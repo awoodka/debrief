@@ -1,4 +1,5 @@
 """Static config for the collector. No secrets here — those live in .env (step 3+)."""
+from pathlib import Path
 
 # The locked six arXiv categories.
 ARXIV_CATEGORIES = ["cs.AI", "cs.LG", "cs.CL", "cs.CV", "cs.NE", "stat.ML"]
@@ -100,3 +101,50 @@ EVENTS_VENUES = [
 # Bluesky author handles for researcher chatter. Empty for now — the real signal comes via
 # searchPosts in step 3 (needs the app password). Wrong handles are harmless (fail-soft).
 BLUESKY_HANDLES = []
+
+# ---- Scoring & agent-digest (step 3b) ----------------------------------------------------------
+# Divergence weights — v1 STARTING POINT; tune after the first real run. Fast in-field signals lead;
+# citations are a lagging bonus. (hf_models/datasets/spaces, github_impls, citations are filled by the
+# 3b-ii API enrichment; they default to 0 until then.)
+IN_FIELD_WEIGHTS = {
+    "on_hf_daily": 5.0,            # HF community surfaced the paper
+    "hf_upvotes": 1.0,
+    "hf_models": 4.0, "hf_datasets": 3.0, "hf_spaces": 2.0,   # engineers building on it
+    "github_impls": 5.0,
+    "discourse_mentions": 4.0,     # researchers/builders citing it in discussion
+    "influential_citations": 6.0, "citations": 0.3,           # lagging
+    "stars": 0.004,                # repo "stars today/week"
+    "github_stars": 0.01,          # official repo's stars (from HF paper-page) — "building on it"
+    "show_launch_hn": 3.0,         # Show/Launch HN = builder discourse
+    "in_field_axis": 1.0,          # base for in-field-tagged items
+}
+MAINSTREAM_WEIGHTS = {
+    "hn_points": 0.05,
+    "ph_votes": 0.02,
+    "mainstream_mentions": 3.0,    # picked up by tech press / mass-market newsletter
+    "mainstream_axis": 1.0,
+}
+# The pulse floor + caps that bound what the AGENTS read. The raw digest_input keeps EVERYTHING.
+AGENT_PAPER_CAP = 50               # top-N papers (by in-field score) sent to the council
+AGENT_PAPER_FULL_ABSTRACTS = 25    # of those, how many get the FULL abstract (rest are one-liners)
+AGENT_CAPS = {                     # per-type ceiling for the agent digest (non-papers run smaller)
+    "discussion": 80, "repo": 40, "article": 40, "funding": 30,
+    "product": 20, "lab_news": 35, "event": 12, "social": 40,
+}
+AGENT_FULL_CONTENT = 15            # per non-paper type, how many get full summary (rest terse)
+
+# ---- Caching, snapshots, enrichment (step 3b-ii) -----------------------------------------------
+# GET responses are cached so re-runs reuse them (and stop the arXiv/Reddit rate-limit tripping).
+CACHE_DB = str(Path(__file__).resolve().parent.parent / "data" / "cache.db")
+DEFAULT_CACHE_TTL = 6 * 3600       # 6h: re-runs within the window reuse cache; daily runs fetch fresh
+CACHE_MAX_AGE_DAYS = 7             # prune cache rows older than this
+
+# Velocity snapshot store (per-item signals over time -> acceleration).
+SNAPSHOT_DB = str(Path(__file__).resolve().parent.parent / "data" / "debrief.db")
+SNAPSHOT_RETENTION_DAYS = 90
+
+# Traction enrichment runs on CANDIDATE papers only (on HF Daily OR cited in discourse).
+# HF paper-pages (fast: linked artifacts + official-repo stars) + Semantic Scholar (lagging: citations)
+# are always on. GitHub code-search for independent impls is OFF by default — it's 30/min rate-limited
+# and ~0 on fresh papers (the gem target), and HF's githubStars already covers "engineers building on it".
+ENRICH_GITHUB_SEARCH = False

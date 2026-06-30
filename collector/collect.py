@@ -19,7 +19,7 @@ try:  # load .env so credentialed sources (GitHub PAT, Product Hunt, Bluesky) se
 except Exception:  # noqa: BLE001
     pass
 
-from collector import config  # noqa: E402
+from collector import config, score, digest, enrich, store  # noqa: E402
 from collector.schema import dedupe  # noqa: E402
 from collector.sources import (  # noqa: E402
     arxiv, hf_daily, rss, hackernews, github_trending, events, bluesky, reddit, producthunt,
@@ -164,7 +164,12 @@ def main():
     warn_if_api_key()
     t0 = datetime.now(timezone.utc)
     items, meta = run(a.days_papers, a.days_news, a.max_arxiv)
-    write_outputs(items, meta)
+    print("[enrich]")
+    enrich.enrich(items)                   # 3b-ii: HF artifacts + citations on candidate papers
+    score.score_all(items)                 # in_field / mainstream / divergence (now with real signals)
+    store.snapshot(items)                  # persist per-item signals -> velocity across runs
+    write_outputs(items, meta)             # digest_input.{md,json} — raw, full, scored (completeness)
+    stats = digest.write(items, meta)      # agent_digest.{md,json} — floored, capped, tiered (what agents read)
     dt = (datetime.now(timezone.utc) - t0).total_seconds()
 
     print(f"\n=== done in {dt:.0f}s ===")
@@ -172,7 +177,10 @@ def main():
     print("per-source:", json.dumps(meta["per_source"]))
     if meta["errors"]:
         print("failed:", json.dumps(meta["errors"]))
-    print(f"wrote {DATA/'digest_input.md'}  and  digest_input.json")
+    pp = stats.get("paper", {})
+    if pp:
+        print(f"papers: {pp['collected']} collected → {pp['passed_floor']} cleared pulse floor → {pp['sent']} to agents")
+    print("wrote digest_input.{md,json} (raw, complete) + agent_digest.{md,json} (what the council reads)")
 
 
 if __name__ == "__main__":
