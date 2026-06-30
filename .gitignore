@@ -1,0 +1,25 @@
+# Secrets — never commit
+.env
+
+# Local runtime data (debriefs, snapshot DB, cache).
+# Served by the future dashboard, not version-controlled. Back up separately if it matters.
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Node / future dashboard
+node_modules/
+.next/
+dist/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
