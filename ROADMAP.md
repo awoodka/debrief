@@ -4,7 +4,7 @@ Everything here is **deliberately deferred** from v1. v1 = the collector + the f
 
 ## Near-term (fast-follow once v1 works)
 
-- **Reddit source** (r/LocalLLaMA, r/MachineLearning) for richer researcher-chatter signal. Needs a free registered + approved Reddit app. The collector's social-fetcher seam already anticipates it.
+- _(Reddit + Product Hunt + broader Hacker News were pulled into **v1** — see `docs/PLAN.md` §3 A2, content balance. No longer deferred.)_
 - **Debrief-as-memory**: feed the last several days' briefings (compact — e.g. past Bottom Lines) into synthesis so the advisor narrates continuity ("third agentic-memory release this week"). Complements the quantitative velocity signal.
 - **Tune divergence weights** against real output (weights live in one config file, easy to change).
 

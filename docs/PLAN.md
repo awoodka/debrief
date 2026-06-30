@@ -37,6 +37,23 @@ advisor.
   above a tiny bar). The zero-signal arXiv tail stays on disk, not sent to agents. Honors completeness +
   the no-cull rule while keeping agent context sane.
 
+### A2. Content balance (added 2026-06-30)
+Research is a **slice, not the spine** — this is a startup-developer's advisor, so online discourse,
+Hacker News, and new startups/companies get the most attention; papers are one input among many.
+- **Collect wide on research (miss nothing), emphasize narrowly.** The arXiv firehose stays fully
+  collected and lives in the Full Index; we rebalance *attention / narrative weight*, never cull.
+- **Adaptive research budget ≈ 25% of the surfaced brief** — a soft *ceiling*, not a quota. Usually
+  less; **flexes up when something genuinely breaks** (major release / high-divergence) so breaking
+  research is never missed. The rest = discourse + HN + startups/funding + tools.
+- **New discourse/startup sources pulled into v1** (were fast-follow): **Reddit via public RSS**
+  (NO API key — r/LocalLLaMA, r/MachineLearning, r/artificial, r/startups; IP rate-limited, so fetched
+  spaced + fail-soft, `top/day|week`), **Lobsters** (HN-like AI discourse), **broader Hacker News**
+  (front + Show + Launch HN), and **Product Hunt** (optional, needs a token). Plus funding RSS
+  (TechCrunch / VentureBeat). Note: Reddit RSS omits upvote scores → Reddit = *discourse presence*.
+- **The gem generalizes beyond papers:** apply in-field-vs-mainstream divergence to **repos, tools,
+  and startup launches** too — "noticed by practitioners before the crowd" can be a hot dev tool or
+  an under-the-radar startup, not only a paper.
+
 ### B. The gem / divergence engine (the heart)
 - **In-field score leads with FAST signals.** Citations lag (a 3–14-day-old paper has ~0). So weight
   **HF linked-artifacts + GitHub implementations + researcher chatter highest**; influential/raw citations
@@ -92,13 +109,15 @@ under-the-radar items), each personalized via `PROFILE.md`:
   padded. Tier word-counts are maxima, not quotas.
 
 ### E. Sources & access
-- **Social:** **Bluesky now** (near-auth-free; app password for search), **Reddit fast-follow** (needs a
-  registered+approved app).
+- **Social / discourse:** **Bluesky** (app password) + **Reddit via public RSS** (no API key — IP
+  rate-limited, fetched spaced + fail-soft) + **Lobsters**. Plus **broader HN** (front/Show/Launch) and
+  optional **Product Hunt** for the discourse + startup pillars (see A2).
 - **Mass-market newsletters:** **scrape their web archives** (tldr.tech/ai, deeplearning.ai/the-batch,
   AlphaSignal's site) — protects the mainstream axis without an email inbox. Forwarding-inbox is the
   fallback. *(Re-verify archive scrapeability at build.)*
-- **Credentials for v1:** **GitHub PAT** (essential) + **Semantic Scholar key** (free, eases limits).
-  OpenAlex deferred to the trend layer.
+- **Credentials for v1:** **GitHub PAT** (essential — the only real must-have). **Semantic Scholar key
+  is optional and skippable** — its API works key-less (backoff), and citations are a low-value lagging
+  signal here. Bluesky app-password + Product Hunt token are optional bonuses. OpenAlex deferred.
 
 ### F. State, persistence, ops
 - **Storage = four tiers by lifetime:**

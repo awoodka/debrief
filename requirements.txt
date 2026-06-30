@@ -1,0 +1,6 @@
+# Collector dependencies (all free, no API keys needed for these).
+requests>=2.31
+feedparser>=6.0
+PyYAML>=6.0
+beautifulsoup4>=4.12
+python-dotenv>=1.0
