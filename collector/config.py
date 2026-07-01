@@ -112,20 +112,20 @@ BLUESKY_HANDLES = []
 # Divergence weights — v1 STARTING POINT; tune after the first real run. Fast in-field signals lead;
 # citations are a lagging bonus. (hf_models/datasets/spaces, github_impls, citations are filled by the
 # 3b-ii API enrichment; they default to 0 until then.)
-# GEM-TRACTION scoring. Magnitudes are LOG-SCALED (lg = ln(1+x)).
-#   in_field = SUBSTANCE (engineers BUILDING on it)  +  ATTENTION (the field NOTICING it, weighted lighter)
-#   mainstream = newsletters / HN / press (the crowd/press knows)
-#   divergence = in_field - mainstream
-# A hidden gem gains in-field traction (upvotes/discussion) BEFORE mainstream. Substance vs attention are
-# tracked separately (shown as sub=/buzz=) so upvote-buzz can't masquerade as substance.
-SUBSTANCE_WEIGHTS = {   # engineers building on it — HEAVY
+# GEM scoring. Magnitudes are LOG-SCALED (lg = ln(1+x)). AXIS CONTRACT (pinned — do NOT re-mix):
+#   in_field   = SUBSTANCE only: artifacts, citations, github impls, DISCOURSE (the field building/discussing)
+#   insider    = POPULARITY: hf_upvotes, github_stars, ph_votes, reddit engagement — context, NOT a gem signal
+#   mainstream = newsletters / HN points / press (the crowd/press knows)
+#   divergence = in_field - mainstream    (insider NEVER enters divergence)
+# A hidden gem gains in-field traction (DISCUSSION, not upvotes) before mainstream.
+SUBSTANCE_WEIGHTS = {   # in_field: engineers BUILDING on it + the field DISCUSSING it — the ONLY gem inputs
     "hf_models": 7.0, "hf_datasets": 4.0, "hf_spaces": 3.0,   # lg — models/datasets/spaces built on it
     "github_impls": 6.0,                                       # lg — independent implementations
     "influential_citations": 6.0, "citations": 1.0,           # lg — builds-on-it citations (lagging)
+    "discourse_mentions": 4.0,                                 # linear — the field discussing it (traction, not upvotes)
 }
-ATTENTION_WEIGHTS = {   # the field noticing / discussing — LIGHTER (early in-field traction)
-    "hf_upvotes": 2.5, "ph_votes": 2.0, "github_stars": 1.5,  # lg — practitioner attention
-    "discourse_mentions": 3.0,                                 # linear — cited in Reddit/Lobsters discussion
+INSIDER_WEIGHTS = {   # POPULARITY only — shown for context, NEVER enters in_field or divergence
+    "hf_upvotes": 2.5, "ph_votes": 2.0, "github_stars": 1.5,  # lg — one-click practitioner popularity
     "reddit_score": 2.0,                                       # lg — technical-community engagement
     "show_launch_hn": 2.0,                                     # flat — builder showing work
 }
@@ -151,6 +151,8 @@ AGENT_PAPER_CAP = 50               # top-N papers sent to the council
 AGENT_PAPER_FULL_ABSTRACTS = 25    # of those, how many get the FULL abstract (rest are one-liners)
 AGENT_PAPER_FRESH_RESERVE = 15     # of the cap, min slots RESERVED for the fresh/unscored tail (in_field=0 —
                                    # no measurable substance yet; the council judges these on the abstract)
+INSIDER_FRESH_CEILING = 5          # fresh-tail LABEL split (display only): insider < this = 🌱 genuinely fresh
+                                   # (no signal, judge generously); >= this = 🔥 popular·unbuilt (judge skeptically)
 AGENT_CAPS = {                     # per-type ceiling for the agent digest (non-papers run smaller)
     "release": 50, "discussion": 80, "repo": 40, "article": 40, "funding": 30,
     "product": 20, "lab_news": 35, "event": 12, "social": 40,
@@ -167,6 +169,7 @@ CACHE_MAX_AGE_DAYS = 7             # prune cache rows older than this
 # Velocity snapshot store (per-item signals over time -> acceleration).
 SNAPSHOT_DB = str(Path(__file__).resolve().parent.parent / "data" / "debrief.db")
 SNAPSHOT_RETENTION_DAYS = 90
+VELOCITY_MIN_SIGNAL = 3            # velocity ignores a signal until its ABSOLUTE value clears this (kills 0->1 blips)
 
 # Traction enrichment runs on CANDIDATE papers only (on HF Daily OR cited in discourse).
 # HF paper-pages (fast: linked artifacts + official-repo stars) + Semantic Scholar (lagging: citations)

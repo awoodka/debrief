@@ -12,8 +12,8 @@ import math
 import re
 from collections import defaultdict
 
-from .config import (SUBSTANCE_WEIGHTS as SW, ATTENTION_WEIGHTS as AW, MAINSTREAM_WEIGHTS as MW,
-                     REDDIT_SUBSTANCE_BASE as RSB, REDDIT_ATTENTION_BASE as RAB,
+from .config import (SUBSTANCE_WEIGHTS as SW, INSIDER_WEIGHTS as IW, MAINSTREAM_WEIGHTS as MW,
+                     REDDIT_SUBSTANCE_BASE as RSB, REDDIT_ATTENTION_BASE as RIB,
                      NEWSLETTER_SOURCES, PRESS_SOURCES)
 
 ARXIV_RE = re.compile(r"(\d{4}\.\d{4,5})")
@@ -78,20 +78,21 @@ def _substance(it):
         + SW["github_impls"] * _lg(rs.get("github_impls", 0))
         + SW["influential_citations"] * _lg(rs.get("influential_citations", 0))
         + SW["citations"] * _lg(rs.get("citations", 0))
+        + SW["discourse_mentions"] * rs.get("discourse_mentions", 0)   # the field DISCUSSING it = substance
         + RSB.get(rs.get("reddit_kind", ""), 0), 2)   # Reddit research posts = substance (H0-3)
 
 
-def _attention(it):
+def _insider(it):
+    """POPULARITY — one-click signals. Shown for context; NEVER enters in_field or divergence."""
     rs = it["raw_signal"]
     return round(
-        AW["hf_upvotes"] * _lg(rs.get("hf_upvotes", 0))
-        + AW["ph_votes"] * _lg(rs.get("ph_votes", 0))
-        + AW["github_stars"] * _lg(rs.get("github_stars", 0))
-        + AW["github_stars"] * _lg(rs.get("stars_today", 0))
-        + AW["discourse_mentions"] * rs.get("discourse_mentions", 0)
-        + AW["reddit_score"] * _lg(rs.get("reddit_score", 0))
-        + AW["show_launch_hn"] * (1 if (rs.get("show_hn") or rs.get("launch_hn")) else 0)
-        + RAB.get(rs.get("reddit_kind", ""), 0), 2)   # Reddit posts by kind (H0-3)
+        IW["hf_upvotes"] * _lg(rs.get("hf_upvotes", 0))
+        + IW["ph_votes"] * _lg(rs.get("ph_votes", 0))
+        + IW["github_stars"] * _lg(rs.get("github_stars", 0))
+        + IW["github_stars"] * _lg(rs.get("stars_today", 0))
+        + IW["reddit_score"] * _lg(rs.get("reddit_score", 0))
+        + IW["show_launch_hn"] * (1 if (rs.get("show_hn") or rs.get("launch_hn")) else 0)
+        + RIB.get(rs.get("reddit_kind", ""), 0), 2)   # Reddit attention by kind (H0-3)
 
 
 def _hn_bucket(points):
@@ -113,12 +114,14 @@ def _mainstream(it):
 
 
 def score_all(items):
+    # AXIS CONTRACT (pinned — do NOT re-mix): in_field = SUBSTANCE only (artifacts/citations/impls/DISCOURSE);
+    # insider = POPULARITY (upvotes/stars/votes), context only; divergence = in_field - mainstream (insider never enters).
     cross_reference(items)
     for it in items:
-        s, a = _substance(it), _attention(it)
+        s = _substance(it)
         it["substance_score"] = s
-        it["attention_score"] = a
-        it["in_field_score"] = round(s + a, 2)
+        it["insider_score"] = _insider(it)
+        it["in_field_score"] = s                      # in_field is substance ONLY (velocity may add to it in store.py)
         it["mainstream_score"] = _mainstream(it)
         it["divergence"] = round(it["in_field_score"] - it["mainstream_score"], 2)
     return items

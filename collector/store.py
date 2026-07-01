@@ -11,15 +11,15 @@ import sqlite3
 import time
 from pathlib import Path
 
-from .config import SNAPSHOT_DB, SNAPSHOT_RETENTION_DAYS
+from .config import SNAPSHOT_DB, SNAPSHOT_RETENTION_DAYS, VELOCITY_MIN_SIGNAL
 from .schema import canonical_key
 
 # signals whose growth-per-day we track = rising SUBSTANCE + community attention.
 # Deliberately NOT hf_upvotes / ph_votes — those are insider POPULARITY; velocity is about adoption.
-_VEL_W = {
+_VEL_W = {   # velocity tracks SUBSTANCE signals only — it boosts the in_field/substance axis (and is capped there)
     "hf_linked_models": 5.0, "hf_linked_datasets": 3.0, "hf_linked_spaces": 2.0,
     "github_impls": 5.0, "influential_citations": 6.0, "citations": 1.0,
-    "discourse_mentions": 4.0, "reddit_score": 0.05, "hn_points": 0.02,
+    "discourse_mentions": 4.0,
 }
 
 
@@ -59,17 +59,21 @@ def snapshot(items, log=print):
         rs = it["raw_signal"]
         deltas, vscore = {}, 0.0
         for s, w in _VEL_W.items():
-            d = (_num(rs.get(s, 0)) - _num(psig.get(s, 0))) / days
+            cur = _num(rs.get(s, 0))
+            d = (cur - _num(psig.get(s, 0))) / days
             if abs(d) >= 0.01:
                 deltas[s] = round(d, 2)
-                if d > 0:
+                if d > 0 and cur >= VELOCITY_MIN_SIGNAL:    # Fix 1 floor: a 0->1 blip earns no boost
                     vscore += w * d
         if deltas:
+            # Fix 1 cap: velocity BOOSTS substance, never replaces it — bonus <= the item's own substance score.
+            vscore = min(vscore, max(it.get("substance_score", 0.0), 0.0))
             it["velocity"] = deltas
             it["velocity_score"] = round(vscore, 2)
-            it["in_field_score"] = round(it["in_field_score"] + it["velocity_score"], 2)   # rising traction boosts the gem
-            it["divergence"] = round(it["in_field_score"] - it["mainstream_score"], 2)
-            vel += 1
+            if vscore > 0:
+                it["in_field_score"] = round(it["in_field_score"] + vscore, 2)   # rising substance boosts the gem
+                it["divergence"] = round(it["in_field_score"] - it["mainstream_score"], 2)
+                vel += 1
 
     rows = [(canonical_key(it), now, it["type"], (it.get("title") or "")[:200],
              it["in_field_score"], it["mainstream_score"], it["divergence"],
