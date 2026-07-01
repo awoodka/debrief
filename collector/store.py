@@ -67,6 +67,8 @@ def snapshot(items, log=print):
         if deltas:
             it["velocity"] = deltas
             it["velocity_score"] = round(vscore, 2)
+            it["in_field_score"] = round(it["in_field_score"] + it["velocity_score"], 2)   # rising traction boosts the gem
+            it["divergence"] = round(it["in_field_score"] - it["mainstream_score"], 2)
             vel += 1
 
     rows = [(canonical_key(it), now, it["type"], (it.get("title") or "")[:200],

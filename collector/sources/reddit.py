@@ -12,6 +12,17 @@ from ..config import REDDIT_RSS, REDDIT_MIN_INTERVAL_SEC
 from ..schema import make_item
 
 _TAG = re.compile(r"<[^>]+>")
+_RESEARCH_TAG = re.compile(r"\[(r|p|d|research|project)\]", re.I)
+_DROP = re.compile(r"\b(released?|open.?weights?|open.?sourc|weights|gguf|checkpoint|\d+\s?b\b|nvfp\d|quantiz)\b", re.I)
+
+
+def _kind(sub, title):
+    """research (r/ML or [R]/[P]) -> substance; LocalLLaMA model drops -> ledger + attention; else chatter."""
+    if sub == "MachineLearning" or _RESEARCH_TAG.search(title):
+        return "research"
+    if sub == "LocalLLaMA" and _DROP.search(title):
+        return "model_drop"
+    return "chatter"
 
 
 def _pub(e):
@@ -41,7 +52,8 @@ def fetch(window_days, log=print):
                 source=label, type="discussion", title=e.get("title", ""),
                 url=e.get("link", ""), summary=_text(e)[:1000], author=e.get("author", ""),
                 published=_pub(e),
-                raw_signal={"axis": "in_field", "subreddit": label.split(":")[-1]},
+                raw_signal={"axis": "in_field", "subreddit": label.split(":")[-1],
+                            "reddit_kind": _kind(label.split(":")[-1], e.get("title", "") or "")},
             ))
             n += 1
         log(f"  {label}: {n}")

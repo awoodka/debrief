@@ -77,6 +77,11 @@ REDDIT_RSS = [
 ]
 REDDIT_MIN_INTERVAL_SEC = 9.0  # Reddit RSS rate-limits hard; space requests well apart (fail-soft anyway)
 
+# Reddit engagement is unavailable (RSS has no scores, .json is 403), so route by post KIND (H0-3).
+# A post reaching a subreddit's top/day|week feed already carries community weight; these are the bases.
+REDDIT_SUBSTANCE_BASE = {"research": 6.0, "model_drop": 3.0, "chatter": 0.0}
+REDDIT_ATTENTION_BASE = {"research": 4.0, "model_drop": 5.0, "chatter": 3.0}
+
 # Lobsters — HN-like tech discourse, clean RSS, no limits.
 LOBSTERS_RSS = [
     ("lobsters:ai", "https://lobste.rs/t/ai.rss"),
@@ -107,29 +112,29 @@ BLUESKY_HANDLES = []
 # Divergence weights — v1 STARTING POINT; tune after the first real run. Fast in-field signals lead;
 # citations are a lagging bonus. (hf_models/datasets/spaces, github_impls, citations are filled by the
 # 3b-ii API enrichment; they default to 0 until then.)
-# THREE-AXIS scoring (work order P0-1). Magnitudes are LOG-SCALED (lg = ln(1+x)).
-#   in-field SUBSTANCE  = researchers/builders BUILDING on it (NOT popularity)
-#   mainstream COVERAGE = newsletters / HN / press (the crowd knows)
-#   insider POPULARITY  = enthusiast-crowd likes (HF upvotes, PH votes, stars) — kept separate
-# divergence = in_field - mainstream. A high-upvote paper with no substance/coverage is NOT a gem.
-IN_FIELD_WEIGHTS = {
-    "hf_models": 7.0, "hf_datasets": 4.0, "hf_spaces": 3.0,   # lg — engineers implementing it
+# GEM-TRACTION scoring. Magnitudes are LOG-SCALED (lg = ln(1+x)).
+#   in_field = SUBSTANCE (engineers BUILDING on it)  +  ATTENTION (the field NOTICING it, weighted lighter)
+#   mainstream = newsletters / HN / press (the crowd/press knows)
+#   divergence = in_field - mainstream
+# A hidden gem gains in-field traction (upvotes/discussion) BEFORE mainstream. Substance vs attention are
+# tracked separately (shown as sub=/buzz=) so upvote-buzz can't masquerade as substance.
+SUBSTANCE_WEIGHTS = {   # engineers building on it — HEAVY
+    "hf_models": 7.0, "hf_datasets": 4.0, "hf_spaces": 3.0,   # lg — models/datasets/spaces built on it
     "github_impls": 6.0,                                       # lg — independent implementations
     "influential_citations": 6.0, "citations": 1.0,           # lg — builds-on-it citations (lagging)
-    "reddit_score": 3.0,                                       # lg — technical-community engagement (P1-2)
-    "discourse_mentions": 4.0,                                 # linear — cited in Reddit/Lobsters discussion
-    "show_launch_hn": 3.0,                                     # flat — builder showing work
 }
-MAINSTREAM_WEIGHTS = {
+ATTENTION_WEIGHTS = {   # the field noticing / discussing — LIGHTER (early in-field traction)
+    "hf_upvotes": 2.5, "ph_votes": 2.0, "github_stars": 1.5,  # lg — practitioner attention
+    "discourse_mentions": 3.0,                                 # linear — cited in Reddit/Lobsters discussion
+    "reddit_score": 2.0,                                       # lg — technical-community engagement
+    "show_launch_hn": 2.0,                                     # flat — builder showing work
+}
+MAINSTREAM_WEIGHTS = {   # crowd / press
     "newsletter": 8.0,         # capped count — covered by an AI newsletter (strong "the crowd knows")
     "hn_bucket": 3.0,          # bucketed hn_points (0/1/2/3/4)
     "press": 5.0,              # capped count — covered by tech press (TechCrunch/VB/MIT-TR)
     "lab_release": 12.0,       # official lab announcement = public reveal
     "mainstream_base": 3.0,    # the newsletter/press item itself
-}
-INSIDER_WEIGHTS = {
-    "hf_upvotes": 4.0, "ph_votes": 3.5, "github_stars": 4.0,  # lg — enthusiast popularity
-    "on_hf_daily": 2.0,                                        # flat — submitted to HF Daily
 }
 
 # Source classification for cross-referencing (P0-1): which sources count as newsletter / press coverage.
@@ -142,13 +147,16 @@ PRESS_SOURCES = {
     "rss:crunchbase_news", "rss:techcrunch_funding", "rss:techcrunch_startups",
 }
 # The pulse floor + caps that bound what the AGENTS read. The raw digest_input keeps EVERYTHING.
-AGENT_PAPER_CAP = 50               # top-N papers (by in-field score) sent to the council
+AGENT_PAPER_CAP = 50               # top-N papers sent to the council
 AGENT_PAPER_FULL_ABSTRACTS = 25    # of those, how many get the FULL abstract (rest are one-liners)
+AGENT_PAPER_FRESH_RESERVE = 15     # of the cap, min slots RESERVED for the fresh/unscored tail (in_field=0 —
+                                   # no measurable substance yet; the council judges these on the abstract)
 AGENT_CAPS = {                     # per-type ceiling for the agent digest (non-papers run smaller)
     "release": 50, "discussion": 80, "repo": 40, "article": 40, "funding": 30,
     "product": 20, "lab_news": 35, "event": 12, "social": 40,
 }
 AGENT_FULL_CONTENT = 15            # per non-paper type, how many get full summary (rest terse)
+PER_SOURCE_CAP = 4                 # no single feed may occupy > N slots in a section (Willison's 14 -> 4)
 
 # ---- Caching, snapshots, enrichment (step 3b-ii) -----------------------------------------------
 # GET responses are cached so re-runs reuse them (and stop the arXiv/Reddit rate-limit tripping).

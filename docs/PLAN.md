@@ -88,10 +88,14 @@ under-the-radar items), each personalized via `PROFILE.md`:
 | **The Skeptic** | Real or overhyped? Reads divergence both ways; carries the substance check. | Empiricist + Contrarian |
 
 - **Personalization is woven into all five** via `PROFILE.md` (no separate Connector seat).
-- **Models:** five seats on **Sonnet**, **synthesis on Opus** — the sustainable baseline to measure
-  quota from, then scale.
-- **Web access:** **strict pre-fetched digest** — seats are `tools: Read` only, no live web. The
-  collector must pack full abstracts + Semantic Scholar `tldr` into the digest.
+- **Models (REVISED 2026-07-01):** five seats on **Sonnet 5**; **synthesis on Opus** (orchestrator).
+  Exact model alias/id confirmed at build (§12) — `model: sonnet` frontmatter alias resolves to the
+  current Sonnet, or use the explicit `claude-sonnet-5`-style id.
+- **Web access (REVISED 2026-07-01 — relaxes §2 "collector does all fetching"):** seats **CAN navigate
+  the live web + the links in the digest** (WebFetch / WebSearch), so a seat can open a flagged
+  paper/repo/thread and verify substance itself — key for judging the (A) fresh/unscored papers and for
+  adversarial gem-checking. Trade: variable quota + less determinism. The collector still packs enough
+  for triage; seats fetch depth on demand (so no need to pre-pack full article bodies).
 - **Prompts reviewed before wiring.** I draft all five system prompts for sign-off, then wire them.
 - **Scaling seam:** each seat = one markdown file in `.claude/agents/`. 6th seat when quota allows =
   **Research Scientist** (dedicated rigor).

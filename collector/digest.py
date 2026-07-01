@@ -8,7 +8,8 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-from .config import (AGENT_PAPER_CAP, AGENT_PAPER_FULL_ABSTRACTS, AGENT_CAPS, AGENT_FULL_CONTENT)
+from .config import (AGENT_PAPER_CAP, AGENT_PAPER_FULL_ABSTRACTS, AGENT_PAPER_FRESH_RESERVE,
+                     AGENT_CAPS, AGENT_FULL_CONTENT, PER_SOURCE_CAP)
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 
@@ -41,6 +42,17 @@ def _sig_str(it):
     return " ".join(f"{k}={rs[k]}" for k in _SIG_KEYS if rs.get(k))
 
 
+def _cap_per_source(items, n):
+    """No single feed may monopolize a section (Simon Willison's 14 posts -> his top n)."""
+    seen, out = defaultdict(int), []
+    for it in items:
+        s = it["source"]
+        if seen[s] < n:
+            seen[s] += 1
+            out.append(it)
+    return out
+
+
 def build(items):
     by_type = defaultdict(list)
     for it in items:
@@ -52,18 +64,32 @@ def build(items):
     for typ, _ in SECTION_ORDER:
         group = by_type.get(typ, [])
         if typ == "paper":
-            # rank by SUBSTANCE (in-field); insider is only a tiebreaker among equal-substance papers
-            # so the popular-but-no-substance-yet tail is ordered sensibly, not arbitrarily.
-            cand = sorted((p for p in group if _paper_has_pulse(p)),
-                          key=lambda p: (p["in_field_score"] + p.get("velocity_score", 0), p.get("insider_score", 0)),
-                          reverse=True)
-            chosen, full_n = cand[:AGENT_PAPER_CAP], AGENT_PAPER_FULL_ABSTRACTS
-            stats["paper"] = {"collected": len(group), "passed_floor": len(cand), "sent": len(chosen)}
+            # Two buckets. SCORED = measurable substance (in-field>0), ranked by substance+velocity.
+            # FRESH/UNSCORED tail = in-field 0 (no artifacts/citations yet) — the collector can't judge
+            # these, so we RESERVE capacity for them and let the council judge on the abstract (contract A).
+            pool = [p for p in group if _paper_has_pulse(p)]
+            scored = sorted((p for p in pool if p["in_field_score"] > 0),
+                            key=lambda p: p["in_field_score"], reverse=True)   # velocity already folded in
+            fresh = sorted((p for p in pool if p["in_field_score"] <= 0),
+                           key=lambda p: p.get("published") or "", reverse=True)   # no signal -> newest first
+            reserve = min(AGENT_PAPER_FRESH_RESERVE, len(fresh))
+            n_scored = min(AGENT_PAPER_CAP - reserve, len(scored))
+            chosen = scored[:n_scored] + fresh[:reserve]
+            chosen += (scored[n_scored:] + fresh[reserve:])[:AGENT_PAPER_CAP - len(chosen)]   # backfill
+            full_n = AGENT_PAPER_FULL_ABSTRACTS
+            stats["paper"] = {"collected": len(group), "passed_floor": len(pool),
+                              "scored": len(scored), "fresh_reserved": reserve, "sent": len(chosen)}
+        elif typ == "release":
+            # already-deduped entities (one source="release" each) — salience sort, NO per-source cap.
+            chosen = sorted(group, key=lambda i: i["in_field_score"] + i["mainstream_score"],
+                            reverse=True)[:AGENT_CAPS.get("release", 50)]
+            full_n = AGENT_FULL_CONTENT
+            stats[typ] = {"collected": len(group), "sent": len(chosen)}
         else:
-            # Cap by SALIENCE (in-field + mainstream + insider) so gems, must-knows, and popular items
-            # all survive the cut; divergence is the agents' judgment signal, not the capping signal.
-            chosen = sorted(group, key=lambda i: i["in_field_score"] + i["mainstream_score"] + i.get("insider_score", 0),
-                            reverse=True)[:AGENT_CAPS.get(typ, 40)]
+            # Cap by SALIENCE (in-field + mainstream) so gems and must-knows both survive the cut;
+            # divergence is the agents' judgment signal, not the capping signal. Cap per source too.
+            ranked = sorted(group, key=lambda i: i["in_field_score"] + i["mainstream_score"], reverse=True)
+            chosen = _cap_per_source(ranked, PER_SOURCE_CAP)[:AGENT_CAPS.get(typ, 40)]
             full_n = AGENT_FULL_CONTENT
             stats[typ] = {"collected": len(group), "sent": len(chosen)}
         selected[typ] = [(it, idx < full_n) for idx, it in enumerate(chosen)]
@@ -81,7 +107,10 @@ def render_md(selected, stats, meta):
     p = stats.get("paper")
     if p:
         L += [f"> **Papers:** {p['collected']} collected → **{p['passed_floor']}** cleared the pulse floor "
-              f"→ top **{p['sent']}** sent to the council (full abstracts for the top {AGENT_PAPER_FULL_ABSTRACTS}).", ""]
+              f"→ **{p['sent']}** sent: **{p.get('scored', '?')}** with in-field traction (substance or attention) + "
+              f"**{p.get('fresh_reserved', '?')}** reserved from the 🌱 fresh/unscored tail "
+              f"(no signal at all yet — **judge on the abstract**). "
+              f"Full abstracts for the top {AGENT_PAPER_FULL_ABSTRACTS}.", ""]
     for typ, label in SECTION_ORDER:
         rows = selected.get(typ, [])
         if not rows:
@@ -93,7 +122,8 @@ def render_md(selected, stats, meta):
             if it.get("type") == "release":
                 ent = it.get("entity", {})
                 org = f" ({ent['org']})" if ent.get("org") else ""
-                L.append(f"- **{ent.get('name', it['title'])}**{org} — div={it['divergence']} "
+                tag = "📢 official" if it["raw_signal"].get("release_official") else "🔓 open/community"
+                L.append(f"- {tag} · **{ent.get('name', it['title'])}**{org} — div={it['divergence']} "
                          f"(in={it['in_field_score']}/main={it['mainstream_score']}) · seen in: "
                          + " · ".join(it.get("seen_in", [])))
                 if it.get("summary"):
@@ -107,9 +137,11 @@ def render_md(selected, stats, meta):
             if it.get("velocity_score", 0) > 0:
                 top = sorted(it.get("velocity", {}).items(), key=lambda kv: -abs(kv[1]))[:3]
                 vel = f" · ▲rising {it['velocity_score']} (" + ", ".join(f"{k} {'+' if v > 0 else ''}{v}/d" for k, v in top) + ")"
+            fresh = " · 🌱fresh (judge on abstract)" if (it["type"] == "paper" and it["in_field_score"] <= 0) else ""
             L.append(f"- **{it['title']}** — `{srcs}` · div={it['divergence']} "
-                     f"(in={it['in_field_score']}/main={it['mainstream_score']}/ins={it.get('insider_score', 0)})"
-                     + (f" · {sig}" if sig else "") + vel)
+                     f"· in={it['in_field_score']} (sub={it.get('substance_score', 0)}/buzz={it.get('attention_score', 0)}) "
+                     f"· main={it['mainstream_score']}"
+                     + (f" · {sig}" if sig else "") + vel + fresh)
             if it.get("url"):
                 L.append(f"  {it['url']}")
             if full and it.get("summary"):
@@ -125,7 +157,8 @@ def write(items, meta):
     flat = [{"full": full, "title": it["title"], "url": it.get("url", ""),
              "sources": it.get("sources", []), "type": it["type"], "arxiv_id": it.get("arxiv_id"),
              "in_field_score": it["in_field_score"], "mainstream_score": it["mainstream_score"],
-             "insider_score": it.get("insider_score", 0), "divergence": it["divergence"],
+             "substance_score": it.get("substance_score", 0), "attention_score": it.get("attention_score", 0),
+             "divergence": it["divergence"],
              "velocity_score": it.get("velocity_score", 0), "velocity": it.get("velocity", {}),
              "raw_signal": it["raw_signal"], "summary": it["summary"] if full else ""}
             for _, rows in selected.items() for it, full in rows]

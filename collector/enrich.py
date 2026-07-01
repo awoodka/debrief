@@ -4,8 +4,10 @@ HF paper-pages give the FAST in-field signals that fire on fresh papers — link
 plus the official repo's stars. Semantic Scholar adds citations + tldr (lagging). GitHub code-search for
 independent impls is off by default (30/min rate-limited, ~0 on fresh papers; HF's githubStars cover it).
 """
+import json
 import os
 import time
+from pathlib import Path
 
 from .http_util import get, session
 from .config import ENRICH_GITHUB_SEARCH
@@ -50,32 +52,56 @@ def _semantic_scholar(cands, log):
         headers["x-api-key"] = key
     by_id = {p["arxiv_id"]: p for p in cands}
     ids = [f"ARXIV:{aid}" for aid in by_id]
-    got = 0
+    indexed = cited = miss = 0
+    debug = {}
     for i in range(0, len(ids), 400):
         batch = ids[i:i + 400]
-        try:
-            r = session().post(SS_BATCH,
-                               params={"fields": "citationCount,influentialCitationCount,tldr"},
-                               json={"ids": batch}, headers=headers, timeout=40)
-            r.raise_for_status()
-            data = r.json()
-        except Exception as e:  # noqa: BLE001
-            log(f"  enrich: Semantic Scholar batch failed — {type(e).__name__}")
+        data = None
+        for attempt in range(4):                       # explicit 429 backoff + retry (S2 rate-limits hard)
+            try:
+                r = session().post(SS_BATCH,
+                                   params={"fields": "citationCount,influentialCitationCount,tldr"},
+                                   json={"ids": batch}, headers=headers, timeout=40)
+                if r.status_code == 429:
+                    log(f"  enrich: S2 429 (attempt {attempt + 1}/4) — backing off")
+                    time.sleep(2 ** attempt * 2)
+                    continue
+                r.raise_for_status()
+                data = r.json()
+                break
+            except Exception as e:  # noqa: BLE001
+                log(f"  enrich: S2 batch error — {type(e).__name__}")
+                time.sleep(2 ** attempt)
+        if data is None:
+            for aid in (s.split(":", 1)[1] for s in batch):
+                debug[aid] = "batch-failed"
             continue
         for sent, res in zip(batch, data):
-            if not res:
+            aid = sent.split(":", 1)[1]
+            if not res:                                # null = not indexed yet (fresh) — expected, tolerated
+                miss += 1
+                debug[aid] = "not-indexed"
                 continue
-            p = by_id.get(sent.split(":", 1)[1])
+            p = by_id.get(aid)
             if not p:
                 continue
             rs = p["raw_signal"]
-            rs["influential_citations"] = res.get("influentialCitationCount", 0) or 0
-            rs["citations"] = res.get("citationCount", 0) or 0
+            ic = res.get("influentialCitationCount", 0) or 0
+            cc = res.get("citationCount", 0) or 0
+            rs["influential_citations"], rs["citations"] = ic, cc
             if res.get("tldr") and res["tldr"].get("text"):
                 rs["ss_tldr"] = res["tldr"]["text"]
-            got += 1
+            indexed += 1
+            cited += 1 if cc else 0
+            debug[aid] = {"cit": cc, "infl": ic}
         time.sleep(1.0)
-    log(f"  enrich: Semantic Scholar citations for {got}/{len(cands)} candidates")
+    try:
+        (Path(__file__).resolve().parent.parent / "data" / "s2_debug.json").write_text(
+            json.dumps({"indexed": indexed, "cited": cited, "miss": miss, "papers": debug}, indent=2))
+    except Exception:  # noqa: BLE001
+        pass
+    log(f"  enrich: Semantic Scholar {indexed}/{len(cands)} indexed · {cited} cited (rest 0 = too fresh) "
+        f"· {miss} not-indexed → data/s2_debug.json")
 
 
 def _github_impls(cands, log):
