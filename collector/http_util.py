@@ -50,6 +50,7 @@ class CachedResponse:
         self.status_code = status
         self.text = text
         self.content = text.encode("utf-8", "replace")
+        self.from_cache = True
 
     def json(self):
         return _json.loads(self.text)
@@ -59,7 +60,7 @@ class CachedResponse:
             raise requests.HTTPError(f"HTTP {self.status_code}")
 
 
-def get(url, *, params=None, timeout=30, retries=3, backoff=2.0, ttl=None):
+def get(url, *, params=None, timeout=30, retries=3, backoff=2.0, ttl=None, headers=None):
     """GET with retries + on-disk cache. Raises the last exception if all attempts fail (caller is fail-soft)."""
     ttl = DEFAULT_CACHE_TTL if ttl is None else ttl
     key = _key(url, params)
@@ -70,7 +71,8 @@ def get(url, *, params=None, timeout=30, retries=3, backoff=2.0, ttl=None):
     last = None
     for attempt in range(retries):
         try:
-            r = session().get(url, params=params, timeout=timeout)
+            r = session().get(url, params=params, timeout=timeout, headers=headers)
+            r.from_cache = False
             if r.status_code == 429:
                 last = RuntimeError("HTTP 429 rate limited")
                 time.sleep(backoff * (attempt + 1) * 2)

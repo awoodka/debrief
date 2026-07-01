@@ -13,12 +13,12 @@ from . import score
 
 HF_PAPER = "https://huggingface.co/api/papers/{}"
 SS_BATCH = "https://api.semanticscholar.org/graph/v1/paper/batch"
-GH_CODE = "https://api.github.com/search/code"
+GH_REPOS = "https://api.github.com/search/repositories"
 
 
 def candidates(items):
     score.cross_reference(items)  # ensure discourse_mentions is set
-    return [p for p in items if p["type"] == "paper" and p.get("arxiv_id")
+    return [p for p in items if p["type"] == "paper" and p.get("arxiv_id") and not p.get("noise")
             and ("hf_daily" in p["sources"] or p["raw_signal"].get("discourse_mentions", 0))]
 
 
@@ -79,21 +79,26 @@ def _semantic_scholar(cands, log):
 
 
 def _github_impls(cands, log):
+    """Repos referencing the arXiv id ≈ independent implementations (in-field substance).
+    Cached (24h) so re-runs are free; live calls are spaced (GitHub search = 30 req/min)."""
     pat = os.environ.get("GITHUB_PAT")
-    headers = {"User-Agent": "debrief/0.1", "Accept": "application/vnd.github+json"}
+    hdr = {"Accept": "application/vnd.github+json"}
     if pat:
-        headers["Authorization"] = f"Bearer {pat}"
-    n = 0
+        hdr["Authorization"] = f"Bearer {pat}"
+    n = hits = 0
     for p in cands:
         try:
-            r = session().get(GH_CODE, params={"q": f'"{p["arxiv_id"]}"'}, headers=headers, timeout=20)
+            r = get(GH_REPOS, params={"q": p["arxiv_id"], "per_page": 1}, headers=hdr, timeout=20, ttl=24 * 3600)
             if r.status_code == 200:
-                p["raw_signal"]["github_impls"] = r.json().get("total_count", 0)
+                c = r.json().get("total_count", 0)
+                p["raw_signal"]["github_impls"] = c
                 n += 1
+                hits += 1 if c else 0
+            if not getattr(r, "from_cache", False):
+                time.sleep(2.1)  # GitHub search API: 30 req/min
         except Exception:  # noqa: BLE001
-            pass
-        time.sleep(2.1)  # GitHub search API: 30 req/min
-    log(f"  enrich: GitHub impl search for {n}/{len(cands)} candidates")
+            time.sleep(2.1)
+    log(f"  enrich: GitHub impls for {n}/{len(cands)} candidates ({hits} with >=1)")
 
 
 def enrich(items, log=print):

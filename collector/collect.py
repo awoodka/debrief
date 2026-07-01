@@ -19,7 +19,7 @@ try:  # load .env so credentialed sources (GitHub PAT, Product Hunt, Bluesky) se
 except Exception:  # noqa: BLE001
     pass
 
-from collector import config, score, digest, enrich, store  # noqa: E402
+from collector import config, score, digest, enrich, store, entities, noise  # noqa: E402
 from collector.schema import dedupe  # noqa: E402
 from collector.sources import (  # noqa: E402
     arxiv, hf_daily, rss, hackernews, github_trending, events, bluesky, reddit, producthunt,
@@ -66,8 +66,8 @@ def run(days_papers, days_news, max_arxiv):
 
     source("arxiv", lambda: arxiv.fetch(days_papers, max_arxiv))
     source("hf_daily", lambda: hf_daily.fetch())
-    for label, url in config.LAB_FEEDS:
-        source(f"rss:{label}", lambda u=url, l=label: rss.fetch_feed(l, u, "lab_news", "neutral", days_news))
+    for label, url, axis in config.LAB_FEEDS:
+        source(f"rss:{label}", lambda u=url, l=label, a=axis: rss.fetch_feed(l, u, "lab_news", a, days_news))
     for label, url in config.NEWS_FEEDS:
         source(f"rss:{label}", lambda u=url, l=label: rss.fetch_feed(l, u, "article", "mainstream", days_news))
     for label, url, axis in config.NEWSLETTER_FEEDS:
@@ -164,6 +164,12 @@ def main():
     warn_if_api_key()
     t0 = datetime.now(timezone.utc)
     items, meta = run(a.days_papers, a.days_news, a.max_arxiv)
+    items, releases = entities.resolve(items)   # P0-3: consolidate cross-source release duplicates
+    meta["releases"] = len(releases)
+    print(f"[entities] {len(releases)} release(s) consolidated")
+    dropped = noise.mark(items)                  # P0-4: flag promo/off-topic (kept in raw dump, excluded from digest)
+    meta["dropped_as_noise"] = len(dropped)
+    print(f"[noise] flagged {len(dropped)} promo/off-topic items")
     print("[enrich]")
     enrich.enrich(items)                   # 3b-ii: HF artifacts + citations on candidate papers
     score.score_all(items)                 # in_field / mainstream / divergence (now with real signals)

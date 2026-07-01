@@ -33,7 +33,7 @@ def fetch(log=print):
             url=n.get("url", ""), summary=n.get("tagline", ""), tags=topics,
             published=n.get("createdAt"),
             raw_signal={"ph_votes": n.get("votesCount", 0),
-                        "ph_comments": n.get("commentsCount", 0), "axis": "mainstream"},
+                        "ph_comments": n.get("commentsCount", 0), "axis": "in_field"},
         ))
     log(f"  producthunt: {len(items)} launches")
     return items

@@ -19,18 +19,19 @@ ARXIV_MIN_INTERVAL_SEC = 3.0  # arXiv asks for >= 3s between requests
 # Lab / company blogs (RSS). type=lab_news. Labs without official RSS (Anthropic, Meta, Mistral, xAI)
 # come via the Olshansk/rss-feeds community feeds so major RELEASES aren't missed.
 _OLSHANSK = "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/"
+# (label, url, axis) — release/announcement feeds = mainstream (public reveal); research/eng = in_field.
 LAB_FEEDS = [
-    ("openai",          "https://openai.com/news/rss.xml"),
-    ("anthropic_news",  _OLSHANSK + "feed_anthropic_news.xml"),
-    ("anthropic_eng",   _OLSHANSK + "feed_anthropic_engineering.xml"),
-    ("google_gemini",   "https://blog.google/products/gemini/rss/"),
-    ("deepmind",        "https://deepmind.google/blog/rss.xml"),
-    ("google_research", "https://research.google/blog/rss/"),
-    ("meta_ai",         _OLSHANSK + "feed_meta_ai.xml"),
-    ("mistral",         _OLSHANSK + "feed_mistral.xml"),
-    ("xai",             _OLSHANSK + "feed_xainews.xml"),
-    ("nvidia",          "https://blogs.nvidia.com/feed/"),
-    ("huggingface",     "https://huggingface.co/blog/feed.xml"),
+    ("openai",          "https://openai.com/news/rss.xml",              "mainstream"),
+    ("anthropic_news",  _OLSHANSK + "feed_anthropic_news.xml",          "mainstream"),
+    ("anthropic_eng",   _OLSHANSK + "feed_anthropic_engineering.xml",   "in_field"),
+    ("google_gemini",   "https://blog.google/products/gemini/rss/",     "mainstream"),
+    ("deepmind",        "https://deepmind.google/blog/rss.xml",         "mainstream"),
+    ("google_research", "https://research.google/blog/rss/",            "in_field"),
+    ("meta_ai",         _OLSHANSK + "feed_meta_ai.xml",                 "mainstream"),
+    ("mistral",         _OLSHANSK + "feed_mistral.xml",                 "mainstream"),
+    ("xai",             _OLSHANSK + "feed_xainews.xml",                 "mainstream"),
+    ("nvidia",          "https://blogs.nvidia.com/feed/",               "mainstream"),
+    ("huggingface",     "https://huggingface.co/blog/feed.xml",         "mainstream"),
 ]
 
 # General tech press (RSS) — mainstream-axis signal.
@@ -106,29 +107,45 @@ BLUESKY_HANDLES = []
 # Divergence weights — v1 STARTING POINT; tune after the first real run. Fast in-field signals lead;
 # citations are a lagging bonus. (hf_models/datasets/spaces, github_impls, citations are filled by the
 # 3b-ii API enrichment; they default to 0 until then.)
+# THREE-AXIS scoring (work order P0-1). Magnitudes are LOG-SCALED (lg = ln(1+x)).
+#   in-field SUBSTANCE  = researchers/builders BUILDING on it (NOT popularity)
+#   mainstream COVERAGE = newsletters / HN / press (the crowd knows)
+#   insider POPULARITY  = enthusiast-crowd likes (HF upvotes, PH votes, stars) — kept separate
+# divergence = in_field - mainstream. A high-upvote paper with no substance/coverage is NOT a gem.
 IN_FIELD_WEIGHTS = {
-    "on_hf_daily": 5.0,            # HF community surfaced the paper
-    "hf_upvotes": 1.0,
-    "hf_models": 4.0, "hf_datasets": 3.0, "hf_spaces": 2.0,   # engineers building on it
-    "github_impls": 5.0,
-    "discourse_mentions": 4.0,     # researchers/builders citing it in discussion
-    "influential_citations": 6.0, "citations": 0.3,           # lagging
-    "stars": 0.004,                # repo "stars today/week"
-    "github_stars": 0.01,          # official repo's stars (from HF paper-page) — "building on it"
-    "show_launch_hn": 3.0,         # Show/Launch HN = builder discourse
-    "in_field_axis": 1.0,          # base for in-field-tagged items
+    "hf_models": 7.0, "hf_datasets": 4.0, "hf_spaces": 3.0,   # lg — engineers implementing it
+    "github_impls": 6.0,                                       # lg — independent implementations
+    "influential_citations": 6.0, "citations": 1.0,           # lg — builds-on-it citations (lagging)
+    "reddit_score": 3.0,                                       # lg — technical-community engagement (P1-2)
+    "discourse_mentions": 4.0,                                 # linear — cited in Reddit/Lobsters discussion
+    "show_launch_hn": 3.0,                                     # flat — builder showing work
 }
 MAINSTREAM_WEIGHTS = {
-    "hn_points": 0.05,
-    "ph_votes": 0.02,
-    "mainstream_mentions": 3.0,    # picked up by tech press / mass-market newsletter
-    "mainstream_axis": 1.0,
+    "newsletter": 8.0,         # capped count — covered by an AI newsletter (strong "the crowd knows")
+    "hn_bucket": 3.0,          # bucketed hn_points (0/1/2/3/4)
+    "press": 5.0,              # capped count — covered by tech press (TechCrunch/VB/MIT-TR)
+    "lab_release": 12.0,       # official lab announcement = public reveal
+    "mainstream_base": 3.0,    # the newsletter/press item itself
+}
+INSIDER_WEIGHTS = {
+    "hf_upvotes": 4.0, "ph_votes": 3.5, "github_stars": 4.0,  # lg — enthusiast popularity
+    "on_hf_daily": 2.0,                                        # flat — submitted to HF Daily
+}
+
+# Source classification for cross-referencing (P0-1): which sources count as newsletter / press coverage.
+NEWSLETTER_SOURCES = {
+    "rss:import_ai", "rss:ahead_of_ai", "rss:interconnects", "rss:latent_space",
+    "rss:last_week_in_ai", "rss:simon_willison",
+}
+PRESS_SOURCES = {
+    "rss:techcrunch_ai", "rss:venturebeat_ai", "rss:mit_tech_review_ai", "rss:stratechery",
+    "rss:crunchbase_news", "rss:techcrunch_funding", "rss:techcrunch_startups",
 }
 # The pulse floor + caps that bound what the AGENTS read. The raw digest_input keeps EVERYTHING.
 AGENT_PAPER_CAP = 50               # top-N papers (by in-field score) sent to the council
 AGENT_PAPER_FULL_ABSTRACTS = 25    # of those, how many get the FULL abstract (rest are one-liners)
 AGENT_CAPS = {                     # per-type ceiling for the agent digest (non-papers run smaller)
-    "discussion": 80, "repo": 40, "article": 40, "funding": 30,
+    "release": 50, "discussion": 80, "repo": 40, "article": 40, "funding": 30,
     "product": 20, "lab_news": 35, "event": 12, "social": 40,
 }
 AGENT_FULL_CONTENT = 15            # per non-paper type, how many get full summary (rest terse)
@@ -147,4 +164,4 @@ SNAPSHOT_RETENTION_DAYS = 90
 # HF paper-pages (fast: linked artifacts + official-repo stars) + Semantic Scholar (lagging: citations)
 # are always on. GitHub code-search for independent impls is OFF by default — it's 30/min rate-limited
 # and ~0 on fresh papers (the gem target), and HF's githubStars already covers "engineers building on it".
-ENRICH_GITHUB_SEARCH = False
+ENRICH_GITHUB_SEARCH = False   # tested 1/25 nonzero on fresh papers @ ~5.7 min/run — HF artifacts carry substance

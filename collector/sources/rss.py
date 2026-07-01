@@ -1,6 +1,7 @@
 """Generic RSS/Atom fetch (labs, tech press, newsletters)."""
 import re
 from calendar import timegm
+from html import unescape
 from datetime import datetime, timezone, timedelta
 
 import feedparser
@@ -11,8 +12,8 @@ from ..schema import make_item
 _TAG = re.compile(r"<[^>]+>")
 
 
-def _clean(html):
-    return _TAG.sub("", html or "").strip()
+def _clean(s):
+    return unescape(_TAG.sub("", s or "")).strip()
 
 
 def _pub(entry):

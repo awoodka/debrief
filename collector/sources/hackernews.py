@@ -21,7 +21,7 @@ def _ts(epoch):
     return datetime.fromtimestamp(int(epoch), tz=timezone.utc).isoformat() if epoch else None
 
 
-def _mk(h, *, axis="mainstream", extra=None):
+def _mk(h, *, axis="in_field", extra=None):  # HN is a builder/developer venue -> in-field
     url = h.get("url") or f"https://news.ycombinator.com/item?id={h.get('objectID')}"
     rs = {"hn_points": h.get("points", 0), "hn_comments": h.get("num_comments", 0), "axis": axis}
     if extra:
