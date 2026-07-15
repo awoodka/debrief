@@ -4,12 +4,14 @@ Papers must clear a minimal PULSE FLOOR (on HF Daily, OR cited in discourse, OR 
 OR has citations) and are then capped to the top-N by in-field score, with full abstracts only for the
 top few. Everything else stays in the raw `digest_input` (the completeness guarantee) — nothing is lost.
 """
+import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path
 
 from .config import (AGENT_PAPER_CAP, AGENT_PAPER_FULL_ABSTRACTS, AGENT_PAPER_FRESH_RESERVE,
                      INSIDER_FRESH_CEILING, AGENT_CAPS, AGENT_FULL_CONTENT, PER_SOURCE_CAP)
+from .schema import canonical_key
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 
@@ -28,6 +30,14 @@ SECTION_ORDER = [
 
 _SIG_KEYS = ("hf_linked_models", "github_impls", "influential_citations", "discourse_mentions",
             "newsletter_hits", "press_hits", "hn_points", "hf_upvotes", "ph_votes")
+
+
+def item_id(it):
+    """Stable short id for cross-memo reference: the arXiv id when there is one, else a 6-hex hash of
+    the canonical key. Council seats QUOTE these ids; the synthesizer counts consensus by them."""
+    if it.get("arxiv_id"):
+        return it["arxiv_id"]
+    return hashlib.md5(canonical_key(it).encode()).hexdigest()[:6]
 
 
 def _paper_has_pulse(p):
@@ -107,7 +117,8 @@ def render_md(selected, stats, meta):
          f"_Generated {meta.get('generated_at', '')}_", "",
          "What the council reads. Items are kept by **salience** (in-field + mainstream) so both gems and",
          "must-knows survive the cap; **divergence** (in-field − mainstream) is the gem signal — high means",
-         "in-field but under-the-radar. Papers are traction-filtered (pulse floor) + capped; raw set in `digest_input`.", ""]
+         "in-field but under-the-radar. Papers are traction-filtered (pulse floor) + capped; raw set in `digest_input`.",
+         "Every item carries a stable `[#id]` — **quote it when you reference the item** (consensus is counted by id).", ""]
     if meta.get("dropped_as_noise"):
         L += [f"_{meta['dropped_as_noise']} promo/off-topic items filtered as noise (audit list in digest_input)._", ""]
     p = stats.get("paper")
@@ -129,7 +140,7 @@ def render_md(selected, stats, meta):
                 ent = it.get("entity", {})
                 org = f" ({ent['org']})" if ent.get("org") else ""
                 tag = "📢 official" if it["raw_signal"].get("release_official") else "🔓 open/community"
-                L.append(f"- {tag} · **{ent.get('name', it['title'])}**{org} — div={it['divergence']} "
+                L.append(f"- `[#{item_id(it)}]` {tag} · **{ent.get('name', it['title'])}**{org} — div={it['divergence']} "
                          f"(in={it['in_field_score']}/main={it['mainstream_score']}) · seen in: "
                          + " · ".join(it.get("seen_in", [])))
                 if it.get("summary"):
@@ -149,7 +160,7 @@ def render_md(selected, stats, meta):
                     fresh = " · 🌱fresh (no signal yet — judge on the abstract)"
                 else:
                     fresh = " · 🔥popular·unbuilt (attention, no substance uptake — judge skeptically)"
-            L.append(f"- **{it['title']}** — `{srcs}` · div={it['divergence']} "
+            L.append(f"- `[#{item_id(it)}]` **{it['title']}** — `{srcs}` · div={it['divergence']} "
                      f"· in={it['in_field_score']} · ins={it.get('insider_score', 0)} · main={it['mainstream_score']}"
                      + (f" · {sig}" if sig else "") + vel + fresh)
             if it.get("url"):
@@ -164,7 +175,7 @@ def write(items, meta):
     selected, stats = build(items)
     DATA.mkdir(exist_ok=True)
     (DATA / "agent_digest.md").write_text(render_md(selected, stats, meta))
-    flat = [{"full": full, "title": it["title"], "url": it.get("url", ""),
+    flat = [{"id": item_id(it), "full": full, "title": it["title"], "url": it.get("url", ""),
              "sources": it.get("sources", []), "type": it["type"], "arxiv_id": it.get("arxiv_id"),
              "in_field_score": it["in_field_score"], "mainstream_score": it["mainstream_score"],
              "substance_score": it.get("substance_score", 0), "insider_score": it.get("insider_score", 0),
