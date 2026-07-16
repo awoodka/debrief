@@ -1,6 +1,6 @@
 ---
 description: Run the daily debrief — collect the AI/ML landscape, convene the five-seat council, and synthesize one calibrated morning briefing.
-argument-hint: (no arguments)
+argument-hint: [--skip-collect]
 allowed-tools: Bash, Read, Write, Glob, Grep, WebFetch, WebSearch, Task
 model: claude-opus-4-8[1m]
 ---
@@ -12,13 +12,22 @@ This runs on the Claude **Max subscription**, never the paid API. Work the steps
 
 First, get today's date for paths and the seats' RUN field: run `date +%F` and use it as `<today>` below.
 
+**Mode.** A normal `/debrief` collects fresh (Step 1). `/debrief --skip-collect` (also accepts `skip` /
+`existing`) reuses the existing `data/agent_digest.md` and jumps straight to the council — for fast
+iteration on the seats or the advisor without paying the ~4-minute collection.
+
 ## Step 0 — Constraint check (non-negotiable)
 Run `printf '%s' "${ANTHROPIC_API_KEY:+SET}"`. If it prints `SET`, **stop** and tell Alex to unset
 `ANTHROPIC_API_KEY` first — this pipeline must bill to the Max subscription, not the paid API. Otherwise
 continue.
 
 ## Step 1 — Collect the landscape (deterministic, no LLM)
-Run the collector from the project root:
+The user's arguments (if any): `$ARGUMENTS`. **If they include `--skip-collect` / `skip` / `existing`,
+skip this step** — you're iterating on an existing digest: confirm `data/agent_digest.md` exists and read
+its `_Generated ..._` line (if it's missing, stop and tell Alex to run a normal `/debrief` first; if it's
+more than ~a day old, note the staleness in the briefing), then go straight to Step 2.
+
+**Otherwise, collect fresh.** Run the collector from the project root:
 ```
 cd /Users/alex/Documents/debrief && .venv/bin/python -m collector.collect
 ```
