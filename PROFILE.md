@@ -84,7 +84,7 @@ especially founders grounded in real customer problems (attended the 2026 Pitch 
 was energized by it). Writing style is conversational and reflective: contractions, flowing paragraphs,
 hedging language, minimal headers/bullets.
 > Use this ONLY for genuine second-order / life-relevant connections. The **Engineer, Investor,
-> Competitive Scout, and Realist must NOT** weight personal interests in their technical verdicts. The
+> Competitive Scout, and Skeptic must NOT** weight personal interests in their technical verdicts. The
 > **Founder** may use the entrepreneurial signal (founders grounded in real customer problems) where a
 > drop genuinely resonates with it — nothing more.
 
