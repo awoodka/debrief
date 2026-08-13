@@ -18,8 +18,17 @@ node_modules/
 .next/
 dist/
 
+# Generated static archive (rebuilt by `make site`; deployed to Cloudflare Pages)
+site/
+
 # OS / editor
 .DS_Store
 *.swp
 .idea/
 .vscode/
+
+# Autonomous-run logs
+logs/
+
+# Cloudflare wrangler local cache (account id, deploy cache) — never commit
+.wrangler/

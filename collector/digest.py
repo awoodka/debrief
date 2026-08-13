@@ -143,6 +143,9 @@ def render_md(selected, stats, meta):
                 L.append(f"- `[#{item_id(it)}]` {tag} · **{ent.get('name', it['title'])}**{org} — div={it['divergence']} "
                          f"(in={it['in_field_score']}/main={it['mainstream_score']}) · seen in: "
                          + " · ".join(it.get("seen_in", [])))
+                ft = it.get("fulltext") or {}
+                if ft.get("status") == "ok":
+                    L.append(f"  📄 fulltext: {ft['path']} ({ft['chars']} chars)")
                 if it.get("summary"):
                     L.append(f"  > {' '.join(it['summary'].split())[:400]}")
                 for lk in it.get("links", [])[:6]:
@@ -165,6 +168,9 @@ def render_md(selected, stats, meta):
                      + (f" · {sig}" if sig else "") + vel + fresh)
             if it.get("url"):
                 L.append(f"  {it['url']}")
+            ft = it.get("fulltext") or {}
+            if ft.get("status") == "ok":
+                L.append(f"  📄 fulltext: {ft['path']} ({ft['chars']} chars)")
             if full and it.get("summary"):
                 L.append(f"  > {it['summary'][:1500]}")
         L.append("")
@@ -173,6 +179,8 @@ def render_md(selected, stats, meta):
 
 def write(items, meta):
     selected, stats = build(items)
+    from . import fulltext   # local import — fulltext imports item_id from this module
+    stats["fulltext"] = fulltext.attach(selected, meta.get("generated_at", ""))
     DATA.mkdir(exist_ok=True)
     (DATA / "agent_digest.md").write_text(render_md(selected, stats, meta))
     flat = [{"id": item_id(it), "full": full, "title": it["title"], "url": it.get("url", ""),
@@ -181,7 +189,8 @@ def write(items, meta):
              "substance_score": it.get("substance_score", 0), "insider_score": it.get("insider_score", 0),
              "divergence": it["divergence"],
              "velocity_score": it.get("velocity_score", 0), "velocity": it.get("velocity", {}),
-             "raw_signal": it["raw_signal"], "summary": it["summary"] if full else ""}
+             "raw_signal": it["raw_signal"], "fulltext": it.get("fulltext"),
+             "summary": it["summary"] if full else ""}
             for _, rows in selected.items() for it, full in rows]
     (DATA / "agent_digest.json").write_text(json.dumps({"stats": stats, "items": flat}, indent=2, ensure_ascii=False))
     return stats

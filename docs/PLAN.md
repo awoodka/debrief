@@ -88,6 +88,10 @@ under-the-radar items), each personalized via `PROFILE.md`:
 | **The Skeptic** | Real or overhyped? Reads divergence both ways; carries the substance check. | Empiricist + Contrarian |
 
 - **Personalization is woven into all five** via `PROFILE.md` (no separate Connector seat).
+  > **SUPERSEDED 2026-07-16:** PROFILE.md personalization is **disabled at all stages** for now — the
+  > seats are profile-free, field-level lenses, and the advisor writes for builders generally. The file
+  > stays on disk, unused. Re-attachment = restoring the PROFILE references in the five seat prompts
+  > plus the `/debrief` preamble / spawn prompt / Step 4 (see git history).
 - **Models (REVISED 2026-07-01):** five seats on **Sonnet 5**; **synthesis on Opus** (orchestrator).
   Exact model alias/id confirmed at build (§12) — `model: sonnet` frontmatter alias resolves to the
   current Sonnet, or use the explicit `claude-sonnet-5`-style id.
@@ -96,6 +100,14 @@ under-the-radar items), each personalized via `PROFILE.md`:
   paper/repo/thread and verify substance itself — key for judging the (A) fresh/unscored papers and for
   adversarial gem-checking. Trade: variable quota + less determinism. The collector still packs enough
   for triage; seats fetch depth on demand (so no need to pre-pack full article bodies).
+  > **SUPERSEDED 2026-07-16 (reverts to "collector does all fetching"):** seats are **Read-only**
+  > again. Depth is now pre-packed deterministically: a collector **fulltext stage**
+  > (`collector/fulltext.py` — trafilatura extraction, cached, fail-soft, per-domain pacing) fetches
+  > each digest item's linked page to `data/fulltext/<id>.txt`, and **four parallel summarizer shards**
+  > (`.claude/agents/summarizer.md`, Sonnet, Read+Write) condense digest + fulltext into an
+  > **enriched digest** (`data/debriefs/<date>/enriched_digest.md`) that the five seats read as their
+  > only input. Stable, reproducible, and the web-fetch token variance is gone; the advisor keeps a
+  > ≤2–3-fetch allowance for crown-jewel confirmation.
 - **Prompts reviewed before wiring.** I draft all five system prompts for sign-off, then wire them.
 - **Scaling seam:** each seat = one markdown file in `.claude/agents/`. 6th seat when quota allows =
   **Research Scientist** (dedicated rigor).
@@ -164,7 +176,10 @@ debrief/
   → collector/collect.py  (no LLM, fail-soft per source)
        fetch wide → normalize to one schema → dedupe → enrich papers with traction signals
        → compute in_field / mainstream / divergence → snapshot to SQLite → write data/digest_input.{md,json}
-  → orchestrator dispatches digest + PROFILE.md to 5 seats IN PARALLEL (Sonnet, Read-only)
+       → fulltext stage: fetch + extract each digest item's linked page → data/fulltext/<id>.txt (2026-07-16)
+  → orchestrator dispatches 4 summarizer shards IN PARALLEL (Sonnet, Read+Write)
+       → per-shard factual summaries → merged data/debriefs/<date>/enriched_digest.md (2026-07-16)
+  → orchestrator dispatches the enriched digest to 5 seats IN PARALLEL (Sonnet, Read-only, no PROFILE)
   → each returns a structured brief citing the collector's signals
   → orchestrator (Opus) synthesizes → one cohesive tiered briefing
        → write data/debriefs/<date>/debrief.{md,json}; index the run in SQLite
@@ -206,7 +221,9 @@ debrief/
 - Output is **tiered + cohesive**; the gem tier surfaces high-divergence items with reasoning + signals +
   calibrated confidence; the Full Index keeps **everything past the minimal bar** (nothing silently lost).
 - The gem mechanism **provably catches a planted high-in-field/low-mainstream example**.
-- Personalization **visibly reflects `PROFILE.md`**.
+- ~~Personalization **visibly reflects `PROFILE.md`**.~~ *(SUPERSEDED 2026-07-16 — personalization
+  disabled at all stages; see §3.C. Replacement criterion: the five seats produce genuinely different
+  readings of the same enriched digest, judged for the field rather than a profile.)*
 - **Clean seams** exist for the trend layer, the dashboard, and automation — none built in v1.
 
 ## 8. Re-verify at build (flux, early–mid 2026)

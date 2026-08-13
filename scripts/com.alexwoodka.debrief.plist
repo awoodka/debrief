@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Daily autonomous debrief. Install:
+    cp scripts/com.alexwoodka.debrief.plist ~/Library/LaunchAgents/
+    launchctl load -w ~/Library/LaunchAgents/com.alexwoodka.debrief.plist
+  Change the time: edit Hour/Minute below, then reload (unload + load -w).
+  Run once now (test): launchctl start com.alexwoodka.debrief
+  Remove: launchctl unload -w ~/Library/LaunchAgents/com.alexwoodka.debrief.plist
+  Laptop note: if the Mac is asleep at the scheduled time, launchd runs the job the next time it wakes.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.alexwoodka.debrief</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/alex/Documents/debrief/scripts/run_debrief.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>10</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/alex/Documents/debrief</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/alex/Documents/debrief/logs/launchd.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/alex/Documents/debrief/logs/launchd.err.log</string>
+</dict>
+</plist>

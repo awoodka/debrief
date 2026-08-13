@@ -186,6 +186,10 @@ def main():
     pp = stats.get("paper", {})
     if pp:
         print(f"papers: {pp['collected']} collected → {pp['passed_floor']} cleared pulse floor → {pp['sent']} to agents")
+    ft = stats.get("fulltext", {})
+    if ft:
+        print(f"fulltext: {ft.get('fetched', 0)} fetched / {ft.get('skipped', 0)} skipped / {ft.get('failed', 0)} failed"
+              " (data/fulltext/)")
     print("wrote digest_input.{md,json} (raw, complete) + agent_digest.{md,json} (what the council reads)")
 
 

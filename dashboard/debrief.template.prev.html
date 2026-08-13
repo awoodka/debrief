@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debrief</title>
+<style>
+  :root{
+    --page:#f7f7f5; --surface:#ffffff; --ink:#1a1a1e; --muted:#6b7280; --faint:#9aa0aa;
+    --accent:#4f46e5; --accent-soft:#eef2ff; --accent-ink:#3730a3;
+    --bull:#047857; --bull-bg:#ecfdf5; --bull-br:#b7ecd5;
+    --bear:#be123c; --bear-bg:#fff1f2; --bear-br:#fbcfd6;
+    --border:#e7e7e3; --hair:#eeeeea;
+    --shadow:0 1px 2px rgba(20,20,30,.04), 0 6px 22px rgba(20,20,30,.05);
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--page); color:var(--ink); font-family:var(--sans);
+    font-size:16px; line-height:1.62; -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  .wrap{max-width:780px; margin:0 auto; padding:56px 28px 96px}
+  a{color:var(--accent); text-decoration:none}
+
+  /* header */
+  header.top{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:40px}
+  .wordmark{font-weight:700; letter-spacing:.22em; font-size:13px; color:var(--faint)}
+  .rundate{font-size:13px; color:var(--faint); font-variant-numeric:tabular-nums}
+
+  /* section scaffolding */
+  section{margin:0 0 44px}
+  .label{font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+         color:var(--accent); margin:0 0 14px}
+  h2{font-size:15px; margin:0} /* not used directly; labels carry the tiering */
+  p{margin:0 0 14px}
+  p:last-child{margin-bottom:0}
+  strong{font-weight:640}
+  code{font-family:var(--mono); font-size:.86em; background:#f1f1ee; padding:.08em .34em; border-radius:5px}
+  .id{font-family:var(--mono); font-size:.8em; color:var(--accent-ink); background:var(--accent-soft);
+      padding:.06em .36em; border-radius:5px; white-space:nowrap}
+
+  /* chips */
+  .chips{display:flex; flex-wrap:wrap; gap:7px; align-items:center}
+  .chip{font-size:11.5px; font-weight:600; letter-spacing:.02em; padding:3px 9px; border-radius:999px;
+        background:#f1f1ee; color:#57606a; white-space:nowrap}
+  .chip.mono{font-family:var(--mono); font-weight:500}
+  .chip.ok{background:#e9f7ef; color:var(--bull)}
+  .chip.warn{background:#fdf3e3; color:#b45309}
+  .chip.low{background:#f0f0ee; color:#6b7280}
+  .chip.accent{background:var(--accent-soft); color:var(--accent-ink)}
+
+  /* bottom line — the hero */
+  .hero .lead{font-size:20px; line-height:1.5; letter-spacing:-.01em; margin:0 0 26px}
+  .hero .lead strong{font-weight:660}
+  ol.actions{list-style:none; margin:0 0 22px; padding:0; counter-reset:a}
+  ol.actions li{counter-increment:a; position:relative; padding:0 0 18px 44px; margin:0}
+  ol.actions li:last-child{padding-bottom:0}
+  ol.actions li::before{content:counter(a); position:absolute; left:0; top:1px; width:28px; height:28px;
+    display:flex; align-items:center; justify-content:center; border-radius:50%;
+    background:var(--accent-soft); color:var(--accent-ink); font-size:13px; font-weight:700; font-variant-numeric:tabular-nums}
+  .act-title{font-weight:640}
+  .act-detail{color:#3b3b42; margin:2px 0 8px}
+  .flip{font-size:13px; color:var(--faint); margin-top:7px}
+  .flip b{font-weight:640; color:var(--muted)}
+  .myread{border-left:3px solid var(--accent); background:linear-gradient(90deg,var(--accent-soft),transparent 82%);
+          padding:12px 16px; border-radius:0 8px 8px 0; margin-top:4px}
+  .myread .tag{font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); display:block; margin-bottom:3px}
+
+  /* what-happened scan (Depth 1) */
+  .whathappened{margin:0 0 24px}
+  .wh-tag{font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:0 0 9px}
+  ul.wh-list{list-style:none; margin:0; padding:0}
+  ul.wh-list li{position:relative; padding:8px 0 8px 22px; margin:0; border-top:1px solid var(--hair);
+    font-size:16px; line-height:1.5; color:var(--ink)}
+  ul.wh-list li:first-child{border-top:0}
+  ul.wh-list li::before{content:"→"; position:absolute; left:0; top:8px; color:var(--accent); font-weight:700}
+
+  /* end-of-item provenance references (Depth 3, recessive) */
+  .refs{margin-top:13px; display:flex; flex-wrap:wrap; gap:6px; align-items:center}
+  .refs-tag{font-size:10px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin-right:2px}
+
+  /* gems */
+  .gem{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px 22px 18px;
+       box-shadow:var(--shadow); margin:0 0 16px}
+  .gem:last-child{margin-bottom:0}
+  .gem-h{display:flex; gap:10px; align-items:flex-start; margin-bottom:8px}
+  .gem-star{color:var(--accent); font-size:15px; line-height:1.55; flex:none}
+  .gem-title{font-weight:660; font-size:17px; line-height:1.4}
+  .gem-body{color:#2c2c33}
+  .gem-foot{display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:14px; padding-top:13px; border-top:1px solid var(--hair)}
+
+  /* landscape */
+  .theme{margin:0 0 26px}
+  .theme:last-child{margin-bottom:0}
+  .theme h3{font-size:16.5px; font-weight:660; letter-spacing:-.01em; margin:0 0 8px}
+  .theme .body{color:#2c2c33}
+  .split{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0 10px}
+  .pane{border-radius:10px; padding:13px 15px; font-size:14.5px; line-height:1.55}
+  .pane .tag{font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; display:block; margin-bottom:5px}
+  .pane .who{font-weight:600; font-size:12px; opacity:.8}
+  .bull{background:var(--bull-bg); border:1px solid var(--bull-br)}
+  .bull .tag{color:var(--bull)}
+  .bear{background:var(--bear-bg); border:1px solid var(--bear-br)}
+  .bear .tag{color:var(--bear)}
+
+  /* deadlines */
+  .dl{display:flex; gap:13px; align-items:baseline; padding:9px 0; border-top:1px solid var(--hair)}
+  .dl:first-child{border-top:0}
+  .dl .d{font-family:var(--mono); font-size:12.5px; color:var(--accent-ink); background:var(--accent-soft);
+         padding:2px 8px; border-radius:6px; flex:none; font-variant-numeric:tabular-nums}
+  .dl .t{font-weight:560}
+  .dl .n{color:var(--faint); font-size:13.5px}
+
+  /* footer */
+  footer.foot{margin-top:56px; padding-top:18px; border-top:1px solid var(--hair);
+    font-size:12.5px; color:var(--faint); display:flex; flex-wrap:wrap; gap:6px 16px}
+  footer.foot b{font-weight:640; color:var(--muted)}
+
+  @media (max-width:620px){
+    .wrap{padding:36px 18px 72px}
+    .hero .lead{font-size:18px}
+    .split{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap"><main id="app"></main></div>
+
+<script id="debrief-data" type="application/json">/*__DEBRIEF_DATA__*/</script>
+<script>
+(function(){
+  "use strict";
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById("debrief-data").textContent || "{}"); }
+  catch(e){ DATA = {}; }
+  var app = document.getElementById("app");
+
+  function esc(s){ return String(s==null?"":s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function inline(s){
+    return esc(s)
+      .replace(/\[#([0-9a-f]{6}|\d{4}\.\d{4,5})\]/g,'<span class="id">[#$1]</span>')
+      .replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>")
+      .replace(/`([^`]+)`/g,"<code>$1</code>");
+  }
+  function paras(s){
+    if(!s) return "";
+    return String(s).split(/\n{2,}/).map(function(p){ return "<p>"+inline(p.trim())+"</p>"; }).join("");
+  }
+  function h(tag, cls, html){
+    var e=document.createElement(tag); if(cls) e.className=cls;
+    if(html!=null) e.innerHTML=html; return e;
+  }
+  function confClass(c){
+    var w=String(c||"").toLowerCase().split(/[\s—-]/)[0];
+    if(w.indexOf("high")===0) return "ok";
+    if(w.indexOf("med")===0) return "warn";
+    if(w.indexOf("low")===0) return "low";
+    return "";
+  }
+  function chip(txt, cls){ return '<span class="chip '+(cls||"")+'">'+esc(txt)+"</span>"; }
+  function sectionLabel(text){ return h("div","label",esc(text)); }
+
+  var m = DATA.meta || {};
+
+  // header
+  var head = h("header","top");
+  head.appendChild(h("div","wordmark","DEBRIEF"));
+  head.appendChild(h("div","rundate", esc(m.date||"") + (m.digest_generated_at ? " · digest "+esc(String(m.digest_generated_at).slice(0,10)) : "")));
+  app.appendChild(head);
+
+  // ---- Bottom Line ----
+  var bl = DATA.bottom_line || {};
+  if (bl.read || (bl.actions&&bl.actions.length) || bl.advisors_read || (bl.what_happened&&bl.what_happened.length)){
+    var sec = h("section","hero");
+    sec.appendChild(sectionLabel("Bottom Line"));
+    if(bl.what_happened && bl.what_happened.length){         // Depth 1 — what happened, leads the doc
+      var wh=h("div","whathappened");
+      wh.appendChild(h("div","wh-tag","What happened"));
+      var whul=h("ul","wh-list");
+      bl.what_happened.forEach(function(ev){ whul.appendChild(h("li",null, inline(ev))); });
+      wh.appendChild(whul);
+      sec.appendChild(wh);
+    }
+    if(bl.read) sec.appendChild(h("div","lead", inline(bl.read)));
+    if(bl.actions && bl.actions.length){
+      var ol = h("ol","actions");
+      bl.actions.forEach(function(a){
+        var li = h("li");
+        li.appendChild(h("div","act-title", inline(a.title||"")));
+        if(a.detail) li.appendChild(h("div","act-detail", inline(a.detail)));
+        var cs=[];
+        if(a.timebox) cs.push(chip(a.timebox,"mono"));
+        if(a.confidence) cs.push(chip(String(a.confidence).split(/[\s—-]/)[0], confClass(a.confidence)));
+        (a.ids||[]).forEach(function(id){ cs.push('<span class="id">'+esc(id)+"</span>"); });
+        if(cs.length) li.appendChild(h("div","chips", cs.join("")));
+        if(a.flip) li.appendChild(h("div","flip","<b>flips if</b> "+inline(a.flip)));
+        ol.appendChild(li);
+      });
+      sec.appendChild(ol);
+    }
+    if(bl.advisors_read){
+      var mr=h("div","myread");
+      mr.appendChild(h("span","tag","Advisor's read"));
+      mr.appendChild(h("div",null, inline(bl.advisors_read)));
+      sec.appendChild(mr);
+    }
+    app.appendChild(sec);
+  }
+
+  // ---- Against the Grain (gems) ----
+  if (DATA.gems && DATA.gems.length){
+    var g = h("section");
+    g.appendChild(sectionLabel("Against the Grain"));
+    DATA.gems.forEach(function(gem){
+      var card=h("div","gem");
+      var hd=h("div","gem-h");
+      hd.appendChild(h("div","gem-star","◆"));
+      hd.appendChild(h("div","gem-title", inline(gem.title||"")));
+      card.appendChild(hd);
+      if(gem.body) card.appendChild(h("div","gem-body", paras(gem.body)));
+      if(gem.why_now) card.appendChild(h("div","gem-body", "<p><strong>Why now:</strong> "+inline(gem.why_now)+"</p>"));
+      var foot=[];
+      if(gem.id) foot.push('<span class="id">'+esc(gem.id)+"</span>");
+      if(gem.divergence) foot.push(chip(gem.divergence,"mono"));
+      if(gem.confidence) foot.push(chip(String(gem.confidence).split(/[\s—-]/)[0], confClass(gem.confidence)));
+      if(gem.flip) card.appendChild(h("div","flip","<b>flips if</b> "+inline(gem.flip)));
+      if(foot.length) card.appendChild(h("div","gem-foot", foot.join("")));
+      g.appendChild(card);
+    });
+    app.appendChild(g);
+  }
+
+  // ---- The Landscape ----
+  if (DATA.landscape && DATA.landscape.length){
+    var ls=h("section");
+    ls.appendChild(sectionLabel("The Landscape"));
+    DATA.landscape.forEach(function(t){
+      var th=h("div","theme");
+      if(t.heading) th.appendChild(h("h3",null, inline(t.heading)));
+      if(t.body) th.appendChild(h("div","body", paras(t.body)));
+      if(t.split){
+        var sp=h("div","split");
+        var bull=h("div","pane bull");
+        bull.innerHTML='<span class="tag">The bull case</span>'+inline(t.split.bull||"");
+        var bear=h("div","pane bear");
+        bear.innerHTML='<span class="tag">The bear case</span>'+inline(t.split.bear||"");
+        sp.appendChild(bull); sp.appendChild(bear);
+        th.appendChild(sp);
+        if(t.split.my_read){
+          var mr2=h("div","myread");
+          mr2.appendChild(h("span","tag","My read"));
+          mr2.appendChild(h("div",null, inline(t.split.my_read)));
+          th.appendChild(mr2);
+        }
+      }
+      if(t.refs && t.refs.length){                            // Depth 3 — recessive provenance, end of section
+        var rf=h("div","refs");
+        rf.innerHTML='<span class="refs-tag">refs</span>'+t.refs.map(function(id){ return '<span class="id">'+esc(id)+"</span>"; }).join(" ");
+        th.appendChild(rf);
+      }
+      ls.appendChild(th);
+    });
+    app.appendChild(ls);
+  }
+
+  // ---- Deadlines ----
+  if (DATA.deadlines && DATA.deadlines.length){
+    var d=h("section");
+    d.appendChild(sectionLabel("Deadlines / Events"));
+    DATA.deadlines.forEach(function(x){
+      var row=h("div","dl");
+      row.appendChild(h("span","d", esc(x.date||"")));
+      row.appendChild(h("span","t", esc(x.title||"")));
+      if(x.note) row.appendChild(h("span","n", inline(x.note)));
+      d.appendChild(row);
+    });
+    app.appendChild(d);
+  }
+
+  // ---- footer ----
+  var f=h("footer","foot");
+  var bits=[];
+  if(m.seats_failed && m.seats_failed.length) bits.push("<b>note</b> part of today's analysis was unavailable");
+  if(m.collector_notes) bits.push(esc(m.collector_notes));
+  bits.push("your morning read on the AI/ML landscape");
+  f.innerHTML = bits.map(function(b){ return "<span>"+b+"</span>"; }).join("");
+  app.appendChild(f);
+
+  if(!app.children.length || app.children.length<=1){
+    app.appendChild(h("p","body","No debrief data found."));
+  }
+})();
+</script>
+</body>
+</html>

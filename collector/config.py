@@ -148,7 +148,7 @@ PRESS_SOURCES = {
 }
 # The pulse floor + caps that bound what the AGENTS read. The raw digest_input keeps EVERYTHING.
 AGENT_PAPER_CAP = 50               # top-N papers sent to the council
-AGENT_PAPER_FULL_ABSTRACTS = 25    # of those, how many get the FULL abstract (rest are one-liners)
+AGENT_PAPER_FULL_ABSTRACTS = 50    # all digest papers carry their abstract (the summarizer condenses)
 AGENT_PAPER_FRESH_RESERVE = 15     # of the cap, min slots RESERVED for the fresh/unscored tail (in_field=0 —
                                    # no measurable substance yet; the council judges these on the abstract)
 INSIDER_FRESH_CEILING = 5          # fresh-tail LABEL split (display only): insider < this = 🌱 genuinely fresh
@@ -157,7 +157,8 @@ AGENT_CAPS = {                     # per-type ceiling for the agent digest (non-
     "release": 50, "discussion": 80, "repo": 40, "article": 40, "funding": 30,
     "product": 20, "lab_news": 35, "event": 12, "social": 40,
 }
-AGENT_FULL_CONTENT = 15            # per non-paper type, how many get full summary (rest terse)
+AGENT_FULL_CONTENT = 100           # per non-paper type: effectively ALL digest items carry their summary
+                                   # (the summarizer stage needs source text for every item; was 15)
 PER_SOURCE_CAP = 4                 # no single feed may occupy > N slots in a section (Willison's 14 -> 4)
 
 # ---- Caching, snapshots, enrichment (step 3b-ii) -----------------------------------------------
@@ -170,6 +171,27 @@ CACHE_MAX_AGE_DAYS = 7             # prune cache rows older than this
 SNAPSHOT_DB = str(Path(__file__).resolve().parent.parent / "data" / "debrief.db")
 SNAPSHOT_RETENTION_DAYS = 90
 VELOCITY_MIN_SIGNAL = 3            # velocity ignores a signal until its ABSOLUTE value clears this (kills 0->1 blips)
+
+# ---- Fulltext stage (fetch + extract the linked page for agent-digest items) --------------------
+# Deterministic depth for the summarizer stage: for every item selected into the agent digest
+# (except the skip rules below), fetch item["url"] via the cached HTTP layer and extract the main
+# text to data/fulltext/<id>.txt. Papers skip (abstracts suffice); events skip (dates suffice).
+FULLTEXT_DIR = str(Path(__file__).resolve().parent.parent / "data" / "fulltext")
+FULLTEXT_MAX_CHARS = 6000          # cap per item — plenty for a summary, bounds the summarizer's input
+FULLTEXT_MIN_CHARS = 400           # extraction shorter than this counts as failed (item keeps its thin summary)
+FULLTEXT_TIMEOUT = 20
+FULLTEXT_RETRIES = 2
+FULLTEXT_SKIP_TYPES = {"paper", "event"}
+FULLTEXT_SKIP_DOMAINS = {          # JS-walled / login-walled / no extractable value (bare domains;
+    "producthunt.com",             #  matching strips "www." and covers subdomains)
+    "twitter.com", "x.com", "bsky.app",
+    "youtube.com", "youtu.be", "vimeo.com",
+}
+FULLTEXT_PAYWALL_DOMAINS = {
+    "wsj.com", "ft.com", "bloomberg.com", "nytimes.com", "theinformation.com", "economist.com",
+}
+FULLTEXT_DOMAIN_INTERVALS = {"reddit.com": 9.0}   # per-domain fetch spacing (seconds); default below
+FULLTEXT_DEFAULT_INTERVAL = 1.0
 
 # Traction enrichment runs on CANDIDATE papers only (on HF Daily OR cited in discourse).
 # HF paper-pages (fast: linked artifacts + official-repo stars) + Semantic Scholar (lagging: citations)
