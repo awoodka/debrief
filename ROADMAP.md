@@ -8,50 +8,29 @@ Everything here is **deliberately deferred** from v1. v1 = the collector + the f
 - **Debrief-as-memory**: feed the last several days' briefings (compact — e.g. past Bottom Lines) into synthesis so the advisor narrates continuity ("third agentic-memory release this week"). Complements the quantitative velocity signal.
 - **Tune divergence weights** against real output (weights live in one config file, easy to change).
 
-## The website — hosting the debrief archive (decided 2026-08-09)
+## The website — hosting the debrief archive
 
-**Decision: host as a static site on Cloudflare Pages** (not the FastAPI/Tunnel app below). Two facts make
-this the simple path: each run already renders a **self-contained** `debrief.html` (all CSS/JS inlined, no
-server needed), and **alexwoodka.com is already registered + DNS-hosted on Cloudflare**, so a custom
-domain and access-gating are one click away. Home page should be **as simple as possible**: just the list
-of debriefs, newest first. The dynamic app (next section) is deferred until a "Run from the web" button is
-actually wanted.
+**Live at `debrief.alexwoodka.com`, served from Alex's home server since 2026-09-14.** The archive is a
+static site. Each run renders a self-contained `debrief.html` (all CSS/JS inlined), and
+`dashboard/build_site.py` turns `data/debriefs/*/debrief.json` into `site/`:
 
-_Built (2026-08-09, this session):_
-- **`dashboard/build_site.py`** — scans `data/debriefs/*/debrief.json` and writes a static `site/`:
-  `site/index.html` (a **minimal** newest-first list — date + one-line `dek` + link) and
-  `site/<date>/index.html` per run, each fully self-contained, with a "← all debriefs" nav link injected.
-  Renders **both schemas** — the new flowing-article schema via `debrief.template.html`, the original
-  `bottom_line`/`gems`/`landscape` schema via `debrief.template.prev.html` — so all past debriefs stay
-  viewable. (The "SQLite debrief index" assumed elsewhere was never built — `debrief.db` holds only the
-  velocity `snapshots` table — so the builder just scans the folders; add an index table later only if
-  search/trends need it.)
-- **`Makefile`** — `make site` (build), `make preview` (build + serve at localhost:8000), `make publish`
-  (build + `wrangler pages deploy`). `site/` is git-ignored and rebuilt on demand.
+- `site/index.html`: a minimal newest-first list (date, one-line `dek`, link)
+- `site/<date>/index.html`: one debrief, self-contained, with a "← all debriefs" link
 
-_Remaining (needs your Cloudflare account / your choices):_
-1. **Deploy** — run the first-hosting steps below (interactive `wrangler login`, then `make publish`),
-   then add the custom domain `debrief.alexwoodka.com` in the Pages project settings.
-2. **Durable store / backup** — `data/debriefs/` is git-ignored + local; put the source debriefs in a
-   **private Git repo** so the archive is backed up (and Pages can auto-deploy on push if you prefer that
-   to `wrangler`).
-3. **Wire into the pipeline** — call `make publish` from `/debrief` Step 6 so each run updates the live
-   site. Left manual for now so publishing stays a deliberate step.
-4. **Home page polish + visibility** — the index is intentionally minimal; a richer landing page and the
-   public-latest / private-archive split (Cloudflare Access) are the next session's work.
+It renders **both schemas**: the flowing-article schema through `debrief.template.html`, and the
+original `bottom_line`/`gems`/`landscape` schema through `debrief.template.prev.html`. There's no debrief
+index table (`debrief.db` holds only the velocity `snapshots`); the builder scans the folders. Locally,
+`make site` builds it and `make preview` serves it at `localhost:8000`. `site/` is git-ignored and rebuilt
+on demand.
 
-_First hosting steps:_ `npm i -g wrangler` → `wrangler login` → `wrangler pages project create debrief` →
-`wrangler pages deploy site` (gives a `*.pages.dev` URL to confirm) → add the custom domain in the Pages
-project settings (DNS auto-created since the domain is already on Cloudflare).
+_History:_ from 2026-08-09 the archive was deployed to Cloudflare Pages with `make publish` (`wrangler`)
+and served at `alexwoodka.com/debrief`. That deploy was retired on 2026-09-14, and the server's archive
+started fresh rather than migrating the old issues.
 
-_Decisions:_
-- **URL — decided (2026-08-09): start with the subdomain `debrief.alexwoodka.com`.** The domain is fresh
-  (nothing at the apex today), so a subdomain is the fastest to stand up. A path (`alexwoodka.com/debrief`)
-  can be adopted later — either by making the apex one Pages project with `/debrief` as a folder, or via a
-  Cloudflare routing rule — without redoing the archive.
-- **Visibility — leaning (confirm at build): public latest / private archive.** Newest debrief at a
-  permanent public URL; the full back-catalog under a gated path (`…/archive/*`) behind **Cloudflare
-  Access** (email login, free).
+_Still open:_
+- **Visibility.** Everything is public. A public-latest / private-archive split (Cloudflare Access on an
+  archive path) is still an option.
+- **Home page polish.** The index is intentionally minimal.
 
 ## The dynamic dashboard (deferred — only if web-triggered runs are wanted)
 
@@ -69,32 +48,36 @@ A weekly/monthly "trend debrief" built off the **velocity snapshot store** (per-
 
 Currently **5 seats** (to keep per-run quota observable). When token usage proves comfortable, add a **6th seat — the Research Scientist** (pure substance/methodology), restoring a dedicated rigor lens alongside the Skeptic. Each seat is one markdown file in `.claude/agents/`, so adding one is a one-file drop.
 
-## Automation — daily autonomous run (built 2026-08-12)
+## Automation — the daily run (on the server since 2026-09-14)
 
-`/debrief` now runs itself every morning. A macOS **launchd LaunchAgent**
-(`scripts/com.alexwoodka.debrief.plist`, installed to `~/Library/LaunchAgents/`) fires at **10:00**
-daily and runs **`scripts/run_debrief.sh`**, which invokes `claude -p "/debrief"` **headless on the Max
-subscription** (verified: non-`--bare` headless uses the stored subscription login, no API key). Because
-Step 6 already publishes, a successful run auto-updates `alexwoodka.com/debrief`.
+`/debrief` runs every day at **10:00 America/New_York** on Alex's home server, started by a systemd timer.
+From 2026-08-12 it ran as a macOS launchd job instead; that job and `scripts/run_debrief.sh` are retired.
 
-Why local, not a cloud "routine": the pipeline needs the local repo, the Python venv, `data/`, and the
-`wrangler` login — a cloud agent runs on a fresh clone with none of those.
+Each run is three throwaway Docker containers built from one pinned image (a fixed Claude Code version
+and locked Python deps), then a publish step:
 
-Wrapper details worth knowing: it sets an explicit PATH (launchd's is minimal) so `claude`
-(`~/.local/bin`), `wrangler` (`~/.npm-global/bin`), and `node` are reachable; it refuses to run if
-`ANTHROPIC_API_KEY` is set (honors the subscription-only rule); it uses `--dangerously-skip-permissions`
-so an unattended run never hangs on a tool prompt; and it writes a dated log to `logs/debrief-<date>.log`.
+1. **collect**: `python -m collector.collect`. It gets the collector's API keys, never the Claude token.
+2. **agent**: `claude -p "/debrief --skip-collect"` on the Max subscription, with no Bash tool, the code
+   read-only, and only `data/` writable. A server-side prompt (`agent-prompt.md`) adapts the steps to
+   having no shell.
+3. **build**: `render.py` and `build_site.py`, with no network access.
+4. **publish**: an atomic switch to the new release. The last five releases are kept for rollback.
+
+The server's scripts (`run.sh`, `update.sh`, `agent-prompt.md`) live outside this repo.
+
+**Keep in sync.** `agent-prompt.md` overrides `/debrief` by step number (Steps 0, 1, 1.5, 2 and 6), and
+relies on `data/debriefs/<today>/enriched_digest.md` and the four `summaries-a.md`…`summaries-d.md`
+shards. Renumbering steps or changing that shard contract here needs a matching change on the server.
 
 Ops notes:
-- **Laptop sleep:** if the Mac is asleep at 10:00, launchd runs the job the next time it wakes (i.e. when
-  the lid opens). No `pmset` wake hack needed.
-- **Login expiry:** the `claude` subscription login expires periodically; if it lapses the run fails and
-  says so in the log — re-run `claude` interactively to re-login.
-- **Quota:** each run is heavy (collector + 4 summarizers + 5-seat council + Opus synthesis); a day that
-  hits the subscription cap just fails and logs it.
-- Change the time: edit Hour/Minute in the plist, then `launchctl unload -w … && launchctl load -w …`.
-  Remove: `launchctl unload -w ~/Library/LaunchAgents/com.alexwoodka.debrief.plist`.
-  Test now: `launchctl start com.alexwoodka.debrief` (watch `logs/debrief-<today>.log`).
+- **Updating:** push to GitHub, then run `update.sh` on the server. It pulls and rebuilds the image, and
+  the next run uses it. Nothing restarts.
+- **Login:** the run uses a token from `claude setup-token`, which lasts a year. When it lapses, the run
+  fails at its first check, before collecting, and says so in its log.
+- **Quota:** each run is heavy (collector, 4 summarizers, a 5-seat council, Opus synthesis). A day that
+  hits the subscription cap fails and logs it.
+- **Local runs:** `/debrief` still works interactively on the Mac for testing. It renders locally and
+  doesn't publish.
 
 ## Other deferred enrichments
 
@@ -104,4 +87,4 @@ Ops notes:
 
 ## Ops / housekeeping
 
-- `data/` (debriefs, snapshot DB, cache) is local and git-ignored. Set up a periodic backup of `data/` if the debrief history matters to you long-term.
+- `data/` (debriefs, snapshot DB, cache) is git-ignored. The live copy is on the server; back it up separately if the debrief history matters long-term.
