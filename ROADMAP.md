@@ -50,7 +50,8 @@ Currently **5 seats** (to keep per-run quota observable). When token usage prove
 
 ## Automation — the daily run (on the server since 2026-09-14)
 
-`/debrief` runs every day at **10:00 America/New_York** on Alex's home server, started by a systemd timer.
+`/debrief` runs every day at **08:30 America/New_York** on Alex's home server, started by a systemd timer.
+The start is randomized by up to 10 minutes, and a run takes about 30 minutes.
 From 2026-08-12 it ran as a macOS launchd job instead; that job and `scripts/run_debrief.sh` are retired.
 
 Each run is three throwaway Docker containers built from one pinned image (a fixed Claude Code version
