@@ -37,12 +37,38 @@ LOG="$REPO/logs/debrief-$STAMP.log"
 
   cd "$REPO" || { echo "ABORT: cannot cd to $REPO"; exit 1; }
 
+  # Fail fast before the collector's ~8 minutes and before any tokens are spent. Catches
+  # revoked disk access, iCloud-evicted files, and unparseable seat configs (a broken seat
+  # otherwise vanishes silently and the run still publishes, degraded).
+  if ! bash "$REPO/scripts/preflight.sh"; then
+    echo "ABORT: preflight failed — not spending tokens on a degraded run."
+    exit 1
+  fi
+
   # Headless run. --dangerously-skip-permissions so the unattended run never hangs on a
   # tool prompt (trusted local automation of our own command). Step 6 of /debrief also
   # rebuilds + publishes the site, so a successful run auto-updates alexwoodka.com/debrief.
-  "$CLAUDE" -p "/debrief" --dangerously-skip-permissions
+  #
+  # caffeinate: this Mac is set to sleep after 1 min idle, which killed the 2026-08-14 run
+  # mid-stream ("your computer went to sleep mid-response"). -i holds off idle sleep, -m
+  # keeps the disk spun, -s covers system sleep on AC. The assertion lives exactly as long
+  # as the claude process. NOTE: closing the lid still sleeps — no assertion prevents that.
+  caffeinate -ims "$CLAUDE" -p "/debrief" --dangerously-skip-permissions
   code=$?
 
-  echo "=== debrief run finished $(date '+%F %T %Z') — claude exit $code ==="
+  # `claude -p` exits 0 even when the run was interrupted mid-pipeline (2026-08-14: exit 0,
+  # nothing published, shard C never regenerated). Trust artifacts on disk, not the exit code.
+  OUT="$REPO/data/debriefs/$STAMP"
+  if [ "$code" -eq 0 ]; then
+    for f in debrief.md debrief.html debrief.json; do
+      if [ ! -s "$OUT/$f" ]; then
+        echo "FAIL: claude exited 0 but $OUT/$f is missing or empty — the run did not complete."
+        code=2
+        break
+      fi
+    done
+  fi
+
+  echo "=== debrief run finished $(date '+%F %T %Z') — exit $code ==="
   exit $code
 } >> "$LOG" 2>&1

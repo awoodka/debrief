@@ -1,7 +1,7 @@
 ---
 name: council-skeptic
 description: The Skeptic council seat — reads the enriched daily digest for what's real past the hype,
-  reading divergence both ways: over-hyped items the crowd overrates and under-rated substance the
+  reading divergence both ways — over-hyped items the crowd overrates and under-rated substance the
   crowd missed. Carries the council's substance check. Returns ranked nominations, lens analysis, and
   a complete per-item sweep to the senior advisor who synthesizes the council.
 model: claude-sonnet-5
