@@ -18,7 +18,7 @@ node_modules/
 .next/
 dist/
 
-# Generated static archive (rebuilt by `make site`; deployed to Cloudflare Pages)
+# Generated static archive (rebuilt by `make site`)
 site/
 
 # OS / editor

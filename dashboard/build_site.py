@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a static site of every debrief, ready to host (e.g. Cloudflare Pages).
+"""Build a static site of every debrief, ready to serve as plain static files.
 
 Scans data/debriefs/*/debrief.json, renders each through the matching dashboard template, and writes a
 self-contained `site/` folder:
@@ -15,8 +15,8 @@ Schema note: newer debriefs use the flowing-article schema (top-level `lead`/`bo
 `debrief.template.prev.html`. The builder picks the right template per file so both keep rendering.
 
 Usage:
-    .venv/bin/python dashboard/build_site.py      # writes ./site
-    wrangler pages deploy site                    # deploy (after `wrangler login`)
+    .venv/bin/python dashboard/build_site.py      # writes ./site, served at the domain root
+    DEBRIEF_SITE_BASE=/debrief .venv/bin/python dashboard/build_site.py   # build for a sub-path instead
 """
 import json
 import os
@@ -27,9 +27,9 @@ ROOT = Path(__file__).resolve().parent.parent
 DASH = ROOT / "dashboard"
 DEBRIEFS = ROOT / "data" / "debriefs"
 SITE = ROOT / "site"
-# Serve under a sub-path (e.g. alexwoodka.com/debrief) by setting DEBRIEF_SITE_BASE=/debrief; set it
-# empty to serve at the domain root (e.g. a subdomain, debrief.alexwoodka.com).
-BASE = os.environ.get("DEBRIEF_SITE_BASE", "/debrief").strip("/")
+# Served at the domain root by default (debrief.alexwoodka.com). Set DEBRIEF_SITE_BASE=/some-path to
+# build for a sub-path instead; that also writes a Cloudflare Pages `_redirects` from / to the sub-path.
+BASE = os.environ.get("DEBRIEF_SITE_BASE", "").strip("/")
 OUT = SITE / BASE if BASE else SITE
 PLACEHOLDER = "/*__DEBRIEF_DATA__*/"
 TPL_NEW = DASH / "debrief.template.html"

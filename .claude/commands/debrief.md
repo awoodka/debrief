@@ -263,17 +263,14 @@ prose field (`lead`, `prose`, `why_now`, `split.*`, `dek`). Prose fields may use
 index for every nominated id (transparency + the future trend layer); reference the memo files rather
 than pasting them (the page strips `_appendix` anyway).
 
-## Step 6 — Render, open, and publish
+## Step 6 — Render and open
 Run `.venv/bin/python dashboard/render.py <today>`. It fills the committed design template
 (`dashboard/debrief.template.html`) with `debrief.json` (dropping the heavy `_appendix`), writes
 `data/debriefs/<today>/debrief.html`, and opens it in Chrome. If it can't auto-open (headless), it
 prints the path — pass that path along to Alex.
 
-Then **publish the archive**: run `make publish` from the project root. It rebuilds the static site
-(`dashboard/build_site.py` → `site/`: every debrief, newest-first, both schemas) and deploys it to
-Cloudflare Pages, live at `alexwoodka.com/debrief`. **Fail-soft:** if `wrangler` isn't installed or
-logged in, note it and continue — the local `debrief.html` still rendered. (One-time setup:
-`npm i -g wrangler && wrangler login`.)
+Don't publish from here. The public archive at `debrief.alexwoodka.com` is built and published by the
+server's own daily run, so a run on the Mac stays local.
 
 **Your final chat message to Alex** IS the terminal briefing: the **Bottom Line** BLUF + the single
 **top gem**, one screen, no machinery named. Then stop — the full read just opened in Chrome
