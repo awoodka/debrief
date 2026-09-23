@@ -1,11 +1,10 @@
 # Debrief — Roadmap
 
-Everything here is **deliberately deferred** from v1. v1 = the collector + the five-seat council + synthesis + a tiered markdown briefing, run manually once a day. These are clean seams we've designed *for* but are **not** building yet.
+v1 is running: the collector, four summarizers, the five-seat council and a single-voice article, published every morning at `debrief.alexwoodka.com` (see *Automation* below). The rest of this file is how that runs and what's still deferred.
 
 ## Near-term (fast-follow once v1 works)
 
-- _(Reddit + Product Hunt + broader Hacker News were pulled into **v1** — see `docs/PLAN.md` §3 A2, content balance. No longer deferred.)_
-- **Debrief-as-memory**: feed the last several days' briefings (compact — e.g. past Bottom Lines) into synthesis so the advisor narrates continuity ("third agentic-memory release this week"). Complements the quantitative velocity signal.
+- **Debrief-as-memory**: feed the last several days' briefings (compact — e.g. past "What happened" lists and deks) into synthesis so the advisor narrates continuity ("third agentic-memory release this week"). Complements the quantitative velocity signal.
 - **Tune divergence weights** against real output (weights live in one config file, easy to change).
 
 ## The website — hosting the debrief archive
@@ -42,7 +41,7 @@ the headless multi-agent path at build time.
 
 ## The trend layer
 
-A weekly/monthly "trend debrief" built off the **velocity snapshot store** (per-item signals over time) + the archive of past debriefs. Surfaces multi-week tides, not just daily developments. This is why the snapshot store keeps a rolling ~90-day high-resolution window (then downsamples).
+A weekly/monthly "trend debrief" built off the **velocity snapshot store** (per-item signals over time) + the archive of past debriefs. Surfaces multi-week tides, not just daily developments. The snapshot store keeps 90 days of per-run snapshots for this; older rows are deleted, not downsampled.
 
 ## Scaling the council
 
@@ -83,7 +82,9 @@ Ops notes:
 ## Other deferred enrichments
 
 - **OpenAlex** for richer trend / citation-graph enrichment (free key, ~2026 requirement).
-- **Forwarding-inbox newsletter parser** as a fallback if the newsletter web archives become unscrapeable.
+- **Mass-market newsletters** (TLDR AI, The Batch, AlphaSignal). They were planned as web-archive scrapes,
+  which were never built; a forwarding-inbox parser is the fallback if scraping doesn't work out. The six
+  wired newsletters all come in over RSS.
 - **Longer snapshot retention** if the trend layer wants deeper history (disk is not the constraint).
 
 ## Ops / housekeeping
