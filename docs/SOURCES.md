@@ -6,6 +6,7 @@ If it has a feed it's usually a one-line add to `collector/config.py`; I'll wire
 
 ## Status legend
 - ✅ **wired** — active in `collector/config.py` now
+- ⏸ **idle** — the code is there, but it produces nothing right now (switched off or not configured)
 - 🟢 **ready** — feed verified working (URL given), easy to add
 - ➕ **candidate** — likely has a feed; URL still needs confirming
 - 🔧 **scrape/watch** — no feed; needs a small scraper / change-detector (verified reachable)
@@ -61,17 +62,20 @@ It then flows through dedupe + scoring automatically. Scrape/watch sources need 
   Exponential View (confirm feeds)
 - ➕ Practitioner blogs: Chip Huyen · Lilian Weng · Eugene Yan · Hamel Husain · Jason Liu
 - 💲 SemiAnalysis (chips/infra; mostly paid)
-- 📧 Email-only (TLDR AI · AlphaSignal): web-archive scrape (planned)
+- 📧 Email-only (TLDR AI · AlphaSignal): web-archive scrape (planned, not built)
 
 ## 6 · Practitioner discourse & community
 - ✅ Hacker News (keyword + front page + Show HN + Launch HN)
 - ✅ Reddit — LocalLLaMA, MachineLearning, artificial, startups, ycombinator
-- ✅ Lobsters (ai) · Bluesky (optional, app password)
+- ✅ Lobsters (ai)
+- ⏸ Bluesky — the source reads the public API, but `BLUESKY_HANDLES` is empty, so it returns nothing
 - ➕ More subreddits: r/OpenAI · r/SaaS · r/Entrepreneur · r/StableDiffusion · r/aivideo
 - 🐦 X/Twitter — no free read API; manual only
 
 ## 7 · Dev-tool & OSS momentum (what builders adopt)
-- ✅ GitHub Trending · GitHub Search (impl counts) · Product Hunt
+- ✅ GitHub Trending
+- ⏸ GitHub Search (impl counts) — off (`ENRICH_GITHUB_SEARCH = False`): slow, rate-limited, ~0 on fresh papers
+- ⏸ Product Hunt — wired, but skipped unless `PRODUCTHUNT_TOKEN` is set (it isn't on the server)
 - ➕ HF trending models/datasets/spaces · Replicate · Ollama · PyPI / npm trending
 - ➕ GitHub Releases for key repos (vllm, transformers, langchain, llama.cpp, ollama…) via per-repo `.atom` feeds
 
