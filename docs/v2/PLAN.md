@@ -307,3 +307,22 @@ The milestones are re-sequenced, because the paper and press rules depend on sig
   - Caching, degraded mode (press falls back to deterministic grouping with no stakes label), usage reporting, and the Claude Code version bump.
 - **M5:** the remaining sources, as before.
 - **M6:** `snapshot-fixtures` plus the weekly newsletter recall check, which replaces a hand-labelled `must_include.yml` as the main measure.
+
+## Revision 2: candidates first, one model call (2026-10-22)
+
+CRITERIA.md has been rewritten:
+- **Candidates.** Each section deterministically produces a capped candidate list: papers 15, releases 10, announcements 35, press 30, discussion 10, so at most 100 in all.
+- **One Haiku call** scores every candidate: a 1–5 score, `relevant`, `why`, `same_as`.
+- **A rule** keeps `score ≥ 4` and relevant. The number to keep is still to be tuned.
+
+This replaces "keep all announcements" and the separate press stakes label.
+
+Other changes:
+- Releases now means significant model releases only: the HF org watch (25 labs), HF trending models, OpenRouter, DeepSeek GitHub and LMArena. Tooling releases, PyPI, npm and repo trending are disabled, and so is PR Newswire.
+- "Relevant" is defined in `config/relevance.md`, in Alex's own words.
+- `debrief sections` prints the source list for each section, and config loading refuses an anchor source whose kind has no section.
+
+Effect on the milestones:
+- **M2** adds the model-release adapters (`hf_hub` with derivative filtering, `openrouter`, `github_org`, and `leaderboard` for LMArena) alongside HN and the paper signals.
+- **M3** builds the candidate stage.
+- **M4** builds the one scoring call.

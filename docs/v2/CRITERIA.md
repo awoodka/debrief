@@ -1,104 +1,125 @@
 # What makes it into the index
 
-Decided with Alex on 2026-10-22. Where this file disagrees with BRIEF.md §6.3–6.5 or with PLAN.md's triage stages, this file wins. The exact thresholds and patterns will live in `config/triage.yml` (M3), so tuning them doesn't need a code change.
+Decided with Alex on 2026-10-22. This supersedes BRIEF.md §6.3–6.5 and PLAN.md's triage stages. Thresholds and patterns will live in `config/triage.yml` (M3); what "relevant" means lives in `config/relevance.md`.
 
-## Principles
+## The pipeline
 
-- **Each section has its own rule.** Releases and lab announcements are kept whole. Press is kept when it's high-profile. Papers are a traction ranking.
-- **Rules decide, the model only labels.** Haiku 5.5 does two narrow jobs, both for press: grouping articles into events, and a high-stakes label. Everything else is deterministic, so every drop has a stated reason in `triage_log.jsonl`.
-- **Traction is the ranking key for papers and press.** This deliberately changes brief principle 3 ("volume is never a ranking key"). Spotting hidden gems is out of scope here: a light model or the collector can't do it reliably. The skill can still notice one among what it's given.
-- **Full text is fetched after selection**, for the index stories only (see the end of this file). No rule below needs more than a title and teaser.
+```
+collect ──> candidates (deterministic, per section, capped; at most 100 in total)
+        ──> one Haiku call scores every candidate
+        ──> a rule keeps the best
+        ──> full text for what's kept ──> the index
+```
 
-## Steps every section shares
+**Determinism.** The candidate list is a pure function of three things: the state database, the run's recorded timestamp, and the config.
+- Every window is measured from the run's timestamp, not the clock.
+- Every signal (upvotes, stars, HN points) is a stored snapshot.
+- Every sort has an explicit final tie-break on `story_id`.
 
-1. **Merge duplicates.** Stories that link the same artifact (a blog post and the arXiv paper it announces), and the same announcement cross-posted under different URLs (OlmoEarth on both the HF and Ai2 blogs, same title within 3 days), become one story.
-2. **New since the last brief.** Releases, announcements and press must have been first seen after the last published brief, per the reported ledger, `runs/<date>/reported.json`. Until the skill writes that ledger, it's "after the last triage run". Papers use their own 7-day window (below).
-3. **Blocklist.** Domains and title patterns in `config/triage.yml`.
+The model call is the one step that isn't deterministic, so it's pinned instead. Its result is cached by a hash of the candidate list, the prompt version, `relevance.md` and the model name. Re-running triage on the same data replays the cache, so the same index comes back. Both the candidate list and the model's answers are written to `triage_log.jsonl`.
 
-## Releases: keep every real release
+## Sections are fixed lists of sources
 
-Sources: GitHub releases for the tracked repos. Hugging Face org uploads, PyPI and npm arrive in M5.
+A story's section comes only from its source's `kind`, mapped through `settings.yml` `sections`. Nothing is inferred from content. `config.load()` refuses an enabled anchor source whose kind has no section. `debrief sections` prints the current lists. As of 2026-10-22:
 
-- **Keep:** every stable release.
-- **Drop:**
-  - drafts
-  - prereleases (GitHub's `prerelease` flag, or a tag matching rc, alpha, beta, dev or pre)
-  - build and nightly tags matching the patterns in config (`^b\d+$`, `nightly`, `^viable/`, …)
-- **Collapse:** a repo marked `collapse: daily` (llama.cpp, which releases on every build) keeps only its newest release of the day, with a count of the rest.
-- **Order:** newest first. No model.
-- **Open (M5):** Hugging Face org uploads can't be "keep all", since NVIDIA alone uploads dozens of checkpoints. Their rule gets settled when that adapter lands.
+| Section | Sources |
+|---|---|
+| papers | arxiv-rss, hf-daily-papers, hf-trending-papers |
+| releases | hf-org-watch (25 labs), hf-trending-models, openrouter-models, deepseek-github, lmarena |
+| announcements | 19 lab and company blogs (OpenAI, DeepMind, Google ×3, Anthropic ×2, Meta, Microsoft Research, Mistral, Cohere, Ai2, Apple, Thinking Machines, NVIDIA ×2, Hugging Face, AWS, Together) |
+| press_policy | TechCrunch, Ars Technica, MIT Technology Review, MIT News, The Verge, Wired, NIST, UK AISI, Federal Register, SEC EDGAR, OpenAI status, Anthropic status |
+| discussion | none. These stories are clusters of discussion posts (M2) |
 
-## Lab announcements: keep all
+Discussion sources (HN, Bluesky, LessWrong, the Alignment Forum, Mastodon, podcasts, Simon Willison) only attach to stories. Reference sources (the newsletters and Techmeme) only record coverage and feed the recall check. Neither kind ever becomes a story itself.
 
-Sources: every anchor source of kind `announcement` (the lab and company blogs).
+Turned off for releases, because they aren't news: GitHub tooling releases, PyPI, npm, trending Spaces and datasets, and GitHub trending and new repos. PR Newswire is off as well.
 
-- **Keep:** every new announcement, from every tier. Only the blocklist drops anything.
-- **Order:** by organization, then newest first. No model.
-- **Expected volume:** about 30 a day. AWS, OpenAI, NVIDIA and Hugging Face write about 75% of them.
-- **Revisit** if the volume crowds the skill. The fix would be a "what happened" label that moves tutorials and customer stories to a one-line list.
+## Candidates, per section
 
-## Press and policy: high-profile events only
+The windows count back from the run. "Not yet in a brief" uses the reported ledger, `runs/<date>/reported.json`. Until the skill writes that ledger, it means "not in a previous triage run's index".
 
-Sources: the press feeds (TechCrunch, Ars Technica, MIT Technology Review, MIT News, The Verge, Wired), PR Newswire, and the policy sources (NIST, UK AISI, Federal Register; SEC EDGAR in M5).
+### Papers: at most 15
 
-1. **Group articles into events.** First deterministically, where articles link the same artifact or URL. Then Haiku sorts the day's remaining press stories into events in one batched call. It sees their titles and teasers, plus the events from the previous 3 days so a story can join an earlier event. Example: the PHP vulnerability's six articles (TechCrunch, Ars, The Verge, two in Wired) become one event.
-2. **Traction per event:**
-   - `outlets`: distinct press sources in the event. A wire service (PR Newswire) never counts as an independent outlet.
-   - `techmeme`: Techmeme carried it, matched by link or title.
-   - `hn`: the discussion level (M2) of Hacker News threads linking any of the event's articles.
-3. **Stakes label** (Haiku, per event): `high` or `normal`. High means something a member of the AI community should know even when only one outlet has it:
-   - a major security incident or vulnerability in widely used software or models
-   - binding regulation, a lawsuit or a government action involving a major AI organization
-   - an outage or failure of a major AI service
-   - a big claim with stakes: a funding round of $1B or more, the acquisition of a known AI company, or a frontier-capability claim from a major lab
-4. **Keep an event when any of these holds:** `outlets ≥ 2`, `techmeme`, `hn ≥ notable`, or `stakes = high`. A wire-only item is kept only on `stakes = high`.
-5. **Order:** `outlets` descending, then `hn`, then newest.
+- **Pool:** papers first seen in the last 3 days. In practice that's what Hugging Face listed, since arXiv-only papers almost never show a signal that fast (1 of 40 sampled on 2026-10-22).
+- **Use bar.** A paper is eligible only with evidence of use: at least one model, dataset or Space on Hugging Face built on it, or an official repo with at least 100 stars. On 2026-10-22, 65 of 193 papers passed. Upvotes alone are attention, not use.
+- **Score: rank fusion.** Each signal ranks the eligible papers: upvotes, repo stars, adoption (models + datasets + Spaces), HN points (M2), and discussion spread (M2). A paper's score is the sum over the signals of `1 / (20 + rank)`.
+  - Tied values share a rank.
+  - A missing signal adds nothing.
+  - No single list can carry a paper. One org held 4 of the top 12 by upvotes.
+- **Order:** score, then upvotes, then `story_id`. At most 2 per organization. The first 15 go to the model.
 
-## Papers: the top 10 by traction from the last 7 days
+### Releases: at most 10
 
-- **Pool:** papers first seen in the last 7 days (arXiv and Hugging Face Daily Papers).
-- **Signals,** each read at its latest snapshot. Each is a ranking of the pool, counting only papers where the value is above 0:
-  1. Hugging Face upvotes. The last 7 days of Daily Papers are re-read every day, because upvotes keep growing.
-  2. GitHub stars of the official repo (`githubStars` from the HF paper API).
-  3. Adoption: models, datasets and Spaces on Hugging Face that link the paper.
-  4. Hacker News points: the best thread linking the paper (M2).
-  5. Discussion spread: distinct discussion threads or posts mentioning it (HN, Bluesky, Simon Willison) (M2/M5).
-- **Score: rank fusion.** A paper's score is the sum, over the signals, of `1 / (k + rank)`. Tied values share a rank, and k starts at 20.
-  - Signals on different scales combine without weights.
-  - A missing signal simply adds nothing.
-  - No single list, such as an org's coordinated upvotes, can carry a paper on its own. On 2026-10-22, one org held 4 of the top 12 by upvotes.
-  - k sets how much topping one list counts against ranking well on several.
-- **Select:** the top 10 by score, at most 2 per organization, skipping papers already in a published brief. A paper with no signal scores 0 and is never picked. Ties go to the higher upvote count.
-- **Deliberately not in the score:**
-  - newsletter coverage, which is the evaluation set below and would otherwise grade itself
-  - citations, too slow to move within a week
-- No model.
+**Significant model releases only:**
+- new original repos from the 25 watched labs, created in the last 48 hours
+- models first seen in HF trending in the last 48 hours that were created within the last 14 days
+- OpenRouter model IDs first seen in the last 48 hours
+- new DeepSeek GitHub repos first seen in the last 48 hours
+- a model that newly enters LMArena's top 5
 
-## Discussion-only stories (M2)
+**What doesn't count as a release:**
+- **Derivatives.** HF tags them `base_model:quantized`, `:finetune`, `:adapter` or `:merge`.
+- **Format copies.** A name ending in GGUF, NVFP4, FP8, AWQ, GPTQ or MLX is folded into the original's story.
+- **Personal accounts.** Only organization accounts count.
 
-A topic discussed in at least 3 independent sources, with no shared artifact. The rule gets settled once M2 produces real data.
+**Order:** tier, then likes, then `story_id`.
+
+### Lab announcements: at most 35
+
+- **Pool:** everything published in the last 48 hours that isn't yet in a brief.
+- **Over the cap,** sources take turns: one source at a time, tier 1 first and then in `sources.yml` order, each giving its newest post. So no single vendor can fill the section on a conference day; on 2026-10-21, NVIDIA's GTC Berlin keynote alone produced 14 posts. Final tie-break: `story_id`.
+
+### Press and policy: at most 30
+
+- **Pool:** everything published in the last 48 hours that isn't yet in a brief.
+- **Grouping:** articles that link the same artifact or URL become one event, deterministically. The model handles the rest of the grouping (below).
+- **Order:**
+  1. `outlets`, the distinct press sources in the event (wires never count)
+  2. Techmeme carried it
+  3. the HN discussion level (M2)
+  4. newest
+  5. `story_id`
+- **Status pages:** only incidents marked major (M5).
+
+### Discussion-only stories: at most 10 (M2)
+
+A topic with at least 3 independent sources and no shared artifact. Ordered by spread, then discussion level, then `story_id`.
+
+The caps add up to 100. A normal day runs about 80–90: about 30 announcements, 30 press, 15 papers, and a few releases.
+
+## The model call (Haiku 5.5, one call per run)
+
+**Input.** Every candidate, in the deterministic order above, delimited as data. Each one carries:
+- its id, section, source and organization
+- its title
+- its teaser or abstract, about 600 characters
+- its signals
+
+Plus the rubric from `config/relevance.md`. Fetched text is untrusted, and the prompt says so.
+
+**Output**, schema-enforced, one entry per candidate:
+- `score`, 1 to 5:
+  - **5, reshapes the field:** a frontier model or major open release with a new capability; a tool that changes how developers build; a finding that changes how models are trained, evaluated or deployed; policy or geopolitics with broad effect.
+  - **4, clearly moves the landscape:** a notable model, tool or result in an important area; a major funding round or acquisition; an incident many people feel (the PHP2Shell vulnerability).
+  - **3, useful but narrower context:** a real but incremental advance; regional or sector policy; a notable product update.
+  - **2, routine:** minor updates, customer and partner stories.
+  - **1, not relevant:** tutorials, marketing, events, off-topic.
+- `relevant`: yes or no, against `relevance.md`
+- `why`: one line, at most 20 words
+- `same_as`: the id of another candidate covering the same event, or null. This is how the six PHP articles and OpenAI's "Patch the Planet" post become one story.
+
+**Then the rule.** Keep candidates with `score ≥ 4` and `relevant`, after merging by `same_as`. How many to keep isn't settled yet; it gets tuned with the recall check below once there's real output.
+
+**Degraded mode.** If Haiku is unavailable, keep each section's first few candidates in the deterministic order, and mark the run `degraded`.
 
 ## How we check it (M6, weekly)
 
-- **The reference set.** The newsletters (Import AI, Interconnects, Ahead of AI, Latent Space, DWATV, Last Week in AI, The Batch) are a human-curated record of what mattered. Every paper and press event they covered in the week forms the reference set.
-- **What gets reported:**
-  - paper recall: the share of their papers that made our top 10 on some day
-  - event recall: the share of their press events we kept
-  - what we missed, and why
-- **Tuning:** k, the press thresholds and the stakes definition are tuned against these numbers. Newsletters never enter a score.
+- **The reference set:** every paper and event the newsletters covered that week (Import AI, Interconnects, Ahead of AI, Latent Space, DWATV, Last Week in AI, The Batch).
+- **What gets reported:** what share of that reference set we kept, and what we missed and why.
+- **Tuning:** the caps, the use bar, k, the score threshold and the rubric are tuned against those numbers.
+- **Newsletters never enter a score or a candidate list.**
 
-## Full text (after selection)
+## Full text (after the rule)
 
-- **For every index story except papers:** fetch its page and extract the main text with trafilatura, capped at about 8,000 characters. Robots.txt is checked and paywalled domains are skipped. It's stored raw and in the detail file the skill reads. That's about 40–60 fetches a day.
-- **Papers** keep their abstract. The arXiv cap rises to 2,000 characters so abstracts stop being cut off.
-
-## Index size
-
-The index is no longer a fixed total. Papers are fixed at 10; the other sections follow their rules. A typical day:
-- 5–10 releases after collapsing
-- about 30 announcements
-- 3–8 press events
-- 10 papers
-- plus discussion-only stories
-
-That's roughly 50–60 in all. The brief's per-section quotas and wildcard slots are dropped. The wildcards were a safety net against the model wrongly dropping tier-1 stories, and nothing tier 1 goes through the model now.
+- **For every kept story except papers:** fetch its page and extract the main text with trafilatura, capped at about 8,000 characters. Robots.txt is checked and paywalled domains are skipped. It's stored raw and in the story's detail file.
+- **Papers** keep their abstract, with the cap raised to 2,000 characters.

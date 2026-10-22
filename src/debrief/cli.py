@@ -6,6 +6,7 @@
                                          fetch, keep raw responses, build stories
   debrief collect --replay YYYY-MM-DD [--into PATH]
                                          rebuild a day from raw files, no network
+  debrief sections                       which sources feed each section (from the config)
   debrief triage | snapshot-fixtures     arrive in M3 and M6
 """
 import argparse
@@ -39,6 +40,31 @@ def _collect(args, cfg):
     return 0 if report["status"] == "ok" else 3
 
 
+def _sections(args, cfg):
+    """Print which sources feed each section, straight from the config."""
+    from .adapters import REGISTRY
+    sections = cfg.settings["sections"]
+    order = list(dict.fromkeys(sections.values()))
+    enabled = [s for s in cfg.sources if s.enabled]
+    for sec in order:
+        rows = [s for s in enabled if "anchor" in s.roles and sections.get(s.kind) == sec]
+        if not rows:
+            print(f"{sec}: no anchor sources; these stories are formed from discussion clusters (M2)")
+            continue
+        print(f"{sec} ({len(rows)} sources)")
+        for s in rows:
+            built = "" if s.adapter in REGISTRY else "   [adapter not built yet]"
+            print(f"  tier {s.tier}  {s.id:22} {s.name}{built}")
+    for role, label in (("discussion", "discussion: attach to stories (M2), never stories themselves"),
+                        ("reference", "reference: coverage and the recall check, never scored or shown")):
+        rows = [s for s in enabled if role in s.roles and "anchor" not in s.roles]
+        print(f"{label} ({len(rows)})")
+        print("  " + ", ".join(s.id for s in rows))
+    off = [s.id for s in cfg.sources if not s.enabled]
+    print(f"disabled ({len(off)}): " + ", ".join(off))
+    return 0
+
+
 def _not_yet(milestone):
     def run(args, cfg):
         print(f"{args.cmd}: not built yet (arrives in {milestone})", file=sys.stderr)
@@ -62,6 +88,8 @@ def main(argv=None):
     p.add_argument("--replay", metavar="DATE", help="rebuild DATE from raw files into a new database")
     p.add_argument("--into", help="replay target database (default: <data>/replay/<date>-<time>.sqlite)")
     p.set_defaults(func=_collect)
+
+    sub.add_parser("sections", help="list the sources that feed each section").set_defaults(func=_sections)
 
     for name, milestone in (("triage", "M3"), ("snapshot-fixtures", "M6")):
         sub.add_parser(name).set_defaults(func=_not_yet(milestone))

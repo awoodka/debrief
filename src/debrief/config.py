@@ -102,6 +102,14 @@ def load(config_dir=CONFIG_DIR, env=os.environ):
         seen.add(src.id)
         sources.append(src)
 
+    # A story's section comes only from its source's kind, via settings.sections. So every enabled
+    # source that creates stories must name a kind that maps to one; nothing is inferred from content.
+    sections = settings.get("sections") or {}
+    for src in sources:
+        if src.enabled and "anchor" in src.roles and sections.get(src.kind) is None:
+            raise ConfigError(f"sources.yml entry {src.id!r}: anchor kind {src.kind!r} has no section "
+                              f"in settings.yml (known kinds: {sorted(sections)})")
+
     data_dir = Path(env.get("DEBRIEF_DATA_DIR") or REPO / "data" / "v2")
     # v1 publishes whatever is in its debriefs/ folder; a v2 run must never write there.
     if (data_dir / "debriefs").is_dir():
