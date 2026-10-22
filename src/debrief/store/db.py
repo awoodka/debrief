@@ -165,6 +165,39 @@ class Store:
         cols = ", ".join(m)
         self.run(f"INSERT INTO mentions ({cols}) VALUES ({', '.join('?' * len(m))})", tuple(m.values()))
 
+    def mention(self, mention_id):
+        row = self.one("SELECT * FROM mentions WHERE mention_id=?", (mention_id,))
+        return dict(row) if row else None
+
+    def set_mention_story(self, mention_id, story_id, method, score):
+        self.run("UPDATE mentions SET story_id=?, match_method=?, match_score=? WHERE mention_id=?",
+                 (story_id, method, score, mention_id))
+
+    def save_engagement(self, mention_id, at, e):
+        self.run("INSERT OR REPLACE INTO engagement VALUES (?,?,?,?,?,?)",
+                 (mention_id, at, e.get("points"), e.get("comments"), e.get("likes"), e.get("reposts")))
+
+    def save_signals(self, story_id, at, source_id, signals):
+        for name, value in sorted(signals.items()):
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                self.run("INSERT OR REPLACE INTO story_signals VALUES (?,?,?,?,?)",
+                         (story_id, at, source_id, name, float(value)))
+
+    def latest_signals(self, story_id):
+        """{name: value} from the most recent observation of each signal."""
+        rows = self.q("""SELECT name, value FROM story_signals s WHERE story_id=? AND observed_at =
+                         (SELECT MAX(observed_at) FROM story_signals t
+                          WHERE t.story_id=s.story_id AND t.name=s.name) ORDER BY name""", (story_id,))
+        return {r[0]: r[1] for r in rows}
+
+    def add_coverage(self, story_id, mention_id, source_id, url, covered_at):
+        self.run("INSERT OR IGNORE INTO coverage VALUES (?,?,?,?,?)",
+                 (story_id, mention_id, source_id, url, covered_at))
+
+    def story_for_url(self, url):
+        row = self.one("SELECT story_id FROM story_urls WHERE url=?", (url,))
+        return row[0] if row else None
+
     def dump(self, table, order_by):
         """Every row of a table as plain tuples, for comparing two databases."""
         return [tuple(r) for r in self.q(f"SELECT * FROM {table} ORDER BY {order_by}")]

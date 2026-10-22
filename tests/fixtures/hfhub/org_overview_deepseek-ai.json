@@ -1,0 +1,16 @@
+{
+ "_id": "652faff917096ceb6bf53f3f",
+ "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/6538815d1bdb3c40db94fbfa/xMBly9PUMphrFVMxLX4kq.png",
+ "fullname": "DeepSeek",
+ "name": "deepseek-ai",
+ "isVerified": true,
+ "isFollowing": false,
+ "numUsers": 37,
+ "numModels": 106,
+ "numSpaces": 6,
+ "numDatasets": 2,
+ "numKernels": 0,
+ "numBuckets": 0,
+ "numPapers": 30,
+ "numFollowers": 151047
+}

@@ -63,7 +63,33 @@ collect:
     max_new_per_run: 15
   hf_daily_papers:
     bootstrap_days: 3
+    lookback_days: 4            # re-read this many days every run, so upvotes and comments stay current
     limit: 100                  # the API defaults to 50 a day; 64 were listed on 2026-10-21
+  hf_papers:
+    lookback_days: 3            # the paper pool: papers HF listed, first seen this many days back (CRITERIA.md)
+  paper_use_bar:                # evidence of use (CRITERIA.md): one of these
+    min_artifacts: 1            # models + datasets + Spaces on the Hub that link the paper
+    min_stars: 100              # the official repo's GitHub stars
+  hn:
+    slice_hours: 6              # one request per slice (~400 stories per 6 h on 2026-10-22; the API returns up to 1000)
+    overlap_minutes: 60         # re-read the last hour each run; Algolia indexes some stories late
+    bootstrap_hours: 24         # how far back a first run reaches (bootstrap-bands reaches further)
+    refresh_days: 3             # re-read points and comments of attached threads posted this recently
+  hn_comments:
+    thread_source: hn
+    days: 3                     # threads posted this recently
+    min_comments: 5
+    max_threads: 40             # per run
+    regrow: 1.5                 # re-read a tree once its comment count has grown this many times
+    top_ranked: 8               # top-level comments kept, in HN's ranked order
+    top_replied: 3              # plus this many of the most-replied others, so disagreement survives
+    comment_max_chars: 1200
+  hf_paper_comments:
+    # Automated accounts that comment on many papers (link lists, related-paper bots); not discussion.
+    skip_authors: [librarian-bot, researchstudio-bot]
+    skip_author_pattern: '(^|[-_])bot$'
+  hf_trending:
+    max_age_days: 14            # a trending model counts as a release only if it's this new
 
 # Story kind -> index section.
 sections:
@@ -76,3 +102,27 @@ sections:
   policy: press_policy
   incident: press_policy
   discussion: discussion
+
+# Attaching mentions to stories (stories/attach.py).
+attach:
+  title_days: 7                 # stories first seen this recently are candidates for the title rule
+  title_min_jaccard: 0.6        # conservative on purpose; the model's same_as pass (M4) covers the rest
+  title_min_shared: 4
+  retro_days: 7                 # the end-of-run pass retries unattached posts this recent
+
+# Discussion level and trend (stories/signals.py has the exact rules).
+bands:
+  window_days: 14
+  min_observations: 200         # a source needs this many threads in the window before percentiles mean anything
+  # Only threads with at least this many points count toward a source's distribution. Most HN
+  # submissions die at 1-3 points: on 2026-10-22 the 75th percentile over all of them was 4 points,
+  # so every attached thread looked notable. With a floor of 10 (~138 threads a day) it's 140 points,
+  # and the 95th is 525. Threads below the floor still count toward "some".
+  floor:
+    hn: 10
+  notable_pctl: 75
+  heavy_pctl: 95
+trend:
+  rising_ratio: 1.5
+  falling_ratio: 0.5
+  min_growth: 10                # points + comments; smaller moves are noise (a 3 -> 5 -> 5 thread isn't "falling")

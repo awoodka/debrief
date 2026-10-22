@@ -95,15 +95,15 @@
 
 - id: deepseek-github
   name: DeepSeek GitHub org (new repos)
-  adapter: github_org
   roles: [anchor]
   tier: 1
   kind: release
   org: DeepSeek
-  url: https://api.github.com/orgs/deepseek-ai/repos?sort=created&direction=desc&per_page=5
   probe: {kind: json, items: '', title: full_name, date: created_at}
   auth: {env: GITHUB_PAT, header: Authorization, format: 'Bearer {}'}
   notes: DeepSeek has no feed; its HF org is in hf-org-watch
+  adapter: github_org
+  url: https://api.github.com/orgs/deepseek-ai/repos?sort=created&direction=desc&per_page=10
 
 - id: microsoft-research
   name: Microsoft Research blog
@@ -303,21 +303,23 @@
 
 - id: hf-paper-detail
   name: Hugging Face paper page API (per paper)
-  adapter: hf_daily_papers
   roles: [context]
   tier: 2
-  url: https://huggingface.co/api/papers/2501.12948
   probe: {kind: json, single: true, title: title}
-  notes: sample paper 2501.12948; checks which fields carry comments and upvotes
+  adapter: hf_paper_api
+  url: https://huggingface.co/api/papers/{each}
+  each: ['2501.12948']
+  notes: 'per-paper signals for the pool: upvotes, repo stars, models/datasets/Spaces built on it (the probe uses one sample paper)'
 
 - id: hf-paper-comments
   name: Hugging Face paper comments
   roles: [discussion]
   tier: 3
   adapter: hf_paper_page
-  url: https://huggingface.co/papers/2501.12948
   probe: {kind: status, expect: [200], contains: '&quot;comments&quot;:['}
   notes: no comments API (/api/papers/{id}/comments is 404). Comments are in the page's embedded JSON; daily_papers gives numComments, so only pages with comments get fetched
+  url: https://huggingface.co/papers/{each}
+  each: ['2501.12948']
 
 - id: hf-trending-papers
   name: Hugging Face trending papers
@@ -390,26 +392,26 @@
 # ------------------------------------------------------------------- models, code and benchmarks
 - id: hf-org-watch
   name: Hugging Face Hub org watch
-  adapter: hf_hub
   roles: [anchor]
   tier: 1
   kind: release
-  url: https://huggingface.co/api/models?author={each}&sort=createdAt&direction=-1&limit=3
   each: [deepseek-ai, Qwen, meta-llama, meta-models, mistralai, google, microsoft, nvidia, allenai,
          openai, moonshotai, zai-org, MiniMaxAI, stepfun-ai, tencent, baidu, ByteDance-Seed, ibm-granite,
          HuggingFaceTB, black-forest-labs, Lightricks, CohereLabs, LiquidAI, apple, xai-org]
   probe: {kind: json, items: '', title: id, date: createdAt}
   notes: 'significant open-weight labs; list widened 2026-10-22 (meta-models, black-forest-labs and tencent were trending but unwatched)'
+  adapter: hf_org_watch
+  url: https://huggingface.co/api/models?author={each}&sort=createdAt&direction=-1&limit=20
 
 - id: hf-trending-models
   name: Hugging Face trending models
-  adapter: hf_hub
   roles: [anchor]
   tier: 2
   kind: release
-  url: https://huggingface.co/api/models?sort=trendingScore&limit=5
   probe: {kind: json, items: '', title: id, date: createdAt}
   notes: verify param
+  adapter: hf_trending
+  url: https://huggingface.co/api/models?sort=trendingScore&limit=50
 
 - id: hf-trending-spaces
   name: Hugging Face trending Spaces
@@ -508,23 +510,24 @@
 
 - id: lmarena
   name: LMArena leaderboard
-  adapter: leaderboard
   roles: [anchor]
   tier: 2
   kind: leaderboard
-  url: https://datasets-server.huggingface.co/rows?dataset=lmarena-ai/leaderboard-dataset&config=text&split=latest&offset=0&length=20
   probe: {kind: json, items: rows, title: row.model_name}
   notes: lmarena.ai returns 403; the official lmarena-ai/leaderboard-dataset on HF (updated 2026-10-21) is read through the datasets-server rows API
+  adapter: leaderboard
+  url: https://datasets-server.huggingface.co/rows?dataset=lmarena-ai/leaderboard-dataset&config=text&split=latest&offset=0&length=50
+  options: {top_n: 5}
 
 - id: openrouter-models
   name: OpenRouter models
-  adapter: openrouter
   roles: [anchor]
   tier: 2
   kind: release
   url: https://openrouter.ai/api/v1/models
   probe: {kind: json, items: data, title: id, date: created}
   notes: verify
+  adapter: openrouter
 
 - id: openrouter-rankings
   name: OpenRouter rankings
@@ -588,14 +591,18 @@
   url: https://hn.algolia.com/api/v1/search_by_date?tags=story&numericFilters=created_at_i>{since_24h}&hitsPerPage=3
   probe: {kind: json, items: hits, title: title, date: created_at, count: nbHits}
   notes: most important discussion source; count = stories in the last 24 h
+  options: {cadence: [daily, 6h]}
 
 - id: hn-items
   name: Hacker News comment trees (Algolia items)
-  adapter: hn
   roles: [discussion]
   tier: 3
-  url: https://hn.algolia.com/api/v1/items/8863
   probe: {kind: json, single: true, title: title}
+  adapter: hn_comments
+  url: https://hn.algolia.com/api/v1/items/{each}
+  each: ['8863']
+  options: {cadence: [daily, 6h]}
+  notes: 'comment trees for attached threads: Algolia for the text, the Firebase API for the ranked order'
 
 - id: bluesky
   name: Bluesky (curated accounts)

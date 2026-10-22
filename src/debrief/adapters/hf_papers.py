@@ -1,6 +1,7 @@
-"""Hugging Face Daily Papers. One request per day, from the day before the cursor to today, so a
-late run fills the gap and late additions to yesterday's list are caught. The seen-set drops
-repeats. Upvotes and comment counts are kept in `extra`; engagement snapshots arrive in M2.
+"""Hugging Face Daily Papers. One request per day, from the day before the cursor (or the start of
+the lookback window, whichever is earlier) to today, so a late run fills the gap, late additions
+are caught, and upvote and comment counts are re-read while a paper is in the pool. The seen-set
+drops repeats; every sighting records hf_upvotes and hf_comments as signals.
 
 The API caps a day at `limit` papers (default 50, so we ask for 100). Hitting the cap is reported
 as a warning, since the list may be truncated. Weekends legitimately return no papers.
@@ -22,6 +23,8 @@ class HfDailyPapers(Adapter):
         today = ctx.now.date()
         last = ctx.store.cursor(source.id).get("last_date")
         start = date.fromisoformat(last) - timedelta(days=1) if last else today - timedelta(days=o["bootstrap_days"] - 1)
+        # Re-read the last lookback_days days every run, so upvote and comment counts stay current.
+        start = min(start, today - timedelta(days=o["lookback_days"] - 1))
         d, all_ok = start, True
         while d <= today:
             rec = ctx.get(source, f"{source.url}?date={d.isoformat()}&limit={o['limit']}",
@@ -58,6 +61,7 @@ class HfDailyPapers(Adapter):
                 kind="paper", org=sanitize.text(org, 120) or source.org,
                 artifact_urls=(f"https://huggingface.co/papers/{aid}",),
                 code_urls=(repo,) if repo.startswith("https://github.com/") else (),
+                signals={"hf_upvotes": p.get("upvotes") or 0, "hf_comments": d.get("numComments") or 0},
                 extra={"hf_upvotes": p.get("upvotes"), "hf_comments": d.get("numComments"),
                        "n_authors": len(authors), "listed_on": record.get("meta", {}).get("date"),
                        "submitted_on_daily_at": p.get("submittedOnDailyAt"),

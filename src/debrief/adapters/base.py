@@ -15,8 +15,9 @@ from ..store import raw
 class Item:
     """One thing a source returned, normalized. The story builder decides what it becomes.
 
-    role: "anchor" can create or update a story; "mention" is a discussion or reference post
-    (M1 stores it unattached); "seen" only records the key, so it's never new again.
+    role: "anchor" can create or update a story; "mention" is a discussion or reference post,
+    attached to stories by stories.attach; "seen" only records the key, so it's never new again;
+    "signal" is a lookup about an existing story (story_id required) that only adds signals.
     """
     item_key: str
     role: str
@@ -31,6 +32,16 @@ class Item:
     artifact_urls: tuple = ()
     code_urls: tuple = ()
     extra: dict = field(default_factory=dict)
+    # Snapshots, recorded every time the item is seen (not just the first time):
+    signals: dict = field(default_factory=dict)      # about the artifact: upvotes, stars, likes ...
+    engagement: dict = field(default_factory=dict)   # about a post: points, comments, likes, reposts
+    # Mentions only:
+    links: tuple = ()                 # URLs the post links to; attach and coverage resolve these
+    mention_kind: str | None = None   # thread | post | comment | reference (default from the source's roles)
+    parent_id: str | None = None      # a comment's thread, as a mention id
+    story_hint: str | None = None     # the story the adapter already knows it belongs to
+    rank: int | None = None           # position in the source's own ranked order (comments)
+    replies: int | None = None        # descendants (comments)
 
 
 class Adapter:
@@ -43,6 +54,13 @@ class Adapter:
     #                missing from the seen-set is itself the evidence that the post is new)
     #   False        never (the source only ever lists new things)
     windowed = True
+    # On a source's first run, record every anchor as seen (for snapshots like a leaderboard,
+    # where "new" only means something relative to a previous run).
+    first_run_seen = False
+    # When collect runs it: None = by its roles (anchor, then discussion, then reference); or
+    # "enrich" (lookups about stories, after the anchors) / "threads" (comment trees, after the
+    # discussion sources they hang off).
+    phase = None
 
     def fetch(self, ctx, source):
         raise NotImplementedError
@@ -55,9 +73,12 @@ class FetchContext:
     """Everything fetch() may use. Records, validators and the cursor are only proposals here:
     collect saves them once the source's items are stored."""
 
-    def __init__(self, client, store, env, run_id, now, opts, log=print):
+    def __init__(self, client, store, env, run_id, now, opts, log=print, run_date=None,
+                 backfill_hours=None):
         self.client, self.store, self.env = client, store, env
         self.run_id, self.now, self.opts, self.log = run_id, now, opts, log
+        self.run_date = run_date or now.date().isoformat()
+        self.backfill_hours = backfill_hours     # bootstrap-bands: reach back this far, ignoring the cursor
         self.records, self.validators, self.warnings = [], [], []
         self.cursor = None
 

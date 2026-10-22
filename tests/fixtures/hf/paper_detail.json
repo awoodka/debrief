@@ -1,0 +1,171 @@
+{
+ "id": "2501.12948",
+ "publishedAt": "2025-01-22T15:19:35.000Z",
+ "submittedOnDailyAt": "2025-01-23T00:00:00.000Z",
+ "title": "DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via\n  Reinforcement Learning",
+ "submittedOnDailyBy": {
+  "_id": "60f1abe7544c2adfd699860c",
+  "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/1674929746905-60f1abe7544c2adfd699860c.jpeg",
+  "isPro": false,
+  "fullname": "AK",
+  "user": "akhaliq",
+  "type": "user",
+  "name": "akhaliq"
+ },
+ "summary": "We introduce our first-generation reasoning models, DeepSeek-R1-Zero and\nDeepSeek-R1. DeepSeek-R1-Zero, a model trained via large-scale reinforcement\nlearning (RL) without supervised fine-tuning (SFT) as a preliminary step,\ndemonstrates remarkable reasoning capabilities. Through RL, DeepSeek-R1-Zero",
+ "upvotes": 463,
+ "discussionId": "6791b70c76d05e183a4116bf",
+ "githubRepo": "https://github.com/deepseek-ai/deepseek-r1",
+ "githubRepoAddedBy": "auto",
+ "ai_summary": "DeepSeek-R1-Zero and DeepSeek-R1 utilize reinforcement learning and multi-stage training to enhance reasoning capabilities, with DeepSeek-R1 achieving performance comparable to OpenAI-o1-1217.",
+ "ai_keywords": [
+  "reinforcement learning",
+  "multi-stage training",
+  "cold-start data",
+  "Qwen",
+  "Llama"
+ ],
+ "ai_summary_model": "Qwen/Qwen2.5-Coder-32B-Instruct",
+ "githubStars": 91933,
+ "organization": {
+  "_id": "652faff917096ceb6bf53f3f",
+  "name": "deepseek-ai",
+  "fullname": "DeepSeek",
+  "avatar": "https://cdn-avatars.huggingface.co/v1/production/uploads/6538815d1bdb3c40db94fbfa/xMBly9PUMphrFVMxLX4kq.png"
+ },
+ "linkedModels": [
+  {
+   "author": "deepseek-ai",
+   "authorData": {
+    "_id": "652faff917096ceb6bf53f3f",
+    "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/6538815d1bdb3c40db94fbfa/xMBly9PUMphrFVMxLX4kq.png",
+    "fullname": "DeepSeek",
+    "name": "deepseek-ai",
+    "type": "org",
+    "isHf": false,
+    "isHfAdmin": false,
+    "isMod": false,
+    "followerCount": 151047,
+    "isUserFollowing": false
+   },
+   "downloads": 1373498,
+   "gated": false,
+   "id": "deepseek-ai/DeepSeek-R1",
+   "availableInferenceProviders": [],
+   "lastModified": "2025-03-27T04:01:59.000Z",
+   "likes": 14402,
+   "pipeline_tag": "text-generation",
+   "private": false,
+   "repoType": "model",
+   "isLikedByUser": false,
+   "widgetOutputUrls": [],
+   "numParameters": 684489845504
+  },
+  {
+   "author": "deepseek-ai",
+   "authorData": {
+    "_id": "652faff917096ceb6bf53f3f",
+    "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/6538815d1bdb3c40db94fbfa/xMBly9PUMphrFVMxLX4kq.png",
+    "fullname": "DeepSeek",
+    "name": "deepseek-ai",
+    "type": "org",
+    "isHf": false,
+    "isHfAdmin": false,
+    "isMod": false,
+    "followerCount": 151047,
+    "isUserFollowing": false
+   },
+   "downloads": 168548,
+   "gated": false,
+   "id": "deepseek-ai/DeepSeek-R1-0528",
+   "availableInferenceProviders": [],
+   "lastModified": "2025-05-29T11:37:44.000Z",
+   "likes": 2489,
+   "pipeline_tag": "text-generation",
+   "private": false,
+   "repoType": "model",
+   "isLikedByUser": false,
+   "widgetOutputUrls": [],
+   "numParameters": 684531386000
+  }
+ ],
+ "numTotalModels": 533,
+ "linkedDatasets": [
+  {
+   "author": "gjoelbye",
+   "downloads": 609,
+   "gated": false,
+   "id": "gjoelbye/cot-hidden-state-trajectories",
+   "lastModified": "2026-05-20T17:22:26.000Z",
+   "datasetsServerInfo": {
+    "viewer": "viewer",
+    "numRows": 96500,
+    "libraries": [
+     "datasets",
+     "dask",
+     "polars",
+     "mlcroissant"
+    ],
+    "formats": [
+     "parquet"
+    ],
+    "modalities": [
+     "tabular",
+     "text"
+    ]
+   },
+   "private": false,
+   "repoType": "dataset",
+   "likes": 0,
+   "isLikedByUser": false,
+   "isBenchmark": false,
+   "isTraces": false,
+   "isEnvironment": false
+  },
+  {
+   "author": "hejun0180-pixel",
+   "downloads": 525,
+   "gated": false,
+   "id": "hejun0180-pixel/Wait-Phenomenon-Evidence-Gemini-DeepSeek",
+   "lastModified": "2026-03-25T02:35:33.000Z",
+   "datasetsServerInfo": {
+    "viewer": "viewer",
+    "numRows": 6,
+    "libraries": [
+     "datasets",
+     "mlcroissant"
+    ],
+    "formats": [
+     "imagefolder"
+    ],
+    "modalities": [
+     "image"
+    ]
+   },
+   "private": false,
+   "repoType": "dataset",
+   "likes": 2,
+   "isLikedByUser": false,
+   "isBenchmark": false,
+   "isTraces": false,
+   "isEnvironment": false
+  }
+ ],
+ "numTotalDatasets": 17,
+ "linkedSpaces": [
+  {
+   "emoji": "🏆",
+   "id": "akhaliq/anycoder",
+   "running": true,
+   "featured": false
+  },
+  {
+   "emoji": "💥",
+   "id": "pliny-the-prompter/obliteratus",
+   "running": false,
+   "shortDescription": "One-click model liberation + chat playground",
+   "featured": false
+  }
+ ],
+ "numTotalSpaces": 4323
+}

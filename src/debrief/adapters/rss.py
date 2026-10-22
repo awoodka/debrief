@@ -3,7 +3,7 @@ import hashlib
 
 import feedparser
 
-from .. import sanitize, times, urls
+from .. import extract, sanitize, times, urls
 from ..store import raw
 from .base import Adapter, Item
 
@@ -22,9 +22,12 @@ def entry_authors(e):
     return tuple(sanitize.text(n, 120) for n in names)
 
 
+def entry_content(e):
+    return (e.get("content") or [{}])[0].get("value") or "" if e.get("content") else ""
+
+
 def entry_summary(e):
-    content = (e.get("content") or [{}])[0].get("value") if e.get("content") else ""
-    return e.get("summary") or content or ""
+    return e.get("summary") or entry_content(e)
 
 
 class Rss(Adapter):
@@ -41,10 +44,17 @@ class Rss(Adapter):
         role = "anchor" if "anchor" in source.roles else "mention"
         out = []
         for e in feed.entries:
+            html = entry_summary(e)
+            # A post's links are how attach and coverage find the stories it's about. Newsletters
+            # (Substack) put a one-line teaser in summary and the whole issue in content.
+            links = ()
+            if role == "mention":
+                body = entry_content(e) + " " + (e.get("summary") or "")
+                links = tuple(dict.fromkeys(u for u, _ in extract.links(body, e.get("link") or "")))[:500]
             out.append(Item(
                 item_key=entry_key(e), role=role, url=e.get("link") or "",
                 title=sanitize.text(e.get("title"), opts["title_max_chars"]),
-                summary=sanitize.text(entry_summary(e), opts["summary_max_chars"]),
+                summary=sanitize.text(html, opts["summary_max_chars"]),
                 published_at=times.iso(e.get("published_parsed") or e.get("updated_parsed")),
-                authors=entry_authors(e), kind=source.kind, org=source.org))
+                authors=entry_authors(e), kind=source.kind, org=source.org, links=links))
         return out

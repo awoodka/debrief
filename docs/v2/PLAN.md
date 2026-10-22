@@ -326,3 +326,51 @@ Effect on the milestones:
 - **M2** adds the model-release adapters (`hf_hub` with derivative filtering, `openrouter`, `github_org`, and `leaderboard` for LMArena) alongside HN and the paper signals.
 - **M3** builds the candidate stage.
 - **M4** builds the one scoring call.
+
+## M2 results (2026-10-22)
+
+`collect` now also runs:
+- Hacker News: every story via a time cursor, plus comment trees with HN's ranked order
+- Hugging Face per-paper signals and paper comments
+- the model-release sources: the HF org watch (25 labs), HF trending, OpenRouter, DeepSeek's GitHub, LMArena
+- attachment of discussion and newsletter/Techmeme coverage to stories, with snapshots of engagement and signals
+- discussion levels and trend
+- `--cadence 6h`, `bootstrap-bands` and `--rebuild`
+
+There are 113 tests.
+
+**Live, on 2026-10-22:**
+- **Runs:** `bootstrap-bands` read 14 days of HN, 14,346 stories in 56 requests. The full daily run took 11 min 53 s; the 6-hour poll takes about 10 s.
+- **Releases:** DeepSeek-V4.1-Flash-1017 is one story from three sources (org watch, trending, OpenRouter), with five HN threads (959 points), 14 captured comments and Interconnects coverage.
+- **Most discussed stories:**
+  - DeepSeek's DeepInfer: 2,331 points
+  - DeepSeek-V4.1-Flash-1017: 959
+  - Mistral's Voxtral 3: 767
+  - PHP2Shell: 446, across 38 threads
+  - Meta Muse leaking users' secrets: 402
+  - OpenAI on Google Cloud: 322
+  - Patch the Planet: 262
+- **Determinism:** a replay of the day's 7 runs matched the live state exactly, in all seven tables.
+
+Findings that changed the code:
+
+**Discussion levels needed a floor.** Over all HN submissions the 75th percentile is 4 points, because most submissions are never discussed. Counting only threads with at least 10 points (about 138 a day) puts the 75th percentile at 140 and the 95th at 525.
+
+**Entity attachment works only for identifiers, and only outside papers.** Two versions failed first:
+- With plain brand words like SpaceX, DeepSeek and GeForce, every thread about a company landed on one unrelated story: 44 SpaceX threads on one opinion piece, and DeepSeek's model threads on its funding article.
+- Paper titles name the models they study. Threads about running Qwen3.8-Flash-Next landed on an RL paper about that model.
+
+The rule now needs a word with a digit (PHP2Shell, V4.1-Flash-1017), shared by exactly one non-paper story. It attached 38 PHP2Shell threads to the Ars story. Posts attached by name or title move later if a URL or id points elsewhere.
+
+**Substack newsletters keep their links in `content`**, not in the summary, which is an 18–66 character teaser. Coverage only appeared once the links came from the full issue.
+
+**HN comment trees follow the story's recency, not the thread's.** DeepSeek's 959-point thread was five days old when the model became a story here.
+
+**Two of the three HF paper comments on a typical paper are bots** (librarian-bot, researchstudio-bot), so bots are skipped.
+
+**Trend on tiny numbers is noise.** A thread going 3 → 5 → 5 points read as "falling", so changes under 10 points plus comments now read as flat.
+
+For M3 and M4:
+- **The PHP2Shell event's biggest threads still attach to nothing.** "PHP 8.2.35" (1,075 points) and the PHP Foundation's post (794) name no identifier and link nothing we collect. The M4 attach pass has to catch these, so its pre-filter must not be "AI-related": security events like this one matter. A better pre-filter is threads that share a word with a candidate story.
+- **Hugging Face comments are the slowest part of the daily run:** 99 pages at HF's 100-per-5-minute page limit, about 6 minutes. Comments only matter for paper candidates, so once M3 ranks papers, they should be fetched for the top ~30 only.
+- **Triage must only consider stories from enabled sources.** Replay and rebuild reproduce everything that was collected, including from sources since disabled (PR Newswire, GitHub releases).

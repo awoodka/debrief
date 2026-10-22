@@ -1,0 +1,140 @@
+{
+ "rows": [
+  {
+   "row_idx": 0,
+   "row": {
+    "model_name": "Gemini 4 Argon (High)",
+    "organization": "google",
+    "license": "Proprietary",
+    "rating": 1532.3049251071352,
+    "rating_lower": 1523.5204504670612,
+    "rating_upper": 1541.0893997472092,
+    "variance": 20.087940104004577,
+    "vote_count": 4900.0,
+    "rank": 1.0,
+    "category": "overall",
+    "leaderboard_publish_date": "2026-10-20"
+   },
+   "truncated_cells": []
+  },
+  {
+   "row_idx": 1,
+   "row": {
+    "model_name": "Claude Opus 5.5 (High)",
+    "organization": "anthropic",
+    "license": "Proprietary",
+    "rating": 1516.214193109078,
+    "rating_lower": 1509.2331722472181,
+    "rating_upper": 1523.1952139709376,
+    "variance": 12.686496080912269,
+    "vote_count": 9496.0,
+    "rank": 2.0,
+    "category": "overall",
+    "leaderboard_publish_date": "2026-10-20"
+   },
+   "truncated_cells": []
+  },
+  {
+   "row_idx": 2,
+   "row": {
+    "model_name": "Claude Fable 5.1 (Max)",
+    "organization": "anthropic",
+    "license": "Proprietary",
+    "rating": 1511.9418886616315,
+    "rating_lower": 1506.0260537348445,
+    "rating_upper": 1517.8577235884186,
+    "variance": 9.110367835381401,
+    "vote_count": 15623.0,
+    "rank": 3.0,
+    "category": "overall",
+    "leaderboard_publish_date": "2026-10-20"
+   },
+   "truncated_cells": []
+  },
+  {
+   "row_idx": 3,
+   "row": {
+    "model_name": "Claude Opus 5 (Max)",
+    "organization": "anthropic",
+    "license": "Proprietary",
+    "rating": 1508.5993931223063,
+    "rating_lower": 1503.8622525803921,
+    "rating_upper": 1513.3365336642203,
+    "variance": 5.841661087959319,
+    "vote_count": 33683.0,
+    "rank": 4.0,
+    "category": "overall",
+    "leaderboard_publish_date": "2026-10-20"
+   },
+   "truncated_cells": []
+  },
+  {
+   "row_idx": 4,
+   "row": {
+    "model_name": "Claude Opus 5 (High)",
+    "organization": "anthropic",
+    "license": "Proprietary",
+    "rating": 1502.7512109050856,
+    "rating_lower": 1499.147085731316,
+    "rating_upper": 1506.3553360788549,
+    "variance": 3.3814545136401213,
+    "vote_count": 69307.0,
+    "rank": 5.0,
+    "category": "overall",
+    "leaderboard_publish_date": "2026-10-20"
+   },
+   "truncated_cells": []
+  },
+  {
+   "row_idx": 5,
+   "row": {
+    "model_name": "Muse Wonder (Max)",
+    "organization": "meta",
+    "license": "Proprietary",
+    "rating": 1501.6949006218686,
+    "rating_lower": 1493.0250789844645,
+    "rating_upper": 1510.3647222592724,
+    "variance": 19.56699543920066,
+    "vote_count": 5099.0,
+    "rank": 6.0,
+    "category": "overall",
+    "leaderboard_publish_date": "2026-10-20"
+   },
+   "truncated_cells": []
+  },
+  {
+   "row_idx": 6,
+   "row": {
+    "model_name": "Claude Opus 4.6 (High)",
+    "organization": "anthropic",
+    "license": "Proprietary",
+    "rating": 1501.2307833641096,
+    "rating_lower": 1497.9449480275705,
+    "rating_upper": 1504.5166187006487,
+    "variance": 2.810576492630064,
+    "vote_count": 82619.0,
+    "rank": 7.0,
+    "category": "overall",
+    "leaderboard_publish_date": "2026-10-20"
+   },
+   "truncated_cells": []
+  },
+  {
+   "row_idx": 7,
+   "row": {
+    "model_name": "Gemini 3.8 Flash (High)",
+    "organization": "google",
+    "license": "Proprietary",
+    "rating": 1498.882028339407,
+    "rating_lower": 1494.3634034530144,
+    "rating_upper": 1503.4006532257997,
+    "variance": 5.315160676442832,
+    "vote_count": 41423.0,
+    "rank": 8.0,
+    "category": "overall",
+    "leaderboard_publish_date": "2026-10-20"
+   },
+   "truncated_cells": []
+  }
+ ]
+}

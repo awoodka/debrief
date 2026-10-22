@@ -1,4 +1,4 @@
-"""Turn parsed items into the seen-set, stories and mentions (brief 5.1; attaching mentions is M2).
+"""Turn parsed items into the seen-set, stories, mentions and snapshots (brief 5.1–5.3).
 
 apply() is the only writer of items, stories and mentions. Every timestamp it stores comes from
 the raw records, never the clock, and records are handled in order. So replaying the same raw
@@ -10,7 +10,9 @@ For each item, keyed by (source, item_key):
 - New anchor: find or create the story by id (the adapter's id, else canon.story_id(url)) and
   merge this source into it. Where the adapter's age guard applies (Adapter.windowed), an anchor
   whose publish date is older than collect.window_days is only recorded as seen.
-- New mention: stored unattached (story_id NULL) until M2.
+- New mention: stored, then attached to a story (or recorded as coverage) by stories.attach.
+- Every sighting, new or repeat, records the item's signals (about the artifact) and engagement
+  (about the post) as timestamped snapshots, which is where bands and trend come from.
 - New seen: just recorded.
 """
 import hashlib
@@ -19,6 +21,7 @@ from datetime import timedelta
 
 from .. import canon, times
 from ..store import dumps
+from . import attach
 
 
 def _h(value):
@@ -96,13 +99,22 @@ def apply(store, settings, source, adapter, records, refs, run_date):
     first_run = first_at is not None and not store.one(
         "SELECT 1 FROM items WHERE source_id=? AND first_seen_at < ? LIMIT 1", (source.id, first_at))
     guard = adapter.windowed is True or (adapter.windowed == "bootstrap" and first_run)
+    new_mentions, last_at = [], first_at
     for rec, ref in zip(records, refs):
-        at = rec["fetched_at"]
+        at = last_at = rec["fetched_at"]
         for it in adapter.parse(rec, source, opts):
             c["items"] += 1
+            if it.role == "signal":            # a lookup about a story we have; not part of the seen-set
+                if it.story_id and store.one("SELECT 1 FROM stories WHERE story_id=?", (it.story_id,)):
+                    store.save_signals(it.story_id, at, source.id, it.signals)
+                    c["signals"] += 1
+                else:
+                    c["signals_orphaned"] += 1
+                continue
             h = item_hash(it)
             prev = store.item(source.id, it.item_key)
             if prev:
+                _snapshots(store, source, prev["story_id"], prev["mention_id"], it, at)
                 if it.role == "seen":          # still listed; its content isn't ours to judge
                     store.run("UPDATE items SET last_seen_at=? WHERE source_id=? AND item_key=?",
                               (at, source.id, it.item_key))
@@ -119,6 +131,8 @@ def apply(store, settings, source, adapter, records, refs, run_date):
 
             c["new"] += 1
             role = it.role
+            if role == "anchor" and adapter.first_run_seen and first_run:
+                role, c["first_run_seen"] = "seen", c["first_run_seen"] + 1
             if role == "anchor" and guard and _too_old(it.published_at, at, opts["window_days"]):
                 role, c["too_old"] = "seen", c["too_old"] + 1
             sid = (it.story_id or canon.story_id(it.url)) if role == "anchor" else None
@@ -135,18 +149,33 @@ def apply(store, settings, source, adapter, records, refs, run_date):
                     c["stories_merged"] += 1
                 _save(store, s, at, old)
                 store.insert_item(source.id, it.item_key, "anchor", sid, None, at, h, ref)
+                _snapshots(store, source, sid, None, it, at)
             elif role == "mention":
                 mid = f"{source.id}|{it.item_key}"
                 store.insert_mention({
                     "mention_id": mid, "source_id": source.id, "item_key": it.item_key,
-                    "kind": "reference" if "reference" in source.roles else "post",
+                    "kind": it.mention_kind or ("post" if "discussion" in source.roles else "reference"),
                     "url": it.url, "canonical_url": canon.canonical_url(it.url), "title": it.title,
                     "text": it.summary, "author": ", ".join(it.authors) or None,
                     "posted_at": it.published_at, "story_id": None, "match_method": None,
-                    "match_score": None, "first_seen_at": at, "raw_ref": ref})
+                    "match_score": None, "first_seen_at": at, "raw_ref": ref,
+                    "links": dumps(_urls(it.links)), "parent_id": it.parent_id, "rank": it.rank,
+                    "replies": it.replies})
                 store.insert_item(source.id, it.item_key, "mention", None, mid, at, h, ref)
+                _snapshots(store, source, None, mid, it, at)
+                new_mentions.append((mid, it.story_hint))
                 c["mentions_new"] += 1
             else:
                 store.insert_item(source.id, it.item_key, "seen", None, None, at, h, ref)
                 c["seen"] += 1
+    if new_mentions:
+        c.update(attach.mentions(store, settings, new_mentions, last_at, source.roles))
     return c
+
+
+def _snapshots(store, source, story_id, mention_id, it, at):
+    """Record what this sighting says about the artifact and the post, if anything."""
+    if story_id and it.signals:
+        store.save_signals(story_id, at, source.id, it.signals)
+    if mention_id and it.engagement:
+        store.save_engagement(mention_id, at, it.engagement)

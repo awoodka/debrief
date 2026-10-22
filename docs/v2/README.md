@@ -8,7 +8,12 @@ v2 replaces the v1 collector and its five-seat council with three layers:
 
 [PLAN.md](PLAN.md) is the approved design. [CRITERIA.md](CRITERIA.md) holds the rules for what makes it into the index. [BRIEF.md](BRIEF.md) is the original brief; where they disagree, the plan and the criteria win. [SOURCES.md](SOURCES.md) is the latest source probe.
 
-Status: **M0 and M1 are done**: the source probe, plus `collect` with the five primary adapters, the raw store, the seen-set and story building. Discussion, triage and the output contract arrive in M2–M4. The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
+Status: **M0–M2 are done.**
+- **M0:** the source probe.
+- **M1:** `collect` with the raw store, the seen-set and story building.
+- **M2:** discussion attached to stories (Hacker News threads and comment trees, Hugging Face paper comments, newsletter and Techmeme coverage); signal snapshots (paper upvotes, repo stars, models built on a paper); the model-release sources; discussion levels and trend.
+
+Triage and the output contract arrive in M3–M4. The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
 
 ## Development setup
 
@@ -36,6 +41,11 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 | `debrief collect` | Fetches every collectable source, keeps the raw responses, and builds stories. Writes `runs/<date>/collect-<run>.md` and `.json`. Exit code 3 if any source failed. |
 | `debrief collect --source ID [--source ID]` | Just those sources. |
 | `debrief collect --replay YYYY-MM-DD [--into PATH]` | Rebuilds that day from its raw files into a new database, with no network. Default target: `<data>/replay/`. |
+| `debrief collect --rebuild` | Rebuilds the whole state from all raw data after a parser change, keeping cursors, ETags and run history. The previous database is kept as a backup. Took 23 s for a day of 7 runs. |
+| `debrief collect --cadence 6h` | The discussion poll: only sources whose `options.cadence` includes `6h` (Hacker News and its comment trees). It's what gives trend more than one observation a day. |
+| `debrief bootstrap-bands [--days 14]` | Reads back Hacker News history, so discussion levels have a distribution to compare against from day one: 14,346 stories in 56 requests on 2026-10-22. |
+| `debrief story ID_OR_TITLE` | One story: its sources, signals, the paper use bar, attached threads and comments, coverage, discussion level and trend. |
+| `debrief sections` | Which sources feed each section, straight from the config. |
 | `debrief triage`, `snapshot-fixtures` | Not built yet (M3, M6). |
 
 ## How `collect` works
@@ -54,6 +64,35 @@ Each source gets one status in the run report:
 - `failed`: every request failed, or the source crashed. It's counted in `source_state.consecutive_failures`, and its cursor doesn't move.
 - `empty`: it answered with nothing in it.
 
+Sources run in phases:
+1. anchors, which create stories
+2. lookups about them (per-paper Hugging Face signals)
+3. discussion sources (Hacker News, Simon Willison)
+4. comment trees (Hacker News comments, Hugging Face paper comments)
+5. reference sources (the newsletters, Techmeme)
+
+At the end of the run, a retro pass re-tries recent unattached posts against the run's new stories.
+
+**Attaching discussion (brief §5.3, `stories/attach.py`).** A discussion post gets one story. The first rule that matches wins:
+1. a hint from its adapter
+2. its thread's story
+3. an exact URL
+4. an arXiv, Hugging Face or GitHub id in its URLs or text
+5. an identifier-like name in its title (a word with a digit, such as PHP2Shell or Qwen3.8) that exactly one recent non-paper story's title shares
+6. a conservative title match (Jaccard ≥ 0.6 and at least 4 shared words)
+
+The method and score are stored. At the end of a run, posts attached by name or title move if a URL or id now points at a story. A reference post gets a coverage row for every story it links to instead. A source with both roles gets both.
+
+**Discussion level and trend (`stories/signals.py`, rules in its docstring).**
+- **Percentile:** within each source, a story's best thread's points are compared with that source's threads from the last 14 days. Only threads with at least `bands.floor` points count (10 for HN), because most submissions are never discussed. Without the floor, the 75th percentile was 4 points.
+- **Spread:** a comment counts under its thread's source, so an HN comment tree is still HN.
+- **Level:**
+  - none: nothing mentions it
+  - some: below the 75th percentile, with one source
+  - notable: at least the 75th percentile, or 2 sources
+  - heavy: at least the 95th percentile, or 3 sources with at least the 75th percentile
+- **Trend:** points plus comments, compared over the last two intervals between snapshots: rising, flat, falling, or unknown with fewer than three snapshots.
+
 Cursors, by adapter:
 
 | Adapter | New means | Cursor |
@@ -62,7 +101,13 @@ Cursors, by adapter:
 | `listing_page` | post link not in the seen-set | none needed; the page is re-read each run |
 | `hf_daily_papers` | paper not in the seen-set | last date; each run re-reads from the day before it to today |
 | `arxiv_rss` | announce type `new` or `cross` | last announcement date; missed weekdays are backfilled from OAI-PMH |
-| `github_releases` | release id not in the seen-set | ETag per repo |
+| `github_releases` (disabled) | release id not in the seen-set | ETag per repo |
+| `hn` | story id not in the seen-set | the last time read, minus an hour of overlap; attached threads are refreshed for 3 days |
+| `hn_comments` | — | per thread: the comment count when its tree was read; re-read at 1.5× |
+| `hf_paper_api`, `hf_paper_page` | — | the paper pool (the last 3 days of HF-listed papers); comments only for papers with comments that pass the use bar |
+| `hf_org_watch`, `hf_trending` | model repo not in the seen-set; derivatives (by tag) only seen; format copies fold into the original's story; trending needs an org account and a model under 14 days old | — |
+| `openrouter`, `github_org` | model id or repo not in the seen-set | — |
+| `leaderboard` | a model's first time in the top N (the first run only records) | — |
 
 **The age guard.** On a first run, a feed hands over its whole history; OpenAI's has 1,315 entries. So an anchor whose publish date is more than `collect.window_days` (7) old when first seen is recorded as seen, not made a story.
 - For feeds and APIs, whose dates are reliable, the guard always applies.
@@ -132,9 +177,10 @@ The rest of the field reference:
 ```
 src/debrief/     cli.py config.py http.py robots.py urls.py probe.py collect.py
                  canon.py (URLs, story ids) sanitize.py times.py extract.py (HTML helpers)
-src/debrief/adapters/   base.py + rss, listing_page, hf_papers, arxiv, github_releases
+src/debrief/adapters/   base.py + rss, listing_page, hf_papers, arxiv, github_releases (M1);
+                        hn, hf_paper_pages, hf_hub, model_sources (M2)
 src/debrief/store/      db.py (state DB), raw.py (raw store), migrations/*.sql
-src/debrief/stories/    build.py (items -> seen-set, stories, mentions)
+src/debrief/stories/    build.py (items -> seen-set, stories, mentions, snapshots), attach.py, signals.py
 config/          settings.yml (UA, timeouts, rate buckets), sources.yml (every source)
 tests/           unit and end-to-end tests (fixtures/ are real responses, trimmed); scripts/dev pytest -q
 deploy/          Dockerfile, requirements*.in/.lock (see deploy/README.md)

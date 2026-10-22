@@ -29,8 +29,8 @@ SOURCES = [
      "url": "https://api.github.test/repos/{each}/releases?per_page=5", "each": ["vllm-project/vllm"]},
     {"id": "off", "name": "Off", "adapter": "rss", "roles": ["anchor"], "tier": 2, "enabled": False,
      "url": "https://feeds.test/off.xml"},
-    {"id": "later", "name": "Later", "adapter": "hn", "roles": ["discussion"], "tier": 3,
-     "url": "https://hn.test/"},
+    {"id": "later", "name": "Later", "adapter": "bluesky", "roles": ["discussion"], "tier": 3,
+     "url": "https://bsky.test/"},
 ]
 
 
@@ -87,7 +87,8 @@ def run(cfg, net):
 
 
 TABLES = (("stories", "story_id"), ("items", "source_id, item_key"), ("mentions", "mention_id"),
-          ("story_urls", "url"))
+          ("story_urls", "url"), ("engagement", "mention_id, observed_at"),
+          ("story_signals", "story_id, observed_at, source_id, name"), ("coverage", "story_id, mention_id"))
 
 
 def dump(path):
@@ -157,3 +158,107 @@ def test_a_failing_source_is_loud_and_keeps_its_cursor(tmp_path):
     assert "| `lab` | failed |" in md
     saved = json.loads((cfg.data_dir / "runs" / "2026-10-22" / f"collect-{report['run_id']}.json").read_text())
     assert saved["statuses"]["failed"] == 1
+
+
+# --- M2: discussion attached end to end ------------------------------------------------------
+
+DISCUSSION = SOURCES[:6] + [
+    {"id": "hn", "name": "HN", "adapter": "hn", "roles": ["discussion"], "tier": 3, "url": "https://hn.test/",
+     "options": {"cadence": ["daily", "6h"]}},
+    {"id": "hn-items", "name": "HN trees", "adapter": "hn_comments", "roles": ["discussion"], "tier": 3,
+     "url": "https://hn.test/", "options": {"cadence": ["daily", "6h"]}},
+    {"id": "digest", "name": "Digest", "adapter": "rss", "roles": ["reference"], "tier": 3,
+     "url": "https://feeds.test/digest.atom"},
+]
+
+DIGEST = b"""<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>d</title>
+<entry><id>d1</id><title>This week</title><link href="https://digest.test/1"/><updated>2026-10-22T18:00:00Z</updated>
+<summary type="html">&lt;a href="https://arxiv.org/abs/2610.28708"&gt;a paper&lt;/a&gt;</summary></entry></feed>"""
+
+
+def hn_slice(title_for_match):
+    j = json.loads(fixture("hn/search_slice.json"))
+    for h in j["hits"]:
+        if h["objectID"] == "50195959":
+            h["url"] = "https://arxiv.org/abs/2610.28708"            # exact URL
+        if h["objectID"] == "50202140":
+            h["url"] = "https://arxiv.org/pdf/2610.28708v2.pdf"     # arXiv id in the URL
+        if h["objectID"] == "50202325":
+            h["url"], h["title"] = "https://elsewhere.test/x", title_for_match   # title rule
+    return json.dumps(j).encode()
+
+
+def discussion_routes(title):
+    return routes() + [
+        (r"feeds\.test/digest\.atom", lambda u: (200, DIGEST)),
+        (r"hn\.algolia\.com/api/v1/search_by_date", lambda u: (200, hn_slice(title))),
+        (r"hn\.algolia\.com/api/v1/search\?tags=story,\(", lambda u: (200, hn_slice(title))),
+        (r"firebaseio\.com/v0/item/50195959\.json", lambda u: (200, fixture("hn/firebase_item.json"))),
+        (r"hn\.algolia\.com/api/v1/items/50195959", lambda u: (200, fixture("hn/item_tree.json"))),
+    ]
+
+
+def make_discussion_cfg(tmp_path):
+    cdir = tmp_path / "config"
+    cdir.mkdir()
+    shutil.copy(Path(config.CONFIG_DIR) / "settings.yml", cdir / "settings.yml")
+    (cdir / "sources.yml").write_text(yaml.safe_dump(DISCUSSION))
+    return config.load(cdir, env={"DEBRIEF_DATA_DIR": str(tmp_path / "data")})
+
+
+def test_discussion_attaches_end_to_end_and_replays(tmp_path, monkeypatch):
+    # Polls are hours apart in real life; give each fetch its own second so snapshots don't collide.
+    from datetime import datetime, timedelta, timezone
+    from debrief.adapters.base import FetchContext
+    tick = iter(range(100000))
+    t0 = datetime(2026, 10, 22, 20, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(FetchContext, "fetched_at", property(
+        lambda self: (t0 + timedelta(minutes=next(tick))).strftime("%Y-%m-%dT%H:%M:%SZ")))
+    cfg = make_discussion_cfg(tmp_path)
+    arxiv_title = None
+    from debrief.adapters import REGISTRY as R
+    from conftest import record as rec_
+    for it in R["arxiv_rss"].parse(rec_(fixture("arxiv/rss_stat.ML.xml"), meta={"kind": "rss"}), cfg.source("arxiv"),
+                                    cfg.settings["collect"]):
+        if it.story_id == "arxiv:2610.28708":
+            arxiv_title = it.title
+    first = run(cfg, FakeNet(discussion_routes(arxiv_title)))
+    by = {x["id"]: x for x in first["sources"]}
+    assert [x["id"] for x in first["sources"] if "counts" in x][-3:] == ["hn", "hn-items", "digest"]   # phase order
+    live = cfg.data_dir / "state" / "debrief.sqlite"
+    s = Store(live)
+    m = {r["mention_id"]: (r["story_id"], r["match_method"]) for r in s.q("SELECT * FROM mentions WHERE source_id='hn'")}
+    assert m["hn|50195959"] == ("arxiv:2610.28708", "url")
+    assert m["hn|50202140"] == ("arxiv:2610.28708", "id")
+    assert m["hn|50202325"] == ("arxiv:2610.28708", "title")
+    assert m["hn|50201751"] == (None, None)
+    comments = s.q("SELECT story_id, parent_id, rank FROM mentions WHERE source_id='hn-items' ORDER BY rank")
+    assert comments and {c["story_id"] for c in comments} == {"arxiv:2610.28708"}
+    assert {c["parent_id"] for c in comments} == {"hn|50195959"}
+    assert s.one("SELECT source_id FROM coverage WHERE story_id='arxiv:2610.28708'")[0] == "digest"
+    assert by["hn-items"]["requests"] == 2          # Firebase order + Algolia tree for the one big attached thread
+    s.close()
+
+    six = run_cadence(cfg, FakeNet(discussion_routes(arxiv_title)), "6h")
+    assert [x["id"] for x in six["sources"] if "counts" in x] == ["hn", "hn-items"]
+    s = Store(live)
+    assert s.one("SELECT COUNT(*) FROM engagement WHERE mention_id='hn|50195959'")[0] >= 2   # run 1 + the 6h poll
+    s.close()
+
+    collect.replay(cfg, "2026-10-22", tmp_path / "replay.sqlite", log=lambda *a: None)
+    assert dump(tmp_path / "replay.sqlite") == dump(live)
+
+
+def run_cadence(cfg, net, cadence):
+    client = Client(cfg.user_agent, cfg.settings["http"], sleep=lambda s: None, session=net)
+    return collect.run(cfg, run_date="2026-10-22", client=client, log=lambda *a, **k: None, cadence=cadence)
+
+
+def test_rebuild_reproduces_the_live_state_and_keeps_cursors(tmp_path):
+    cfg = make_cfg(tmp_path)
+    run(cfg, FakeNet(routes()))
+    live = cfg.data_dir / "state" / "debrief.sqlite"
+    before, cursor = dump(live), Store(live).cursor("hf")
+    out = collect.rebuild(cfg, log=lambda *a: None)
+    assert dump(live) == before and Store(live).cursor("hf") == cursor
+    assert (cfg.data_dir / "state" / out["backup"]).exists()

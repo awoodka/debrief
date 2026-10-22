@@ -93,10 +93,13 @@ def test_mentions_are_stored_unattached(tmp_path):
     s = Store(tmp_path / "s.sqlite")
     m = Item(item_key="post-1", role="mention", url="https://simonwillison.net/2026/Oct/22/x/?utm_source=rss",
              title="A post", summary="Text", authors=("Simon",), published_at="2026-10-22T18:00:00Z")
-    c = apply(s, src(id="simon-willison", roles=("reference", "discussion"), tier=3), [m])
+    c = apply(s, src(id="import-ai", roles=("reference",), tier=3), [m])
     row = dict(s.one("SELECT * FROM mentions"))
     assert c["mentions_new"] == 1 and row["story_id"] is None and row["kind"] == "reference"
     assert row["canonical_url"] == "https://simonwillison.net/2026/Oct/22/x"
+    # A source with both roles posts as discussion (and still records coverage).
+    apply(s, src(id="simon-willison", roles=("reference", "discussion"), tier=3), [replace(m, item_key="post-2")])
+    assert s.mention("simon-willison|post-2")["kind"] == "post"
 
 
 def test_same_items_into_fresh_stores_give_identical_rows(tmp_path):

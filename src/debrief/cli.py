@@ -2,10 +2,13 @@
 
   debrief probe-sources [--source ID ...] [--include-disabled] [--md PATH]
                                          check every source once (Milestone 0)
-  debrief collect [--source ID ...] [--date YYYY-MM-DD]
-                                         fetch, keep raw responses, build stories
+  debrief collect [--source ID ...] [--date YYYY-MM-DD] [--cadence daily|6h]
+                                         fetch, keep raw responses, build stories, attach discussion
+  debrief bootstrap-bands [--days 14]    read back HN history so discussion levels have a baseline
+  debrief story ID_OR_TITLE              one story: sources, signals, discussion, coverage, level
   debrief collect --replay YYYY-MM-DD [--into PATH]
                                          rebuild a day from raw files, no network
+  debrief collect --rebuild              rebuild the whole state from raw (after a parser change)
   debrief sections                       which sources feed each section (from the config)
   debrief triage | snapshot-fixtures     arrive in M3 and M6
 """
@@ -28,16 +31,72 @@ def _probe(args, cfg):
 
 def _collect(args, cfg):
     from . import collect
+    if args.rebuild:
+        out = collect.rebuild(cfg)
+        print(f"rebuilt state from {len(out['dates'])} day(s) of raw data: {out['totals']}; "
+              f"previous state kept as state/{out['backup']}")
+        return 0
     if args.replay:
         into = args.into or cfg.data_dir / "replay" / f"{args.replay}-{datetime.now():%Y%m%d-%H%M%S}.sqlite"
         result = collect.replay(cfg, args.replay, into)
         print(f"replayed {len(result['runs'])} run(s) into {result['into']}: {result['totals']}")
         return 0
-    report = collect.run(cfg, only=set(args.source or []) or None, run_date=args.date)
+    report = collect.run(cfg, only=set(args.source or []) or None, run_date=args.date, cadence=args.cadence)
     print(f"collect {report['run_id']}: {report['status']} · " +
           ", ".join(f"{k} {v}" for k, v in sorted(report["statuses"].items())) +
           f" · report in runs/{report['run_date']}/collect-{report['run_id']}.md")
     return 0 if report["status"] == "ok" else 3
+
+
+def _bootstrap_bands(args, cfg):
+    from . import collect
+    report = collect.run(cfg, only={"hn"}, backfill_hours=args.days * 24)
+    hn = next((x for x in report["sources"] if x["id"] == "hn"), {})
+    print(f"hn: {hn.get('status')}, {hn.get('requests')} requests, {hn.get('counts', {}).get('new', 0)} new stories stored")
+    return 0 if hn.get("status") == "ok" else 3
+
+
+def _story(args, cfg):
+    from .collect import state_path
+    from .store import Store, loads
+    from .stories import signals
+    store = Store(state_path(cfg))
+    q = args.query
+    row = store.one("SELECT story_id FROM stories WHERE story_id=?", (q,)) or store.one(
+        "SELECT story_id FROM stories WHERE title LIKE ? ORDER BY first_seen_at DESC, story_id LIMIT 1", (f"%{q}%",))
+    if not row:
+        print(f"no story matches {q!r}")
+        return 1
+    st = store.story(row[0])
+    at = store.one("SELECT MAX(fetched_at) FROM fetches")[0]
+    d = signals.discussion(store, cfg.settings, st["story_id"], at)
+    print(f"{st['story_id']}  [{st['section']}, tier {st['tier']}]  {st['title']}")
+    print(f"  published {st['published_at']}  first seen {st['first_seen']}  sources {', '.join(st['sources'])}")
+    print(f"  urls: {', '.join(st['artifact_urls'][:4])}" + (f"  code: {', '.join(st['code_urls'])}" if st["code_urls"] else ""))
+    sig = store.latest_signals(st["story_id"])
+    if sig:
+        print("  signals: " + ", ".join(f"{k} {v:g}" for k, v in sig.items()))
+    if st["section"] == "papers":
+        u = signals.paper_usage(store, st["story_id"])
+        print(f"  use bar: {'passes' if signals.passes_use_bar(u, cfg.settings['collect']['paper_use_bar']) else 'fails'} {u}")
+    print(f"  discussion: band {d['band']}, spread {d['spread']}, trend {d['trend']}, where {d['where']}")
+    for src, b in d["by_source"].items():
+        print(f"    {src}: {b}")
+    for m in store.q("""SELECT mention_id, kind, title, url, match_method, match_score FROM mentions WHERE story_id=?
+                        AND kind IN ('thread','post') ORDER BY mention_id""", (st["story_id"],)):
+        e = signals._latest(store, m["mention_id"], at)
+        print(f"  {m['kind']} {m['mention_id']} ({m['match_method']} {m['match_score']}): {m['title'][:70]}  "
+              f"{e.get('points')} points, {e.get('comments')} comments")
+        for c in store.q("SELECT author, text, rank, replies FROM mentions WHERE parent_id=? ORDER BY rank LIMIT 3",
+                         (m["mention_id"],)):
+            print(f"      #{c['rank']} {c['author']} ({c['replies']} replies): {c['text'][:110]}")
+    hf_comments = store.q("""SELECT author, text FROM mentions WHERE story_id=? AND kind='comment' AND parent_id IS NULL
+                             ORDER BY rank LIMIT 3""", (st["story_id"],))
+    for c in hf_comments:
+        print(f"  comment {c['author']}: {c['text'][:110]}")
+    for cv in store.q("SELECT source_id, covered_at, url FROM coverage WHERE story_id=? ORDER BY covered_at", (st["story_id"],)):
+        print(f"  covered by {cv['source_id']} {cv['covered_at']} {cv['url']}")
+    return 0
 
 
 def _sections(args, cfg):
@@ -87,7 +146,19 @@ def main(argv=None):
     p.add_argument("--date", help="logical run date for raw files and first_seen (default: today)")
     p.add_argument("--replay", metavar="DATE", help="rebuild DATE from raw files into a new database")
     p.add_argument("--into", help="replay target database (default: <data>/replay/<date>-<time>.sqlite)")
+    p.add_argument("--rebuild", action="store_true",
+                   help="rebuild the state database from all raw data (after a parser change); keeps cursors and ETags")
+    p.add_argument("--cadence", default="daily", choices=("daily", "6h"),
+                   help="6h runs only the discussion poll sources (default: daily, everything)")
     p.set_defaults(func=_collect)
+
+    p = sub.add_parser("bootstrap-bands", help="read back HN history so discussion levels have a baseline")
+    p.add_argument("--days", type=int, default=14)
+    p.set_defaults(func=_bootstrap_bands)
+
+    p = sub.add_parser("story", help="show one story with its signals and attached discussion")
+    p.add_argument("query", help="a story id, or part of a title")
+    p.set_defaults(func=_story)
 
     sub.add_parser("sections", help="list the sources that feed each section").set_defaults(func=_sections)
 
