@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xml:lang="en-us" xmlns="http://www.w3.org/2005/Atom"><title>Simon Willison's Weblog</title><link href="http://simonwillison.net/" rel="alternate"/><link href="http://simonwillison.net/atom/everything/" rel="self"/><id>http://simonwillison.net/</id><updated>2026-10-22T19:42:26+00:00</updated><author><name>Simon Willison</name></author><entry><title>DE STAAT - FREEDOM (Official Music Video)</title><link href="https://simonwillison.net/2026/Oct/22/de-staat-freedom/" rel="alternate"/><published>2026-10-22T19:42:26+00:00</published><updated>2026-10-22T19:42:26+00:00</updated><id>https://simonwillison.net/2026/Oct/22/de-staat-freedom/</id><summary type="html">
+    
+&lt;p&gt;&lt;strong&gt;&lt;a href="https://www.youtube.com/watch?v=hKO4pQtIXow"&gt;DE STAAT - FREEDOM (Official Music Video)&lt;/a&gt;&lt;/strong&gt;&lt;/p&gt;
+OK well this is a first for me... at &lt;a href="https://www.youtube.com/watch?v=hKO4pQtIXow&amp;amp;t=44s"&gt;00:44&lt;/a&gt; in this new music video by Dutch alternative rock band &lt;a href="https://en.wikipedia.org/wiki/De_Staat"&gt;De Staat&lt;/a&gt;:&lt;/p&gt;
+&lt;p&gt;&lt;video
+  src="https://static.simonwillison.net/static/2026/freedom-pelican.mp4"
+  poster="https://static.simonwillison.net/static/2026/freedom-pelican-poster.jpg"
+  preload="none"
+  loop="1" controls="1"
+  playsinline="1" muted="1"
+  width="1280"
+  height="720"
+  style="display: block; width: 100%; height: auto;"
+&gt; &lt;/video&gt;
+&lt;/p&gt;
+&lt;p&gt;The visual effects are credited to Matties Grooten of &lt;a href="https://fakeitorleaveit.com"&gt;Fake it or Leave it&lt;/a&gt;.
+
+    &lt;p&gt;&lt;small&gt;&lt;/small&gt;Via &lt;a href="https://news.ycombinator.com/item?id=50186129#50193407"&gt;flir on Hacker News&lt;/a&gt;&lt;/small&gt;&lt;/p&gt;
+
+
+    &lt;p&gt;Tags: &lt;a href="https://simonwillison.net/tags/music"&gt;music&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/ai"&gt;ai&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/generative-ai"&gt;generative-ai&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/pelican-riding-a-bicycle"&gt;pelican-riding-a-bicycle&lt;/a&gt;&lt;/p&gt;
+
+
+
+</summary><category term="music"/><category term="ai"/><category term="generative-ai"/><category term="pelican-riding-a-bicycle"/></entry>
+<entry><title>Donating Agent Skills to the Agentic AI Foundation</title><link href="https://simonwillison.net/2026/Oct/22/donating-agent-skills/" rel="alternate"/><published>2026-10-22T18:09:56+00:00</published><updated>2026-10-22T18:09:56+00:00</updated><id>https://simonwillison.net/2026/Oct/22/donating-agent-skills/</id><summary type="html">
+    
+&lt;p&gt;&lt;strong&gt;&lt;a href="https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation"&gt;Donating Agent Skills to the Agentic AI Foundation&lt;/a&gt;&lt;/strong&gt;&lt;/p&gt;
+News today from Anthropic:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;We’re committed to keeping Agent Skills open, community-driven, and vendor-neutral. Today, we are donating the standard to the Agentic AI Foundation (AAIF) under the Linux Foundation, &lt;a href="https://www.anthropic.com/news/donating-the-model-context-protocol-and-establishing-of-the-agentic-ai-foundation"&gt;which we co-founded&lt;/a&gt; with Block and OpenAI last year, and to which we donated the Model Context Protocol (MCP).&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;I'm pleased to note I called this one &lt;a href="https://simonwillison.net/2025/Dec/19/agent-skills/"&gt;last December&lt;/a&gt;, when Anthropic first declared skills to be an "open standard":&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;I wouldn't be surprised to see this end up &lt;a href="https://simonwillison.net/2025/Dec/9/agentic-ai-foundation/"&gt;in the AAIF&lt;/a&gt;, recently the new home of the MCP specification.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Fun side note: since my blog content is available to Claude via the &lt;a href="https://github.com/datasette/datasette-mcp"&gt;datasette-mcp&lt;/a&gt;
+plugin I found that post by &lt;a href="https://claude.ai/share/80b341de-590b-4834-bca9-0d9c9a3a0298"&gt;prompting Claude&lt;/a&gt; to "&lt;code&gt;Use simonwillison.net MCP to find if I ever talked about how I want skills to be donated to a standards body&lt;/code&gt;".
+
+
+    &lt;p&gt;Tags: &lt;a href="https://simonwillison.net/tags/standards"&gt;standards&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/ai"&gt;ai&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/generative-ai"&gt;generative-ai&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/llms"&gt;llms&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/anthropic"&gt;anthropic&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/model-context-protocol"&gt;model-context-protocol&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/skills"&gt;skills&lt;/a&gt;&lt;/p&gt;
+
+
+
+</summary><category term="standards"/><category term="ai"/><category term="generative-ai"/><category term="llms"/><category term="anthropic"/><category term="model-context-protocol"/><category term="skills"/></entry>
+<entry><title>Quoting Armin Ronacher</title><link href="https://simonwillison.net/2026/Oct/22/armin-ronacher/" rel="alternate"/><published>2026-10-22T15:34:13+00:00</published><updated>2026-10-22T15:34:13+00:00</updated><id>https://simonwillison.net/2026/Oct/22/armin-ronacher/</id><summary type="html">
+    &lt;blockquote cite="https://twitter.com/mitsuhiko/status/2113207589978636646"&gt;&lt;p&gt;As fun as AI is, we built so much bad software over the last 30 years, and now the universe is punishing us for our sins.&lt;/p&gt;&lt;/blockquote&gt;
+&lt;p class="cite"&gt;&amp;mdash; &lt;a href="https://twitter.com/mitsuhiko/status/2113207589978636646"&gt;Armin Ronacher&lt;/a&gt;&lt;/p&gt;
+
+    &lt;p&gt;Tags: &lt;a href="https://simonwillison.net/tags/security"&gt;security&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/generative-ai"&gt;generative-ai&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/armin-ronacher"&gt;armin-ronacher&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/ai"&gt;ai&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/ai-security-research"&gt;ai-security-research&lt;/a&gt;, &lt;a href="https://simonwillison.net/tags/llms"&gt;llms&lt;/a&gt;&lt;/p&gt;
+
+
+
+</summary><category term="security"/><category term="generative-ai"/><category term="armin-ronacher"/><category term="ai"/><category term="ai-security-research"/><category term="llms"/></entry></feed>

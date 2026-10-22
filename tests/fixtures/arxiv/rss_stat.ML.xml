@@ -1,0 +1,88 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<rss xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0">
+  <channel>
+    <title>stat.ML updates on arXiv.org</title>
+    <link>http://rss.arxiv.org/rss/stat.ML</link>
+    <description>stat.ML updates on the arXiv.org e-print archive.</description>
+    <atom:link href="http://rss.arxiv.org/rss/stat.ML" rel="self" type="application/rss+xml"/>
+    <docs>http://www.rssboard.org/rss-specification</docs>
+    <language>en-us</language>
+    <lastBuildDate>Thu, 22 Oct 2026 04:00:13 +0000</lastBuildDate>
+    <managingEditor>rss-help@arxiv.org</managingEditor>
+    <pubDate>Thu, 22 Oct 2026 00:00:00 -0400</pubDate>
+    <skipDays>
+      <day>Saturday</day>
+      <day>Sunday</day>
+    </skipDays>
+    <item>
+      <title>Borrowing Strength Across Stores: Transfer Learning for Choice-Based Revenue Management</title>
+      <link>https://arxiv.org/abs/2610.28708</link>
+      <description>arXiv:2610.28708v1 Announce Type: new 
+Abstract: Large retail chains must tailor assortment and pricing decisions to local customer preferences, yet even retailers with extensive sales records often have limited data for estimating demand at the store or local market level, particularly in product categories with short selling windows. Local estimation (fitting a demand model for each store on its own) can therefore be unreliable, while pooling data across stores improves estimation precision at the cost of ignoring local demand heterogeneity. We study how retailers can balance these competing effects through transfer learning under a multinomial logit (MNL) demand model. We propose a shrinkage estimator that combines store-specific demand estimates with information pooled from other stores. Unlike the linear or quadratic settings underlying much of the existing theoretical literature on information transfer in operations, the nonlinear MNL likelihood does not admit a straightforward bias-variance decomposition. By exploiting its self-concordant-like properties, we establish finite-sample performance guarantees that characterize when information transfer improves demand estimation and how the appropriate degree of shrinkage depends on local sample size, feature dimensionality, and cross-store heterogeneity. We further derive regret bounds for downstream assortment and pricing decisions. Numerical experiments demonstrate the operational benefits of shrinkage across different data environments. An empirical study using data from several hundred stores of a European apparel retailer shows that shrinkage improves out-of-sample product prioritization and revenue capture relative to both local estimation and full pooling. Our findings demonstrate how retailers can leverage information across their store networks to improve revenue management decisions while preserving local demand differences.</description>
+      <guid isPermaLink="false">oai:arXiv.org:2610.28708v1</guid>
+      <category>stat.ML</category>
+      <category>cs.LG</category>
+      <category>math.OC</category>
+      <pubDate>Thu, 22 Oct 2026 00:00:00 -0400</pubDate>
+      <arxiv:announce_type>new</arxiv:announce_type>
+      <dc:rights>http://arxiv.org/licenses/nonexclusive-distrib/1.0/</dc:rights>
+      <dc:creator>Recep Yusuf Bekci, Stefanus Jasin, Joline Uichanco</dc:creator>
+    </item>
+<item>
+      <title>A Reverse-Gold Theorem: Positive-Data Identification by Substrate-Bounded Contrastive Learners</title>
+      <link>https://arxiv.org/abs/2610.28747</link>
+      <description>arXiv:2610.28747v1 Announce Type: new 
+Abstract: Gold's theorem shows that no learner can identify an arbitrary language in a superfinite class from positive presentations alone. We prove a positive result of a different shape. Fix an innate \emph{recursive contrast operator} $R$ mapping any string to a finite set of structurally bounded perturbations of it, and a discriminative scorer of bounded capacity trained by InfoNCE-style contrastive estimation \citep{vandenoord2018,macollins2018} on self-generated perturbations. Under a faithfulness condition relating operator, scorer, and target, the trained scorer achieves \emph{PAC conditional identification} from positive data alone: with high probability it ranks all but an $\varepsilon$-fraction of positives above every out-of-language perturbation in their own orbit, with sample complexity polynomial in the capacity, the orbit size, the score bound, and $1/\varepsilon$. The negatives are constructed by the learner, not supplied by an oracle, and no global normalizing constant over strings is ever computed. The misranking bound follows from the geometry of the contrastive loss---per-example loss floors plus a definite loss increment under misranking---yielding an $\varepsilon^{-2}$ rate, together with an explicit approximation gap that quantifies the cost of in-language (``colliding'') perturbations and vanishes for orbit-pure operators. The ranking guarantee lifts to a global membership classifier under a margin condition, and the same operator composed with the learned scorer is a normalization-free Metropolis--Hastings generator. We instantiate the hypotheses for substitutable context-free languages \citep{clarkeyraud2007} and the subregular classes \citep{heinz2010,hayashikamigaito2025}, and state an open conjecture locating the construction in the mildly context-sensitive hierarchy.</description>
+      <guid isPermaLink="false">oai:arXiv.org:2610.28747v1</guid>
+      <category>stat.ML</category>
+      <category>cs.CL</category>
+      <category>cs.LG</category>
+      <category>q-bio.NC</category>
+      <pubDate>Thu, 22 Oct 2026 00:00:00 -0400</pubDate>
+      <arxiv:announce_type>new</arxiv:announce_type>
+      <dc:rights>http://creativecommons.org/licenses/by-nc-nd/4.0/</dc:rights>
+      <dc:creator>Rakesh Sengupta</dc:creator>
+    </item>
+<item>
+      <title>Interdomain Attention: Beyond Token-Level Key-Value Memory</title>
+      <link>https://arxiv.org/abs/2605.24330</link>
+      <description>arXiv:2605.24330v2 Announce Type: cross 
+Abstract: Softmax attention-based transformers and recurrent memory-based models (e.g., state space models (SSMs)) form the foundation of modern sequence models. Hybrid architectures aim to combine the expressivity from attention and the computational efficiency from recurrent memory, yet so far common practices simply stack both attention and recurrent layers. We propose Interdomain Attention (IA) as a novel hybrid attention architecture that mixes attention and recurrent memory in the same layer. Motivated by a kernel regression view of softmax attention, IA compresses values and kernel features of keys into a recurrent memory parameterized by an SSM. Then IA approximates dot-product attention by implicitly reconstructing the attention matrix and values from memory states; importantly this construction maintains SSM's computational efficiency advantage. We demonstrate IA's efficacy by designing and pre-training IA network architectures, where ablation studies identify attention-like readout as the primary source of gain over SSMs. Across 125M-1.3B models pre-trained on text data, IA improves over an S4D baseline at matched memory size. It also outperforms softmax attention-based Transformer in perplexity and accuracy on common-sense reasoning tasks. Based on Caduceus backbone, IA matches or outperforms the original SSM-based architecture in both perplexity and downstream tasks on genomic data.</description>
+      <guid isPermaLink="false">oai:arXiv.org:2605.24330v2</guid>
+      <category>cs.LG</category>
+      <category>stat.ML</category>
+      <pubDate>Thu, 22 Oct 2026 00:00:00 -0400</pubDate>
+      <arxiv:announce_type>cross</arxiv:announce_type>
+      <dc:rights>http://creativecommons.org/licenses/by/4.0/</dc:rights>
+      <dc:creator>Naoki Kiyohara, Harrison Bo Hua Zhu, Riccardo El Hassanin, Zhuo Sun, Wenlong Chen, Samir Bhatt, Yingzhen Li</dc:creator>
+    </item>
+<item>
+      <title>Exploiting Concavity Information in Gaussian Process Contextual Bandit Optimization</title>
+      <link>https://arxiv.org/abs/2503.10836</link>
+      <description>arXiv:2503.10836v2 Announce Type: replace 
+Abstract: The contextual bandit models sequential decision-making problems in which rewards depend on both the chosen action and observed context. In many domains such as medicine, business, and engineering, prior knowledge provides structural information about the reward function that can be exploited to improve optimization efficiency. This paper studies settings where, for each observable context, the conditional mean reward is known to be concave with respect to the action variable. To leverage this structure, we develop a contextual bandit algorithm that conditions a Bayesian Gaussian Process posterior on concavity constraints. We propose a novel reward model that combines a concavity-preserving regression spline basis with a constrained GP posterior, yielding a tractable shape-constrained estimator. Building on this model, we construct a UCB algorithm and establish new posterior concentration inequalities for the constrained posterior, leading to regret guarantees that are never worse than applying standard GP-UCB without concavity information and can be strictly tighter when concavity is informative. Experiments on benchmark problems and a Warfarin dosing test application demonstrate substantial reductions in cumulative regret relative to state-of-the-art baselines.</description>
+      <guid isPermaLink="false">oai:arXiv.org:2503.10836v2</guid>
+      <category>stat.ML</category>
+      <category>cs.LG</category>
+      <pubDate>Thu, 22 Oct 2026 00:00:00 -0400</pubDate>
+      <arxiv:announce_type>replace</arxiv:announce_type>
+      <dc:rights>http://creativecommons.org/licenses/by/4.0/</dc:rights>
+      <dc:creator>Kevin Li, Eric Laber</dc:creator>
+    </item>
+<item>
+      <title>The Limits of Post-Selection Generalization</title>
+      <link>https://arxiv.org/abs/1806.06100</link>
+      <description>arXiv:1806.06100v2 Announce Type: replace-cross 
+Abstract: While statistics and machine learning offer numerous methods for ensuring generalization, these methods often fail in the presence of adaptivity---the common practice in which the choice of analysis depends on previous interactions with the same dataset. A recent line of work has introduced powerful, general purpose algorithms that ensure post hoc generalization (also called robust or post-selection generalization), which says that, given the output of the algorithm, it is hard to find any statistic for which the data differs significantly from the population it came from.
+  In this work we show several limitations on the power of algorithms satisfying post hoc generalization. First, we show a tight lower bound on the error of any algorithm that satisfies post hoc generalization and answers adaptively chosen statistical queries, showing a strong barrier to progress in post selection data analysis. Second, we show that post hoc generalization is not closed under composition, despite many examples of such algorithms exhibiting strong composition properties.</description>
+      <guid isPermaLink="false">oai:arXiv.org:1806.06100v2</guid>
+      <category>cs.LG</category>
+      <category>cs.DS</category>
+      <category>stat.ML</category>
+      <pubDate>Thu, 22 Oct 2026 00:00:00 -0400</pubDate>
+      <arxiv:announce_type>replace-cross</arxiv:announce_type>
+      <dc:rights>http://arxiv.org/licenses/nonexclusive-distrib/1.0/</dc:rights>
+      <dc:creator>Kobbi Nissim, Adam Smith, Thomas Steinke, Uri Stemmer, Jonathan Ullman</dc:creator>
+    </item>
+  </channel>
+</rss>

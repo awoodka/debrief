@@ -55,6 +55,9 @@
   org: Anthropic
   url: https://www.anthropic.com/news
   probe: {kind: links, link_pattern: '^https://www\.anthropic\.com/news/[^/?#]+$'}
+  options:
+    # category pages that match the post pattern (seen 2026-10-22); others are caught as non-articles
+    exclude: ['/news/(announcements|features|product|policy|safeguards|security|partnerships)$']
   notes: no RSS; listing-page scrape. The pattern also matches category pages such as /news/announcements, which the adapter must skip
 
 - id: anthropic-research
@@ -267,6 +270,7 @@
   url: https://rss.arxiv.org/rss/{each}
   each: [cs.LG, cs.CL, cs.AI, cs.CV, stat.ML]
   probe: {kind: feed}
+  options: {oai_base: 'https://oaipmh.arxiv.org/oai', oai_sets: [cs, stat], oai_max_pages: 40}
   notes: holds only the latest announcement; gaps are backfilled from arxiv-oai
 
 - id: arxiv-api

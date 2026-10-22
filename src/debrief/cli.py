@@ -1,11 +1,16 @@
 """The `debrief` command line.
 
   debrief probe-sources [--source ID ...] [--include-disabled] [--md PATH]
-                                                         Milestone 0: check every source once
-  debrief collect | triage | snapshot-fixtures           arrive in M1, M3 and M6
+                                         check every source once (Milestone 0)
+  debrief collect [--source ID ...] [--date YYYY-MM-DD]
+                                         fetch, keep raw responses, build stories
+  debrief collect --replay YYYY-MM-DD [--into PATH]
+                                         rebuild a day from raw files, no network
+  debrief triage | snapshot-fixtures     arrive in M3 and M6
 """
 import argparse
 import sys
+from datetime import datetime
 
 from . import config
 
@@ -18,6 +23,20 @@ def _probe(args, cfg):
     jpath, md = probe.write(results, cfg, md_path=args.md)
     print(f"wrote {md} and {jpath}")
     return 0
+
+
+def _collect(args, cfg):
+    from . import collect
+    if args.replay:
+        into = args.into or cfg.data_dir / "replay" / f"{args.replay}-{datetime.now():%Y%m%d-%H%M%S}.sqlite"
+        result = collect.replay(cfg, args.replay, into)
+        print(f"replayed {len(result['runs'])} run(s) into {result['into']}: {result['totals']}")
+        return 0
+    report = collect.run(cfg, only=set(args.source or []) or None, run_date=args.date)
+    print(f"collect {report['run_id']}: {report['status']} · " +
+          ", ".join(f"{k} {v}" for k, v in sorted(report["statuses"].items())) +
+          f" · report in runs/{report['run_date']}/collect-{report['run_id']}.md")
+    return 0 if report["status"] == "ok" else 3
 
 
 def _not_yet(milestone):
@@ -37,7 +56,14 @@ def main(argv=None):
     p.add_argument("--include-disabled", action="store_true", help="also request disabled sources")
     p.set_defaults(func=_probe)
 
-    for name, milestone in (("collect", "M1"), ("triage", "M3"), ("snapshot-fixtures", "M6")):
+    p = sub.add_parser("collect", help="fetch sources, keep raw responses, build stories")
+    p.add_argument("--source", action="append", help="collect only this source id (repeatable)")
+    p.add_argument("--date", help="logical run date for raw files and first_seen (default: today)")
+    p.add_argument("--replay", metavar="DATE", help="rebuild DATE from raw files into a new database")
+    p.add_argument("--into", help="replay target database (default: <data>/replay/<date>-<time>.sqlite)")
+    p.set_defaults(func=_collect)
+
+    for name, milestone in (("triage", "M3"), ("snapshot-fixtures", "M6")):
         sub.add_parser(name).set_defaults(func=_not_yet(milestone))
 
     args = ap.parse_args(argv)

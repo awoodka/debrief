@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+    <responseDate>2026-10-22T20:36:31Z</responseDate>
+                <request verb="ListRecords" metadataPrefix="arXivRaw" from="2026-10-20" until="2026-10-20" set="stat">http://oaipmh.arxiv.org/oai</request>
+
+
+    <ListRecords>
+                    <record>
+                <header>
+        <identifier>oai:arXiv.org:2610.24336</identifier>
+        <datestamp>2026-10-20</datestamp>
+            <setSpec>cs:cs:LG</setSpec>
+            <setSpec>stat:stat:ML</setSpec>
+    </header>
+
+            <metadata>
+                        <arXivRaw xmlns="http://arxiv.org/OAI/arXivRaw/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://arxiv.org/OAI/arXivRaw/ https://oaipmh.arxiv.org/OAI/arXivRaw.xsd">
+        <id>2610.24336</id>
+        <submitter>Tom Waknine</submitter>
+            <version version="v1">
+                <date>Sat, 17 Oct 2026 00:04:51 GMT</date>
+                <size>83kb</size>
+            </version>
+        <title>Uniform convergence at optimal rate and scale</title>
+        <authors>Noga Alon, Steve Hanneke, Shay Moran, Tom Waknine</authors>
+        <categories>cs.LG stat.ML</categories>
+            <acm-class>I.2.6</acm-class>
+            <msc-class>68Q32 (Primary), 62G30, 52C17 (Secondary)</msc-class>
+            <license>http://creativecommons.org/licenses/by/4.0/</license>
+            <abstract>Uniform convergence asks how many random samples suffice for empirical averages to approximate expectations simultaneously over an entire class of functions. It is a central concept in probability and a foundation of statistical learning. For binary-valued classes, the Vapnik--Chervonenkis theorem characterizes uniform convergence by finiteness of the VC dimension. For dimension $d$, the sharp worst-case sample complexity for additive error $\varepsilon$ is of order $d/\varepsilon^2$. For real-valued functions, the analogous combinatorial parameter is the fat-shattering dimension, which depends on an approximation scale $\gamma$. The challenge is to achieve error $\gamma+\varepsilon$ with order $d/\varepsilon^2$ samples, matching the sample bound for binary classes, where $d$ is now the fat-shattering dimension at scale $\gamma$. Previous results achieved either the optimal scale or the optimal sample complexity, but not both. Our main result closes this gap, establishing the sharp sample complexity at the optimal scale. Along the way, we use several tools that may be of independent interest. The first concerns $\varepsilon$-nets with margin. A classical $\varepsilon$-net intersects every set of mass at least $\varepsilon$ in a prescribed family; we allow the net to intersect a slightly enlarged version of each such set. Remarkably, this relaxation permits bounds independent of the ambient dimension in natural geometric settings. Second, we derive improved covering bounds in both discrete and real-valued settings: we extend Haussler&#39;s covering lemma to partial concept classes and use this extension to obtain $\ell_2$ covers at the optimal scale for real-valued function classes. Third, we obtain a chaining bound at the optimal scale by aligning the covers so that successive approximations become increasingly close to one another.</abstract>
+    </arXivRaw>
+
+            </metadata>
+        </record>
+<record>
+                <header>
+        <identifier>oai:arXiv.org:2610.23917</identifier>
+        <datestamp>2026-10-20</datestamp>
+            <setSpec>cs:cs:LG</setSpec>
+            <setSpec>econ:econ:EM</setSpec>
+            <setSpec>stat:stat:ML</setSpec>
+    </header>
+
+            <metadata>
+                        <arXivRaw xmlns="http://arxiv.org/OAI/arXivRaw/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://arxiv.org/OAI/arXivRaw/ https://oaipmh.arxiv.org/OAI/arXivRaw.xsd">
+        <id>2610.23917</id>
+        <submitter>Karl Li</submitter>
+            <version version="v1">
+                <date>Sat, 03 Oct 2026 23:59:45 GMT</date>
+                <size>277kb</size>
+            </version>
+        <title>Announced Breaks Separate Conformal Reliability from Frequency Calibration</title>
+        <authors>Karl Li (Columbia University)</authors>
+        <categories>cs.LG econ.EM stat.ML</categories>
+            <comments>Accepted at the 40th Conference on Neural Information Processing Systems (NeurIPS 2026). 53 pages, 7 figures</comments>
+            <license>http://creativecommons.org/licenses/by/4.0/</license>
+            <abstract>An announced boundary reveals the partition before the first affected outcome, and a reset there serves one of two audits. The per-time audit reads conformal reliability, the expected distance of the threshold&#39;s coverage from nominal at miscoverage 0.1. The frequency audit reads frequency calibration, whether a closed window&#39;s error rate matched it. The reset rule, the post-boundary empirical quantile, attains the minimax per-time rate for independent scores. On bounded scores a recursion reset at the boundary attains a frequency gap of order one over the count when its floor adds a bounded total. At the 50th forecast after a large synthetic break, the reset rule&#39;s per-time gap stands below that of five adaptive methods, four from their authors&#39; code, with every paired band below zero. After an electricity market reform, on 68 unseen scores, the band stands below zero against two, includes zero against two, adaptive conformal inference among them, and is a point at zero against one. After monetary policy decisions its pointwise band stands above zero against all five on 10 of the first 34 days. Of 9 announced boundaries one clears the smallest coverage difference its window detects, where every method&#39;s per-time gap at the 50th forecast exceeds the nominal miscoverage. Over the first 50 forecasts the reset recursion leads the frequency audit after every synthetic break.</abstract>
+    </arXivRaw>
+
+            </metadata>
+        </record>
+<record>
+                <header>
+        <identifier>oai:arXiv.org:2305.17817</identifier>
+        <datestamp>2026-10-20</datestamp>
+            <setSpec>cs:cs:CL</setSpec>
+            <setSpec>cs:cs:AI</setSpec>
+            <setSpec>stat:stat:AP</setSpec>
+    </header>
+
+            <metadata>
+                        <arXivRaw xmlns="http://arxiv.org/OAI/arXivRaw/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://arxiv.org/OAI/arXivRaw/ https://oaipmh.arxiv.org/OAI/arXivRaw.xsd">
+        <id>2305.17817</id>
+        <submitter>Olukunle Owolabi</submitter>
+            <version version="v1">
+                <date>Sun, 28 May 2023 22:36:35 GMT</date>
+                <size>23kb</size>
+            </version>
+        <title>Transfer Learning for Power Outage Detection Task with Limited Training Data</title>
+        <authors>Olukunle Owolabi</authors>
+        <categories>cs.CL cs.AI stat.AP</categories>
+            <license>http://creativecommons.org/licenses/by/4.0/</license>
+            <abstract>Early detection of power outages is crucial for maintaining a reliable power distribution system. This research investigates the use of transfer learning and language models in detecting outages with limited labeled data. By leveraging pretraining and transfer learning, models can generalize to unseen classes.
+  Using a curated balanced dataset of social media tweets related to power outages, we conducted experiments using zero-shot and few-shot learning. Our hypothesis is that Language Models pretrained with limited data could achieve high performance in outage detection tasks over baseline models. Results show that while classical models outperform zero-shot Language Models, few-shot fine-tuning significantly improves their performance. For example, with 10% fine-tuning, BERT achieves 81.3% accuracy (+15.3%), and GPT achieves 74.5% accuracy (+8.5%). This has practical implications for analyzing and localizing outages in scenarios with limited data availability.
+  Our evaluation provides insights into the potential of few-shot fine-tuning with Language Models for power outage detection, highlighting their strengths and limitations. This research contributes to the knowledge base of leveraging advanced natural language processing techniques for managing critical infrastructure.</abstract>
+    </arXivRaw>
+
+            </metadata>
+        </record>
+<record>
+                <header>
+        <identifier>oai:arXiv.org:1908.04284</identifier>
+        <datestamp>2026-10-20</datestamp>
+            <setSpec>eess:eess:AS</setSpec>
+            <setSpec>cs:cs:LG</setSpec>
+            <setSpec>stat:stat:ML</setSpec>
+    </header>
+
+            <metadata>
+                        <arXivRaw xmlns="http://arxiv.org/OAI/arXivRaw/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://arxiv.org/OAI/arXivRaw/ https://oaipmh.arxiv.org/OAI/arXivRaw.xsd">
+        <id>1908.04284</id>
+        <submitter>Quan Wang</submitter>
+            <version version="v1">
+                <date>Mon, 12 Aug 2019 17:54:31 GMT</date>
+                <size>236kb</size>
+                    <source_type>D</source_type>
+            </version>
+            <version version="v2">
+                <date>Sat, 01 Feb 2020 18:04:42 GMT</date>
+                <size>190kb</size>
+                    <source_type>D</source_type>
+            </version>
+            <version version="v3">
+                <date>Wed, 25 Mar 2020 19:06:18 GMT</date>
+                <size>191kb</size>
+                    <source_type>D</source_type>
+            </version>
+            <version version="v4">
+                <date>Wed, 08 Apr 2020 15:41:16 GMT</date>
+                <size>192kb</size>
+                    <source_type>D</source_type>
+            </version>
+            <version version="v5">
+                <date>Mon, 05 Oct 2026 17:34:59 GMT</date>
+                <size>193kb</size>
+            </version>
+            <version version="v6">
+                <date>Mon, 12 Oct 2026 02:00:26 GMT</date>
+                <size>193kb</size>
+            </version>
+            <version version="v7">
+                <date>Mon, 19 Oct 2026 12:35:59 GMT</date>
+                <size>193kb</size>
+            </version>
+        <title>Personal VAD: Speaker-Conditioned Voice Activity Detection</title>
+        <authors>Shaojin Ding, Quan Wang, Shuo-yiin Chang, Li Wan, Ignacio Lopez Moreno</authors>
+        <categories>eess.AS cs.LG stat.ML</categories>
+            <comments>Speaker Odyssey 2020</comments>
+            <license>http://arxiv.org/licenses/nonexclusive-distrib/1.0/</license>
+            <abstract>In this paper, we propose &#34;personal VAD&#34;, a system to detect the voice activity of a target speaker at the frame level. This system is useful for gating the inputs to a streaming on-device speech recognition system, such that it only triggers for the target user, which helps reduce the computational cost and battery consumption, especially in scenarios where a keyword detector is unpreferable. We achieve this by training a VAD-alike neural network that is conditioned on the target speaker embedding or the speaker verification score. For each frame, personal VAD outputs the probabilities for three classes: non-speech, target speaker speech, and non-target speaker speech. Under our optimal setup, we are able to train a model with only 130K parameters that outperforms a baseline system where individually trained standard VAD and speaker recognition networks are combined to perform the same task.</abstract>
+    </arXivRaw>
+
+            </metadata>
+        </record>
+<resumptionToken cursor="0" completeListSize="5">TOKEN-PAGE-2</resumptionToken>
+</ListRecords>
+</OAI-PMH>

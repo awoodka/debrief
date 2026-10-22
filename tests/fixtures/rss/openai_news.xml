@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+    <channel>
+        <title><![CDATA[OpenAI News]]></title>
+        <description><![CDATA[The OpenAI blog]]></description>
+        <link>https://openai.com/news</link>
+        <image>
+            <url>https://openai.com/apple-icon.png</url>
+            <title>OpenAI News</title>
+            <link>https://openai.com/news</link>
+        </image>
+        <generator>OpenAI</generator>
+        <lastBuildDate>Thu, 22 Oct 2026 20:32:46 GMT</lastBuildDate>
+        <atom:link href="https://openai.com/news/rss.xml" rel="self" type="application/rss+xml"/>
+        <language><![CDATA[en-US]]></language>
+        <item>
+            <title><![CDATA[Build more responsive apps with the Decisions API]]></title>
+            <description><![CDATA[Fast, focused, low-cost decisions for any application.]]></description>
+            <link>https://openai.com/index/decisions-api</link>
+            <guid isPermaLink="true">https://openai.com/index/decisions-api</guid>
+            <category><![CDATA[Product]]></category>
+            <pubDate>Thu, 22 Oct 2026 19:00:00 GMT</pubDate>
+        </item>
+<item>
+            <title><![CDATA[What FDE means at OpenAI]]></title>
+            <description><![CDATA[What forward deployed engineering means at OpenAI]]></description>
+            <link>https://openai.com/index/forward-deployed-engineering-means</link>
+            <guid isPermaLink="true">https://openai.com/index/forward-deployed-engineering-means</guid>
+            <category><![CDATA[Engineering]]></category>
+            <pubDate>Thu, 22 Oct 2026 06:00:00 GMT</pubDate>
+        </item>
+<item>
+            <title><![CDATA[Uber brings ChatGPT Work to all employees with OpenAI]]></title>
+            <description><![CDATA[Uber is rolling out ChatGPT Work to more than 30,000 employees, helping teams research, analyze data, create presentations, and complete complex workflows.]]></description>
+            <link>https://openai.com/index/uber-chatgpt-work-rollout</link>
+            <guid isPermaLink="true">https://openai.com/index/uber-chatgpt-work-rollout</guid>
+            <category><![CDATA[Company]]></category>
+            <pubDate>Thu, 22 Oct 2026 00:00:00 GMT</pubDate>
+        </item>
+    </channel>
+</rss>

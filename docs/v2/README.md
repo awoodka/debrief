@@ -8,7 +8,7 @@ v2 replaces the v1 collector and its five-seat council with three layers:
 
 [PLAN.md](PLAN.md) is the approved design. [BRIEF.md](BRIEF.md) is the original brief; where they disagree, the plan wins. [SOURCES.md](SOURCES.md) is the latest source probe.
 
-Status: **Milestone 0 is done**: the config, the polite HTTP client, and `probe-sources`. `collect` and `triage` arrive in M1–M4. The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
+Status: **M0 and M1 are done**: the source probe, plus `collect` with the five primary adapters, the raw store, the seen-set and story building. Discussion, triage and the output contract arrive in M2–M4. The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
 
 ## Development setup
 
@@ -33,7 +33,52 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 | `debrief probe-sources` | Requests every enabled source once, through the same rate limits the collector uses. Writes `docs/v2/SOURCES.md` and `$DEBRIEF_DATA_DIR/probe/probe-<time>.json`. |
 | `debrief probe-sources --source ID [--source ID]` | Re-probes just those sources (disabled ones included) and merges them into the latest full probe. |
 | `debrief probe-sources --include-disabled` | Also requests disabled sources. |
-| `debrief collect`, `triage`, `snapshot-fixtures` | Not built yet (M1, M3, M6). |
+| `debrief collect` | Fetches every collectable source, keeps the raw responses, and builds stories. Writes `runs/<date>/collect-<run>.md` and `.json`. Exit code 3 if any source failed. |
+| `debrief collect --source ID [--source ID]` | Just those sources. |
+| `debrief collect --replay YYYY-MM-DD [--into PATH]` | Rebuilds that day from its raw files into a new database, with no network. Default target: `<data>/replay/`. |
+| `debrief triage`, `snapshot-fixtures` | Not built yet (M3, M6). |
+
+## How `collect` works
+
+For each source in `sources.yml` order:
+
+1. The adapter fetches, and every response is written to the raw store before anything parses it.
+2. In one transaction, the builder stores items, stories and mentions. Only then are the source's ETags and cursor saved, so a crash means a retry, never a gap.
+
+A source is collected when it's enabled, has a role other than `context`, and its adapter exists. Context sources are lookups for later stages.
+
+Each source gets one status in the run report:
+
+- `ok`: answered with no failures. Zero new items is a quiet day, still `ok`.
+- `partial`: some requests failed.
+- `failed`: every request failed, or the source crashed. It's counted in `source_state.consecutive_failures`, and its cursor doesn't move.
+- `empty`: it answered with nothing in it.
+
+Cursors, by adapter:
+
+| Adapter | New means | Cursor |
+|---|---|---|
+| `rss` | entry key not in the seen-set | ETag / Last-Modified per feed |
+| `listing_page` | post link not in the seen-set | none needed; the page is re-read each run |
+| `hf_daily_papers` | paper not in the seen-set | last date; each run re-reads from the day before it to today |
+| `arxiv_rss` | announce type `new` or `cross` | last announcement date; missed weekdays are backfilled from OAI-PMH |
+| `github_releases` | release id not in the seen-set | ETag per repo |
+
+**The age guard.** On a first run, a feed hands over its whole history; OpenAI's has 1,315 entries. So an anchor whose publish date is more than `collect.window_days` (7) old when first seen is recorded as seen, not made a story.
+- For feeds and APIs, whose dates are reliable, the guard always applies.
+- For scraped pages, it applies only on the source's first run, because a scraped date can be wrong. After that, a link missing from the seen-set is itself the evidence that the post is new.
+- Listing pages also fetch only their 5 newest links on a first run.
+
+## Data layout
+
+```
+$DEBRIEF_DATA_DIR/
+  raw/<date>/<source>/<run>.jsonl.gz   every response, byte-exact, pruned after raw_retention_days (60)
+  state/debrief.sqlite                 cursors, ETags, the seen-set (items), stories, mentions, runs
+  runs/<date>/collect-<run>.{md,json}  the per-run report
+  probe/                               probe-sources results
+  replay/                              databases built by --replay
+```
 
 ## Being a polite client
 
@@ -85,9 +130,13 @@ The rest of the field reference:
 ## Layout so far
 
 ```
-src/debrief/     cli.py config.py http.py robots.py urls.py probe.py
+src/debrief/     cli.py config.py http.py robots.py urls.py probe.py collect.py
+                 canon.py (URLs, story ids) sanitize.py times.py extract.py (HTML helpers)
+src/debrief/adapters/   base.py + rss, listing_page, hf_papers, arxiv, github_releases
+src/debrief/store/      db.py (state DB), raw.py (raw store), migrations/*.sql
+src/debrief/stories/    build.py (items -> seen-set, stories, mentions)
 config/          settings.yml (UA, timeouts, rate buckets), sources.yml (every source)
-tests/           unit tests; scripts/dev pytest -q
+tests/           unit and end-to-end tests (fixtures/ are real responses, trimmed); scripts/dev pytest -q
 deploy/          Dockerfile, requirements*.in/.lock (see deploy/README.md)
 scripts/dev      the dev container wrapper
 docs/v2/         BRIEF.md, PLAN.md, SOURCES.md, this README

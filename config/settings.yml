@@ -48,3 +48,31 @@ http:
     venturebeat:
       hosts: [venturebeat.com]
       interval_s: 10
+
+collect:
+  # Anchors from windowed sources (feeds, release lists, listing pages) whose publish date is older
+  # than this when first seen are recorded as seen, not made into stories. This is a bootstrap
+  # guard, not a cursor: the seen-set is the cursor.
+  window_days: 7
+  title_max_chars: 300
+  summary_max_chars: 1500
+  max_authors: 15
+  raw_retention_days: 60
+  listing:
+    bootstrap_fetch: 5          # first run: fetch this many of the newest links, record the rest as seen
+    max_new_per_run: 15
+  hf_daily_papers:
+    bootstrap_days: 3
+    limit: 100                  # the API defaults to 50 a day; 64 were listed on 2026-10-21
+
+# Story kind -> index section.
+sections:
+  paper: papers
+  release: releases
+  repo: releases
+  leaderboard: releases
+  announcement: announcements
+  press: press_policy
+  policy: press_policy
+  incident: press_policy
+  discussion: discussion

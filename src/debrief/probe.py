@@ -15,16 +15,13 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import quote_plus
 
 import feedparser
-from bs4 import BeautifulSoup
-
-from . import urls
+from . import extract, urls
 from .config import REPO
 from .http import Client
 
-FEED_TYPES = {"application/rss+xml", "application/atom+xml", "application/feed+json"}
 ITUNES = "https://itunes.apple.com/search?entity=podcast&limit=5&term="
 
 
@@ -85,13 +82,6 @@ def _short(s, n=90):
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-def _auth_headers(source, env):
-    a = source.auth or {}
-    if a.get("env") and env.get(a["env"]):
-        return {a["header"]: a["format"].format(env[a["env"]])}
-    return {}
-
-
 def _parse_feed(att, r):
     d = feedparser.parse(r.content)
     if d.bozo and not d.entries:
@@ -104,26 +94,12 @@ def _parse_feed(att, r):
 
 
 def _parse_links(att, r, spec):
-    soup = BeautifulSoup(r.content, "html.parser")
     base = r.final_url or att.url
-    for ln in soup.find_all("link", href=True):
-        rel = " ".join(ln.get("rel") or []).lower()
-        if "alternate" in rel and (ln.get("type") or "").lower() in FEED_TYPES:
-            att.feeds.append(urljoin(base, ln["href"]))
-    anchors = soup.select(spec["selector"]) if spec.get("selector") else soup.find_all("a", href=True)
-    pattern = re.compile(spec["link_pattern"]) if spec.get("link_pattern") else None
-    seen, links = set(), []
-    for a in anchors:
-        href = urljoin(base, (a.get("href") or "").strip()).split("#")[0]
-        if not href.startswith("http") or href in seen:
-            continue
-        if pattern and not pattern.search(href):
-            continue
-        seen.add(href)
-        links.append((href, a.get_text(" ", strip=True)))
-    att.n_items = len(links)
-    if links:
-        att.sample_title = _short(links[0][0], 110)
+    att.feeds = extract.advertised_feeds(r.content, base)
+    found = extract.links(r.content, base, spec.get("link_pattern"), spec.get("selector"))
+    att.n_items = len(found)
+    if found:
+        att.sample_title = _short(found[0][0], 110)
 
 
 def _parse_json(att, data, spec):
@@ -258,7 +234,7 @@ def probe_source(client, source, env=os.environ):
         if not groups:
             res.summary = "nothing to probe (no url)"
             return res
-        headers = _auth_headers(source, env)
+        headers = source.auth_headers(env)
         for group in groups:
             atts = [probe_url(client, u, spec, headers or None, each=e) for spec, u, e in group]
             res.attempts.extend(atts)

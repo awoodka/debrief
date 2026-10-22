@@ -234,3 +234,36 @@ Status of the user's items (2026-10-22):
   - optionally Artificial Analysis and YouTube Data API keys
   - lists to curate: GitHub repos, HF orgs, PyPI/npm packages, SEC companies, Bluesky/Mastodon accounts, podcasts, trusted voices
   - the user's review of SOURCES.md and the code before M1 starts
+
+## M1 results (2026-10-22)
+
+`collect` runs the five primary adapters: `rss`, `listing_page`, `hf_daily_papers`, `arxiv_rss` with OAI-PMH backfill, and `github_releases`. That covers 40 sources.
+
+On live data, starting from empty:
+
+| Run | Time | Requests | New stories |
+|---|---|---|---|
+| First | 1 min 47 s | 81 | 923 |
+| Second, two minutes later | 52 s | 55, of which 34 answered 304 | 4, all published between the runs |
+
+The first run's 923 stories are 704 papers, 99 announcements, 94 press/policy and 26 releases. The age guard kept 2,877 old feed entries out.
+
+The M1 acceptance checks:
+- **No duplicates across the two runs.** No two stories share an artifact URL.
+- **Replay is exact.** `collect --replay 2026-10-22` rebuilt identical stories, items, mentions and story-URL rows.
+
+Findings that changed the code:
+
+**arXiv OAI-PMH.** In the `arXiv` metadata format every record carries `<updated>`, so new papers can't be told apart. In `arXivRaw` they can: a new paper has only a v1, dated within a week of the datestamp. Measured on 2026-10-20, most new papers lag 1–3 days (median 3), with a tail of edits up to years old.
+
+**Meta's blog posts** have neither date tags nor article markup. So:
+- A fetched post only needs a title.
+- Dates fall back to trafilatura's text finder. It misdated 1 in 5 Meta posts, which is why the age guard for scraped pages runs only on a source's first run.
+
+**Anthropic's listing** mixes posts with category pages. Seven category slugs are excluded in `sources.yml`.
+
+**Hugging Face** caps a day at 50 papers unless asked for `limit=100`; Oct 21 had 64.
+
+Left for later milestones:
+- The same announcement cross-posted under different URLs (OlmoEarth on both the HF and Ai2 blogs) is two stories until the triage merge (§6.1, M3).
+- PR Newswire's general feed is mostly off-topic press releases, which triage filters out.

@@ -42,6 +42,13 @@ class Source:
     options: dict = field(default_factory=dict)
     notes: str = ""
 
+    def auth_headers(self, env):
+        """The auth header this source sends, if its env var is set; {} otherwise."""
+        a = self.auth or {}
+        if a.get("env") and env.get(a["env"]):
+            return {a["header"]: a["format"].format(env[a["env"]])}
+        return {}
+
 
 def _source(raw, seen):
     where = f"sources.yml entry {raw.get('id', '?')!r}"
