@@ -882,15 +882,17 @@
   notes: Akamai 'Access Denied' (403) to non-browser clients
 
 - id: sec-edgar
-  name: SEC EDGAR current filings
+  name: SEC EDGAR filings (AI-company allowlist)
   adapter: sec_edgar
   roles: [anchor]
   tier: 2
   kind: policy
-  url: https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=10&output=atom
-  probe: {kind: feed}
-  enabled: false
-  notes: '403: SEC requires a User-Agent with an email. Set DEBRIEF_CONTACT to an email, then re-probe'
+  # SEC company ids (CIK, 10 digits): NVIDIA, Microsoft, Alphabet, Meta, Amazon, Apple, AMD, Oracle
+  url: https://data.sec.gov/submissions/CIK{each}.json
+  each: ['0001045810', '0000789019', '0001652044', '0001326801', '0001018724', '0000320193',
+         '0000002488', '0001341439']
+  probe: {kind: json, single: true, title: name}
+  notes: 'the official EDGAR API (data.sec.gov). sec.gov/cgi-bin/browse-edgar is disallowed by robots.txt. Needs DEBRIEF_CONTACT to be an email (SEC fair-access policy). Each response lists ~1000 recent filings; the adapter keeps forms like 8-K, 10-K, 10-Q, S-1 and skips insider-trade Form 4s'
 
 - id: federal-register
   name: Federal Register

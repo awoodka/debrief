@@ -205,7 +205,7 @@ docs/v2/  BRIEF.md (the brief, verbatim), SOURCES.md (M0 probe table), README.md
 
 ## M0 results (2026-10-22)
 
-The full table is in [SOURCES.md](SOURCES.md): 90 sources, 70 ok, 19 disabled with a reason, and 1 failed (Semantic Scholar, which needs a key). The findings below change the plan.
+The full table is in [SOURCES.md](SOURCES.md): 90 sources, 71 ok, 18 disabled with a reason, and 1 failed (Semantic Scholar, which needs a key). The findings below change the plan.
 
 - **arXiv's 2026-10-01 change is about submissions, not access.** Submitters are capped at 2 papers a month ([arXiv blog](https://blog.arxiv.org/2026/10/01/updated-rate-limit-policy/)). The access terms are unchanged ([terms of use](https://info.arxiv.org/help/api/tou.html)): one request every 3 s, on a single connection, across all our machines. That budget is shared with v1's collector.
 - **arXiv lookups use OAI-PMH, not the query API.** `export.arxiv.org` robots.txt disallows everything. `oaipmh.arxiv.org` is allowed and does both jobs: `ListRecords` for backfill and `GetRecord` for lookups by id.
@@ -224,13 +224,13 @@ The full table is in [SOURCES.md](SOURCES.md): 90 sources, 70 ok, 19 disabled wi
   - VentureBeat: 429 on every request.
   - GlobeNewswire (Akamai), EU AI Office (CloudFront) and Business Wire (timeout): unavailable to a plain client.
 - **New source:** `github-new-ai-repos`, a GitHub search for repos created in the last week with `topic:llm` and more than 50 stars.
+- **SEC EDGAR uses the official API.** That's `data.sec.gov/submissions/CIK<id>.json`, for an allowlist of 8 public AI companies, all verified by name. The `cgi-bin/browse-edgar` feed returned 200 once the User-Agent carried an email, but robots.txt disallows it.
 - **HN volume** is about 1,200 stories a day, small enough to store every story losslessly.
 
-Waiting on the user:
-- **Tokens:**
-  - a push token for git
-  - a `GITHUB_PAT` (no scopes) for the collector
+Status of the user's items (2026-10-22):
+- **Done:** the push token (in a repo-local credential store), the collector `GITHUB_PAT`, and `DEBRIEF_CONTACT`. The last two are in the gitignored `.env`.
+- **Still open:**
   - a free Semantic Scholar key
-  - optionally an Artificial Analysis key and a YouTube Data API key
-  - `DEBRIEF_CONTACT` set to an email (SEC EDGAR needs one)
-- **Lists to curate:** GitHub repos, HF orgs, PyPI and npm packages, Bluesky and Mastodon accounts, podcasts, and trusted voices.
+  - optionally Artificial Analysis and YouTube Data API keys
+  - lists to curate: GitHub repos, HF orgs, PyPI/npm packages, SEC companies, Bluesky/Mastodon accounts, podcasts, trusted voices
+  - the user's review of SOURCES.md and the code before M1 starts

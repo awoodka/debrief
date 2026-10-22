@@ -1,8 +1,8 @@
 # Debrief v2 source probe (Milestone 0)
 
-Generated 2026-10-22T15:50:38-04:00 by `debrief probe-sources`, with User-Agent `debrief/2.0 (personal AI/ML news digest; +https://github.com/awoodka/debrief)`. Each endpoint was requested once, through the same rate buckets the collector uses. Full record: `$DEBRIEF_DATA_DIR/probe/probe-20261022-155038.json`.
+Generated 2026-10-22T16:29:08-04:00 by `debrief probe-sources`, with User-Agent `debrief/2.0 (personal AI/ML news digest; awoodka@startupshell.org)`. Each endpoint was requested once, through the same rate buckets the collector uses. Full record: `$DEBRIEF_DATA_DIR/probe/probe-20261022-162908.json`.
 
-Status counts: disabled 19, failed 1, ok 70
+Status counts: disabled 18, failed 1, ok 71
 
 | Source | Roles · tier | Status | Endpoint | Items | Sample | Limits / caching / robots | Notes |
 |---|---|---|---|---|---|---|---|
@@ -91,7 +91,7 @@ Status counts: disabled 19, failed 1, ok 70
 | PR Newswire (`prnewswire`) | anchor · 2 | ok | https://www.prnewswire.com/rss/news-releases-list.rss | 20 | UBCF Extends Free Pink Bag Shopping Event in Jonesboro Through October 30th · Thu, 22 Oct 2026 19:45:00 | ETag, Last-Modified | verify; needs hard keyword + org filtering |
 | Business Wire (`businesswire`) | anchor · 2 | disabled |  |  |  |  | newsroom page timed out after 30 s; no feed found |
 | GlobeNewswire (`globenewswire`) | anchor · 2 | disabled |  |  |  |  | Akamai 'Access Denied' (403) to non-browser clients |
-| SEC EDGAR current filings (`sec-edgar`) | anchor · 2 | disabled |  |  |  |  | 403: SEC requires a User-Agent with an email. Set DEBRIEF_CONTACT to an email, then re-probe |
+| SEC EDGAR filings (AI-company allowlist) (`sec-edgar`) | anchor · 2 | ok 8/8 ok | https://data.sec.gov/submissions/CIK{each}.json | 1 | NVIDIA CORP |  | the official EDGAR API (data.sec.gov). sec.gov/cgi-bin/browse-edgar is disallowed by robots.txt. Needs DEBRIEF_CONTACT to be an email (SEC fair-access policy). Each response lists ~1000 recent filings; the adapter keeps forms like 8-K, 10-K, 10-Q, S-1 and skips insider-trade Form 4s |
 | Federal Register (`federal-register`) | anchor · 2 | ok | https://www.federalregister.gov/api/v1/documents.json?conditions[term]=%22artificial+intelligence%22&order=newest&per_page=3 | 3 | Agency Information Collection Activities; Proposed Collection; Comment Request; Fraud.gov… · 2026-10-22 |  |  |
 | NIST news (`nist`) | anchor · 2 | ok | https://www.nist.gov/news-events/news/rss.xml | 40 | New Chip-Based ‘Tape Measure’ for Light Could Revolutionize Mobile Timekeeping and Enhanc… · Fri, 16 Oct 2026 12:00:00 | ETag, Last-Modified | verify; needs AI keyword filtering |
 | EU AI Office (`eu-ai-office`) | anchor · 2 | disabled |  |  |  |  | CloudFront 403 to non-browser clients |
