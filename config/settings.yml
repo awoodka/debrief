@@ -1,0 +1,50 @@
+# Debrief v2 settings. Sources live in sources.yml; secrets live in .env (never here).
+
+# {contact} is DEBRIEF_CONTACT, or contact_default when that's unset. Some APIs (SEC EDGAR) require
+# an email address here, so set DEBRIEF_CONTACT to one before enabling those sources.
+user_agent: "debrief/2.0 (personal AI/ML news digest; {contact})"
+contact_default: "+https://github.com/awoodka/debrief"
+
+http:
+  timeout_s: 30
+  max_retries: 2
+  backoff_s: 5               # first retry after 5 s, then 10 s
+  max_retry_after_s: 120     # a server asking for a longer pause fails the fetch instead of stalling the run
+  default_interval_s: 2.0    # per host, when no bucket below matches
+  # Rate buckets: one request at a time, at least interval_s apart, across every listed host and its
+  # subdomains.
+  buckets:
+    arxiv:
+      # arXiv terms of use (checked 2026-10-22): at most one request every 3 s, on a single
+      # connection, across ALL machines under our control. The v1 collector on this server shares
+      # this budget, so never run v2 against arXiv during the v1 window (08:30-09:10 ET).
+      hosts: [arxiv.org]
+      interval_s: 3.5
+    deepmind:
+      hosts: [deepmind.google]   # reported to rate-limit
+      interval_s: 10
+    sec:
+      hosts: [sec.gov]           # SEC fair access: <= 10 requests/s, declared UA with an email
+      interval_s: 0.5
+    huggingface-pages:
+      # HF advertises (RateLimit-Policy, 2026-10-22): pages 100 per 300 s, API 500 per 300 s.
+      hosts: [huggingface.co/papers, huggingface.co/blog, huggingface.co/spaces]
+      interval_s: 3.5
+    huggingface:
+      hosts: [huggingface.co]
+      interval_s: 1.0
+    openreview:
+      hosts: [api2.openreview.net]   # advertises 20 per 60 s
+      interval_s: 3.5
+    github-api:
+      hosts: [api.github.com]
+      interval_s: 1.0
+    github:
+      hosts: [github.com]
+      interval_s: 1.0
+    hn:
+      hosts: [hn.algolia.com]
+      interval_s: 1.0
+    venturebeat:
+      hosts: [venturebeat.com]
+      interval_s: 10

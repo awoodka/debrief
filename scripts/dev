@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Run a command in the Debrief v2 dev container: the repo is mounted at /app, the data dir at /data.
+#
+#   scripts/dev build                      build (or rebuild) the debrief-v2:dev image
+#   scripts/dev python -m debrief probe-sources
+#   scripts/dev pytest -q
+#   scripts/dev --claude python -m debrief triage --date 2026-10-22
+#
+# Secrets stay split the way the production run splits them. By default the container gets the
+# source keys from ./.env and never the Claude token. --claude swaps that: it gets the Claude
+# token file ($DEBRIEF_CLAUDE_ENV) and no source keys.
+set -euo pipefail
+
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+IMAGE=${DEBRIEF_IMAGE:-debrief-v2:dev}
+DATA=${DEBRIEF_DATA_DIR:-/srv/data/debrief-v2}
+CLAUDE_ENV=${DEBRIEF_CLAUDE_ENV:-/srv/apps/debrief/claude.env}
+
+if [ "${1:-}" = build ]; then
+  exec docker build --target dev -t "$IMAGE" -f "$REPO/deploy/Dockerfile" "$REPO"
+fi
+
+# The v1 pipeline publishes whatever lands in its debriefs/ folder, so never point v2 at it.
+[ ! -d "$DATA/debriefs" ] || { echo "dev: $DATA holds the v1 pipeline's data; refusing" >&2; exit 1; }
+mkdir -p "$DATA"
+
+ENV_ARGS=()
+if [ "${1:-}" = --claude ]; then
+  shift
+  [ -r "$CLAUDE_ENV" ] || { echo "dev: no Claude token file at $CLAUDE_ENV" >&2; exit 1; }
+  ENV_ARGS=(--env-file "$CLAUDE_ENV")
+elif [ -f "$REPO/.env" ]; then
+  ENV_ARGS=(--env-file "$REPO/.env")
+fi
+
+TTY=()
+[ -t 0 ] && [ -t 1 ] && TTY=(-t)
+
+exec docker run --rm -i "${TTY[@]}" --user "$(id -u):$(id -g)" \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --tmpfs /tmp --tmpfs /home/debrief:uid="$(id -u)",gid="$(id -g)",mode=0700 \
+  -v "$REPO:/app" -v "$DATA:/data" -w /app \
+  -e DEBRIEF_DATA_DIR=/data ${DEBRIEF_CONTACT:+-e "DEBRIEF_CONTACT=$DEBRIEF_CONTACT"} \
+  "${ENV_ARGS[@]}" "$IMAGE" "$@"

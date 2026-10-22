@@ -1,0 +1,934 @@
+# Debrief v2 sources. One entry per source; adding a source is one entry here (plus an adapter, if
+# its adapter type is new). Field reference: docs/v2/README.md. Quick version:
+#
+#   id, name     stable id (used in raw paths and the index) and a display name
+#   adapter      the adapter type that will fetch it (M1+); probe-sources ignores this
+#   roles        anchor | discussion | reference | context  (a list: a source can hold two roles)
+#   tier         1 always considered · 2 filtered normally · 3 attach-only (never an anchor)
+#   kind, org    default story kind and organisation for anchors from this source
+#   url, each    the endpoint; {each} expands over the `each` list. Dates: {today} {yesterday} {since_24h}
+#   candidates   unverified alternatives, tried in order by probe-sources (string, or {url, probe})
+#   probe        how probe-sources checks it: kind feed | links | json | graphql | status | itunes
+#   auth         {env, header, format}: send a header when that env var is set
+#   enabled      false = ships disabled (optional adapters)
+#
+# "verify" in notes = not yet confirmed live; docs/v2/SOURCES.md has the probe results.
+
+# ---------------------------------------------------------------- labs and companies: anchor, tier 1
+- id: openai-news
+  name: OpenAI News
+  adapter: rss
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: OpenAI
+  url: https://openai.com/news/rss.xml
+  probe: {kind: feed}
+
+- id: deepmind-blog
+  name: Google DeepMind blog
+  adapter: rss
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Google DeepMind
+  url: https://deepmind.google/blog/rss.xml
+  probe: {kind: feed}
+  notes: reportedly rate-limits; 10 s bucket
+
+- id: hf-blog
+  name: Hugging Face blog
+  adapter: rss
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Hugging Face
+  url: https://huggingface.co/blog/feed.xml
+  probe: {kind: feed}
+
+- id: anthropic-news
+  name: Anthropic news
+  adapter: listing_page
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Anthropic
+  url: https://www.anthropic.com/news
+  probe: {kind: links, link_pattern: '^https://www\.anthropic\.com/news/[^/?#]+$'}
+  notes: no RSS; listing-page scrape. The pattern also matches category pages such as /news/announcements, which the adapter must skip
+
+- id: anthropic-research
+  name: Anthropic research
+  adapter: listing_page
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Anthropic
+  url: https://www.anthropic.com/research
+  probe: {kind: links, link_pattern: '^https://www\.anthropic\.com/research/[^/?#]+$'}
+
+- id: anthropic-engineering
+  name: Anthropic engineering
+  adapter: listing_page
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Anthropic
+  url: https://www.anthropic.com/engineering
+  probe: {kind: links, link_pattern: '^https://www\.anthropic\.com/engineering/[^/?#]+$'}
+  enabled: false
+  notes: no post links in the page HTML (built by JavaScript) and none in anthropic.com/sitemap.xml; engineering posts now appear under /research/, which anthropic-research covers
+
+- id: meta-ai-blog
+  name: Meta AI blog
+  adapter: listing_page
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Meta
+  url: https://ai.meta.com/blog/
+  probe: {kind: links, link_pattern: '^https://ai\.meta\.com/blog/[^/?#]+/?$'}
+  notes: no RSS; listing-page scrape
+
+- id: deepseek-github
+  name: DeepSeek GitHub org (new repos)
+  adapter: github_org
+  roles: [anchor]
+  tier: 1
+  kind: release
+  org: DeepSeek
+  url: https://api.github.com/orgs/deepseek-ai/repos?sort=created&direction=desc&per_page=5
+  probe: {kind: json, items: '', title: full_name, date: created_at}
+  auth: {env: GITHUB_PAT, header: Authorization, format: 'Bearer {}'}
+  notes: DeepSeek has no feed; its HF org is in hf-org-watch
+
+- id: microsoft-research
+  name: Microsoft Research blog
+  adapter: rss
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Microsoft
+  probe: {kind: feed}
+  url: https://www.microsoft.com/en-us/research/feed/
+  notes: verified 2026-10-22
+
+- id: google-research
+  name: Google Research blog
+  adapter: rss
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Google
+  url: https://research.google/blog/rss/
+  probe: {kind: feed}
+  notes: verify (worked in v1)
+
+- id: google-ai-blog
+  name: Google AI blog (blog.google)
+  adapter: rss
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Google
+  probe: {kind: feed}
+  url: https://blog.google/technology/ai/rss/
+  notes: verified 2026-10-22; includes some non-AI business posts
+
+- id: google-gemini-blog
+  name: Google Gemini product blog
+  adapter: rss
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Google
+  url: https://blog.google/products/gemini/rss/
+  probe: {kind: feed}
+  notes: worked in v1
+
+- id: mistral-news
+  name: Mistral AI news
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Mistral
+  adapter: rss
+  url: https://mistral.ai/news/rss
+  probe: {kind: feed}
+  notes: feed advertised by mistral.ai/news (found 2026-10-22)
+
+- id: cohere-blog
+  name: Cohere blog
+  adapter: listing_page
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Cohere
+  url: https://cohere.com/blog
+  probe: {kind: links, link_pattern: '^https://cohere\.com/blog/[^/?#]+/?$'}
+  notes: verify
+
+- id: ai2-blog
+  name: Ai2 blog
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Ai2
+  adapter: rss
+  url: https://allenai.org/rss.xml
+  probe: {kind: feed}
+  notes: feed advertised by allenai.org/blog
+
+- id: qwen-blog
+  name: Qwen blog
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Alibaba Qwen
+  adapter: rss
+  url: https://qwenlm.github.io/blog/index.xml
+  probe: {kind: feed}
+  enabled: false
+  notes: feed works but its newest post is 2025-09-22; Qwen now ships through its HF org (hf-org-watch)
+
+- id: nvidia-blog
+  name: NVIDIA blog
+  adapter: rss
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: NVIDIA
+  url: https://blogs.nvidia.com/feed/
+  probe: {kind: feed}
+  notes: worked in v1
+
+- id: nvidia-dev-blog
+  name: NVIDIA developer blog
+  adapter: rss
+  roles: [anchor]
+  tier: 2
+  kind: announcement
+  org: NVIDIA
+  url: https://developer.nvidia.com/blog/feed
+  probe: {kind: feed}
+  notes: verify
+
+- id: apple-ml
+  name: Apple Machine Learning Research
+  adapter: rss
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Apple
+  url: https://machinelearning.apple.com/rss.xml
+  probe: {kind: feed}
+  notes: verify
+
+- id: thinking-machines
+  name: Thinking Machines Lab blog
+  roles: [anchor]
+  tier: 1
+  kind: announcement
+  org: Thinking Machines
+  adapter: rss
+  url: https://thinkingmachines.ai/blog/index.xml
+  probe: {kind: feed}
+  notes: feed advertised by the blog; posts are infrequent
+
+- id: aws-ml-blog
+  name: AWS Machine Learning blog
+  adapter: rss
+  roles: [anchor]
+  tier: 2
+  kind: announcement
+  org: AWS
+  url: https://aws.amazon.com/blogs/machine-learning/feed/
+  probe: {kind: feed}
+  notes: verify
+
+- id: together-ai-blog
+  name: Together AI blog
+  roles: [anchor]
+  tier: 2
+  kind: announcement
+  org: Together AI
+  adapter: rss
+  url: https://www.together.ai/blog/rss.xml
+  probe: {kind: feed}
+  notes: feed advertised by together.ai/blog
+
+# ---------------------------------------------------------------------------------------- papers
+- id: arxiv-rss
+  name: arXiv category RSS
+  adapter: arxiv_rss
+  roles: [anchor]
+  tier: 2
+  kind: paper
+  url: https://rss.arxiv.org/rss/{each}
+  each: [cs.LG, cs.CL, cs.AI, cs.CV, stat.ML]
+  probe: {kind: feed}
+  notes: holds only the latest announcement; gaps are backfilled from arxiv-oai
+
+- id: arxiv-api
+  name: arXiv query API (lookups by id)
+  adapter: arxiv_api
+  roles: [context]
+  tier: 2
+  enabled: false
+  url: https://export.arxiv.org/api/query?id_list=1706.03762
+  probe: {kind: feed}
+  notes: 'not needed: export.arxiv.org robots.txt is Disallow / for all agents, and arxiv-oai GetRecord does the same lookups (verified 2026-10-22)'
+
+- id: arxiv-oai
+  name: arXiv OAI-PMH (gap backfill and lookups by id)
+  adapter: arxiv_oai
+  roles: [context]
+  tier: 2
+  url: https://oaipmh.arxiv.org/oai?verb=Identify
+  probe: {kind: status, expect: [200], contains: '<Identify>'}
+  notes: 'verified 2026-10-22. Backfill: ListRecords set=cs / set=stat from=<cursor>. Lookup: GetRecord identifier=oai:arXiv.org:<id> metadataPrefix=arXiv. Same 3 s budget as all arXiv'
+
+- id: hf-daily-papers
+  name: Hugging Face Daily Papers
+  adapter: hf_daily_papers
+  roles: [anchor, discussion]
+  tier: 1
+  kind: paper
+  url: https://huggingface.co/api/daily_papers
+  probe: {kind: json, items: '', title: paper.title, date: publishedAt}
+
+- id: hf-paper-detail
+  name: Hugging Face paper page API (per paper)
+  adapter: hf_daily_papers
+  roles: [context]
+  tier: 2
+  url: https://huggingface.co/api/papers/2501.12948
+  probe: {kind: json, single: true, title: title}
+  notes: sample paper 2501.12948; checks which fields carry comments and upvotes
+
+- id: hf-paper-comments
+  name: Hugging Face paper comments
+  roles: [discussion]
+  tier: 3
+  adapter: hf_paper_page
+  url: https://huggingface.co/papers/2501.12948
+  probe: {kind: status, expect: [200], contains: '&quot;comments&quot;:['}
+  notes: no comments API (/api/papers/{id}/comments is 404). Comments are in the page's embedded JSON; daily_papers gives numComments, so only pages with comments get fetched
+
+- id: hf-trending-papers
+  name: Hugging Face trending papers
+  adapter: hf_trending_papers
+  roles: [anchor]
+  tier: 2
+  kind: paper
+  url: https://huggingface.co/api/daily_papers?sort=trending
+  probe: {kind: json, items: '', title: paper.title}
+  notes: verified; returns a different order from the default list
+
+- id: alphaxiv-overview
+  name: alphaXiv overviews
+  adapter: alphaxiv
+  roles: [discussion, context]
+  tier: 3
+  url: https://alphaxiv.org/abs/2501.12948.md
+  probe: {kind: status, expect: [200, 404]}
+  notes: verify; 404 means no overview yet. Comments are not probed (no documented endpoint)
+
+- id: semantic-scholar
+  name: Semantic Scholar API
+  adapter: semantic_scholar
+  roles: [context]
+  tier: 2
+  url: https://api.semanticscholar.org/graph/v1/paper/ARXIV:1706.03762?fields=title,citationCount,influentialCitationCount
+  probe: {kind: json, single: true, title: title}
+  auth: {env: SEMANTIC_SCHOLAR_API_KEY, header: x-api-key, format: '{}'}
+  notes: keyless shared pool answered 429; needs a free API key (SEMANTIC_SCHOLAR_API_KEY)
+
+- id: openalex
+  name: OpenAlex API
+  adapter: openalex
+  roles: [context]
+  tier: 2
+  url: https://api.openalex.org/works/doi:10.48550/arXiv.1706.03762
+  probe: {kind: json, single: true, title: title}
+  auth: {env: OPENALEX_API_KEY, header: Authorization, format: 'Bearer {}'}
+  notes: fallback citations
+
+- id: openreview
+  name: OpenReview API
+  adapter: openreview
+  roles: [context]
+  tier: 2
+  url: https://api2.openreview.net/groups?id=ICLR.cc/2026/Conference
+  probe: {kind: json, items: groups, title: id}
+  notes: verify
+
+- id: proceedings
+  name: Conference proceedings sites
+  adapter: proceedings
+  roles: [anchor]
+  tier: 2
+  kind: paper
+  enabled: false
+  notes: seasonal, low priority; not probed
+
+- id: biorxiv
+  name: bioRxiv API
+  adapter: biorxiv
+  roles: [anchor]
+  tier: 2
+  kind: paper
+  enabled: false
+  url: https://api.biorxiv.org/details/biorxiv/{yesterday}/{today}/0
+  probe: {kind: json, items: collection, title: title, date: date}
+  notes: disabled by default (AI-for-science later)
+
+# ------------------------------------------------------------------- models, code and benchmarks
+- id: hf-org-watch
+  name: Hugging Face Hub org watch
+  adapter: hf_hub
+  roles: [anchor]
+  tier: 1
+  kind: release
+  url: https://huggingface.co/api/models?author={each}&sort=createdAt&direction=-1&limit=3
+  each: [deepseek-ai, meta-llama, Qwen, mistralai, google, microsoft, nvidia, allenai, openai,
+         moonshotai, zai-org, ibm-granite, HuggingFaceTB]
+  probe: {kind: json, items: '', title: id, date: createdAt}
+  notes: verify params; org list is a starting point
+
+- id: hf-trending-models
+  name: Hugging Face trending models
+  adapter: hf_hub
+  roles: [anchor]
+  tier: 2
+  kind: release
+  url: https://huggingface.co/api/models?sort=trendingScore&limit=5
+  probe: {kind: json, items: '', title: id, date: createdAt}
+  notes: verify param
+
+- id: hf-trending-spaces
+  name: Hugging Face trending Spaces
+  adapter: hf_hub
+  roles: [anchor]
+  tier: 2
+  kind: release
+  url: https://huggingface.co/api/spaces?sort=trendingScore&limit=5
+  probe: {kind: json, items: '', title: id, date: createdAt}
+  notes: trending Spaces include spam (e.g. gambling pages); needs the blocklist
+
+- id: hf-trending-datasets
+  name: Hugging Face trending datasets
+  adapter: hf_hub
+  roles: [anchor]
+  tier: 2
+  kind: release
+  url: https://huggingface.co/api/datasets?sort=trendingScore&limit=5
+  probe: {kind: json, items: '', title: id, date: createdAt}
+  notes: verify param
+
+- id: github-releases
+  name: GitHub releases (tracked repos)
+  adapter: github_releases
+  roles: [anchor]
+  tier: 1
+  kind: release
+  each: [vllm-project/vllm, ggml-org/llama.cpp, huggingface/transformers, pytorch/pytorch,
+         ollama/ollama, sgl-project/sglang, anthropics/claude-code, langchain-ai/langgraph,
+         openai/openai-agents-python, pydantic/pydantic-ai, huggingface/smolagents]
+  url: https://api.github.com/repos/{each}/releases?per_page=5
+  probe: {kind: json, items: '', title: tag_name, date: published_at}
+  auth: {env: GITHUB_PAT, header: Authorization, format: 'Bearer {}'}
+  notes: GitHub robots.txt disallows /*.atom$, so releases come from the REST API (60/h without GITHUB_PAT, 5000/h with). Repo list is a starting point for you to edit
+
+- id: github-trending
+  name: GitHub trending
+  adapter: github_trending
+  roles: [anchor]
+  tier: 2
+  kind: repo
+  probe: {kind: links, selector: 'article.Box-row h2 a'}
+  url: https://github.com/trending
+  notes: HTML scrape. robots.txt disallows /*?since=, so only the default (daily) page is allowed
+
+- id: github-new-ai-repos
+  name: New AI repos gaining stars (GitHub search)
+  adapter: github_search
+  roles: [anchor]
+  tier: 2
+  kind: repo
+  url: https://api.github.com/search/repositories?q=created:>{week_ago}+stars:>50+topic:llm&sort=stars&order=desc&per_page=10
+  probe: {kind: json, items: items, title: full_name, date: created_at}
+  auth: {env: GITHUB_PAT, header: Authorization, format: 'Bearer {}'}
+  notes: official-API complement to github-trending; search allows 10 requests/min without a token
+
+- id: github-api
+  name: GitHub REST API (stars, issues)
+  adapter: github_api
+  roles: [context, discussion]
+  tier: 3
+  url: https://api.github.com/repos/vllm-project/vllm
+  probe: {kind: json, single: true, title: full_name}
+  auth: {env: GITHUB_PAT, header: Authorization, format: 'Bearer {}'}
+
+- id: pypi
+  name: PyPI releases (tracked SDKs)
+  adapter: pypi
+  roles: [anchor]
+  tier: 2
+  kind: release
+  each: [anthropic, openai, google-genai, mistralai, transformers, vllm, torch, huggingface-hub,
+         langchain, llama-index]
+  url: https://pypi.org/rss/project/{each}/releases.xml
+  probe: {kind: feed}
+  notes: PyPI robots.txt disallows /pypi/*/json; the per-project release RSS is allowed
+
+- id: npm
+  name: npm releases (tracked SDKs)
+  adapter: npm
+  roles: [anchor]
+  tier: 2
+  kind: release
+  url: https://registry.npmjs.org/{each}/latest
+  each: ['@anthropic-ai/sdk', '@anthropic-ai/claude-code', openai, '@google/genai', ai,
+         '@modelcontextprotocol/sdk']
+  probe: {kind: json, single: true, title: version}
+
+- id: lmarena
+  name: LMArena leaderboard
+  adapter: leaderboard
+  roles: [anchor]
+  tier: 2
+  kind: leaderboard
+  url: https://datasets-server.huggingface.co/rows?dataset=lmarena-ai/leaderboard-dataset&config=text&split=latest&offset=0&length=20
+  probe: {kind: json, items: rows, title: row.model_name}
+  notes: lmarena.ai returns 403; the official lmarena-ai/leaderboard-dataset on HF (updated 2026-10-21) is read through the datasets-server rows API
+
+- id: openrouter-models
+  name: OpenRouter models
+  adapter: openrouter
+  roles: [anchor]
+  tier: 2
+  kind: release
+  url: https://openrouter.ai/api/v1/models
+  probe: {kind: json, items: data, title: id, date: created}
+  notes: verify
+
+- id: openrouter-rankings
+  name: OpenRouter rankings
+  adapter: openrouter
+  roles: [anchor]
+  tier: 2
+  kind: leaderboard
+  url: https://openrouter.ai/rankings
+  probe: {kind: status, expect: [200]}
+  enabled: false
+  notes: page loads (2.5 MB) with the data embedded in its script payload; fragile to parse, so off until needed
+
+- id: artificial-analysis
+  name: Artificial Analysis
+  adapter: artificial_analysis
+  roles: [context]
+  tier: 2
+  url: https://artificialanalysis.ai/api/v2/data/llms/models
+  probe: {kind: json, items: data, title: name}
+  auth: {env: ARTIFICIAL_ANALYSIS_API_KEY, header: x-api-key, format: '{}'}
+  enabled: false
+  notes: 401 without a key; free key needed (ARTIFICIAL_ANALYSIS_API_KEY)
+
+- id: epoch-ai
+  name: Epoch AI data
+  adapter: epoch
+  roles: [context]
+  tier: 2
+  url: https://epoch.ai/data
+  probe: {kind: links, link_pattern: '\.(csv|zip)(\?|$)'}
+  notes: low priority; looks for downloadable datasets
+
+- id: status-openai
+  name: OpenAI status
+  adapter: statuspage
+  roles: [anchor]
+  tier: 2
+  kind: incident
+  org: OpenAI
+  probe: {kind: feed}
+  url: https://status.openai.com/history.rss
+  notes: verified; emit stories only for major incidents
+
+- id: status-anthropic
+  name: Anthropic status
+  adapter: statuspage
+  roles: [anchor]
+  tier: 2
+  kind: incident
+  org: Anthropic
+  probe: {kind: feed}
+  url: https://status.anthropic.com/history.rss
+  notes: verified; emit stories only for major incidents
+
+# ------------------------------------------------------------------------------------ discussion
+- id: hn
+  name: Hacker News (Algolia)
+  adapter: hn
+  roles: [discussion]
+  tier: 3
+  url: https://hn.algolia.com/api/v1/search_by_date?tags=story&numericFilters=created_at_i>{since_24h}&hitsPerPage=3
+  probe: {kind: json, items: hits, title: title, date: created_at, count: nbHits}
+  notes: most important discussion source; count = stories in the last 24 h
+
+- id: hn-items
+  name: Hacker News comment trees (Algolia items)
+  adapter: hn
+  roles: [discussion]
+  tier: 3
+  url: https://hn.algolia.com/api/v1/items/8863
+  probe: {kind: json, single: true, title: title}
+
+- id: bluesky
+  name: Bluesky (curated accounts)
+  adapter: bluesky
+  roles: [discussion]
+  tier: 3
+  url: https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=bsky.app&limit=2
+  probe: {kind: json, items: feed, title: post.record.text, date: post.record.createdAt}
+  notes: account list to be curated; bsky.app is a probe stand-in
+
+- id: bluesky-search
+  name: Bluesky search (keyless)
+  adapter: bluesky
+  roles: [discussion]
+  tier: 3
+  url: https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=arxiv&limit=2
+  probe: {kind: json, items: posts, title: record.text, date: record.createdAt}
+  enabled: false
+  notes: searchPosts on the public AppView returns 403 without a login
+
+- id: bluesky-jetstream
+  name: Bluesky Jetstream (firehose filter)
+  adapter: jetstream
+  roles: [discussion]
+  tier: 3
+  enabled: false
+  notes: optional later mode (websocket); not probed
+
+- id: lobsters
+  name: Lobsters
+  adapter: lobsters
+  roles: [discussion]
+  tier: 3
+  url: https://lobste.rs/t/{each}.json
+  each: [ai, ml]
+  probe: {kind: json, items: '', title: title, date: created_at}
+  enabled: false
+  notes: 'robots.txt: Disallow / for all generic agents (JSON and RSS alike)'
+
+- id: lesswrong
+  name: LessWrong
+  adapter: lesswrong
+  roles: [discussion]
+  tier: 3
+  url: https://www.lesswrong.com/graphql
+  probe:
+    kind: graphql
+    query: '{ posts(input: {terms: {view: "new", limit: 3}}) { results { title pageUrl postedAt baseScore commentCount } } }'
+    items: data.posts.results
+    title: title
+    date: postedAt
+  notes: verify
+
+- id: alignment-forum
+  name: Alignment Forum
+  adapter: lesswrong
+  roles: [discussion]
+  tier: 3
+  url: https://www.alignmentforum.org/graphql
+  probe:
+    kind: graphql
+    query: '{ posts(input: {terms: {view: "new", limit: 3}}) { results { title pageUrl postedAt baseScore commentCount } } }'
+    items: data.posts.results
+    title: title
+    date: postedAt
+  notes: verify
+
+- id: mastodon
+  name: Mastodon (sigmoid.social)
+  adapter: mastodon
+  roles: [discussion]
+  tier: 3
+  url: https://sigmoid.social/api/v1/timelines/tag/machinelearning?limit=2
+  probe: {kind: json, items: '', title: content, date: created_at}
+  notes: verify; account/hashtag list to be curated
+
+- id: youtube
+  name: YouTube channels
+  adapter: youtube
+  roles: [discussion]
+  tier: 3
+  url: https://www.youtube.com/feeds/videos.xml?channel_id={each}
+  each: [UCXUPKJO5MZQN11PqgIvyuvQ, UCbfYPyITQ-7l4upoX8nvctg, UCZHmQk67mSJgfCCTn7xBfew]
+  probe: {kind: feed}
+  enabled: false
+  notes: 'robots.txt disallows /feeds/videos.xml. Alternative: YouTube Data API v3 with a free key (YOUTUBE_API_KEY)'
+
+- id: podcasts
+  name: Podcasts
+  adapter: podcast
+  roles: [discussion]
+  tier: 3
+  each: [Latent Space, Dwarkesh Podcast, The Cognitive Revolution, No Priors]
+  probe: {kind: itunes}
+  notes: feed URLs found through the iTunes search API, then probed
+
+- id: discord
+  name: Discord (invited bot only)
+  adapter: discord
+  roles: [discussion]
+  tier: 3
+  enabled: false
+  notes: optional; only servers where an admin invited the bot; not probed
+
+# ------------------------------------------------------- newsletters and aggregators: reference
+- id: ainews
+  name: AINews (smol.ai)
+  adapter: rss
+  roles: [reference]
+  tier: 3
+  probe: {kind: feed}
+  url: https://news.smol.ai/rss.xml
+  enabled: false
+  notes: 'feed and site work, but the newest issue is 2026-09-10: AINews looks inactive'
+
+- id: simon-willison
+  name: Simon Willison's Weblog
+  adapter: rss
+  roles: [reference, discussion]
+  tier: 3
+  url: https://simonwillison.net/atom/everything/
+  probe: {kind: feed}
+  notes: also discussion (first-hand reactions)
+
+- id: import-ai
+  name: Import AI
+  adapter: rss
+  roles: [reference]
+  tier: 3
+  url: https://importai.substack.com/feed
+  probe: {kind: feed}
+
+- id: interconnects
+  name: Interconnects
+  adapter: rss
+  roles: [reference]
+  tier: 3
+  url: https://www.interconnects.ai/feed
+  probe: {kind: feed}
+
+- id: ahead-of-ai
+  name: Ahead of AI
+  adapter: rss
+  roles: [reference]
+  tier: 3
+  url: https://magazine.sebastianraschka.com/feed
+  probe: {kind: feed}
+
+- id: latent-space
+  name: Latent Space (newsletter)
+  adapter: rss
+  roles: [reference]
+  tier: 3
+  url: https://www.latent.space/feed
+  probe: {kind: feed}
+
+- id: dwatv
+  name: Don't Worry About the Vase
+  adapter: rss
+  roles: [reference]
+  tier: 3
+  url: https://thezvi.substack.com/feed
+  probe: {kind: feed}
+
+- id: last-week-in-ai
+  name: Last Week in AI
+  adapter: rss
+  roles: [reference]
+  tier: 3
+  url: https://lastweekin.ai/feed
+  probe: {kind: feed}
+
+- id: the-batch
+  name: The Batch (DeepLearning.AI)
+  adapter: listing_page
+  roles: [reference]
+  tier: 3
+  url: https://www.deeplearning.ai/the-batch/
+  probe: {kind: links, link_pattern: '^https://www\.deeplearning\.ai/the-batch/issue-\d+/?$'}
+  notes: no RSS advertised; weekly issues are /the-batch/issue-NNN
+
+- id: techmeme
+  name: Techmeme
+  adapter: rss
+  roles: [reference]
+  tier: 3
+  url: https://www.techmeme.com/feed.xml
+  probe: {kind: feed}
+  notes: verify; also marks mainstream_at
+
+- id: imap-newsletters
+  name: Email newsletters (TLDR AI, Ben's Bites, The Rundown)
+  adapter: imap
+  roles: [reference]
+  tier: 3
+  enabled: false
+  notes: optional IMAP inbox, set up later; not probed
+
+# ------------------------------------------------------ press and official releases: anchor, tier 2
+- id: techcrunch-ai
+  name: TechCrunch AI
+  adapter: rss
+  roles: [anchor, reference]
+  tier: 2
+  kind: press
+  url: https://techcrunch.com/category/artificial-intelligence/feed/
+  probe: {kind: feed}
+
+- id: ars-technica-ai
+  name: Ars Technica AI
+  adapter: rss
+  roles: [anchor, reference]
+  tier: 2
+  kind: press
+  url: https://arstechnica.com/ai/feed/
+  probe: {kind: feed}
+
+- id: mit-tech-review-ai
+  name: MIT Technology Review AI
+  adapter: rss
+  roles: [anchor, reference]
+  tier: 2
+  kind: press
+  url: https://www.technologyreview.com/topic/artificial-intelligence/feed
+  probe: {kind: feed}
+
+- id: mit-news-ai
+  name: MIT News AI
+  adapter: rss
+  roles: [anchor]
+  tier: 2
+  kind: press
+  url: https://news.mit.edu/rss/topic/artificial-intelligence2
+  probe: {kind: feed}
+
+- id: the-verge-ai
+  name: The Verge AI
+  adapter: rss
+  roles: [anchor, reference]
+  tier: 2
+  kind: press
+  url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+  probe: {kind: feed}
+  notes: verify
+
+- id: wired-ai
+  name: Wired AI
+  adapter: rss
+  roles: [anchor, reference]
+  tier: 2
+  kind: press
+  url: https://www.wired.com/feed/tag/ai/latest/rss
+  probe: {kind: feed}
+  notes: verify
+
+- id: venturebeat-ai
+  name: VentureBeat AI
+  adapter: rss
+  roles: [anchor, reference]
+  tier: 2
+  kind: press
+  url: https://venturebeat.com/category/ai/feed/
+  probe: {kind: feed}
+  enabled: false
+  notes: 'HTTP 429 on every request from this server (v1: 39 of 39 runs; probe: 1 of 1)'
+
+- id: prnewswire
+  name: PR Newswire
+  adapter: rss
+  roles: [anchor]
+  tier: 2
+  kind: press
+  url: https://www.prnewswire.com/rss/news-releases-list.rss
+  probe: {kind: feed}
+  notes: verify; needs hard keyword + org filtering
+
+- id: businesswire
+  name: Business Wire
+  adapter: rss
+  roles: [anchor]
+  tier: 2
+  kind: press
+  url: https://www.businesswire.com/newsroom
+  probe: {kind: links, link_pattern: '^https://www\.businesswire\.com/news/home/[^?#]+$'}
+  enabled: false
+  notes: newsroom page timed out after 30 s; no feed found
+
+- id: globenewswire
+  name: GlobeNewswire
+  adapter: rss
+  roles: [anchor]
+  tier: 2
+  kind: press
+  url: https://www.globenewswire.com/rss/list
+  probe: {kind: links, link_pattern: '/RssFeed/'}
+  enabled: false
+  notes: Akamai 'Access Denied' (403) to non-browser clients
+
+- id: sec-edgar
+  name: SEC EDGAR current filings
+  adapter: sec_edgar
+  roles: [anchor]
+  tier: 2
+  kind: policy
+  url: https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=10&output=atom
+  probe: {kind: feed}
+  enabled: false
+  notes: '403: SEC requires a User-Agent with an email. Set DEBRIEF_CONTACT to an email, then re-probe'
+
+- id: federal-register
+  name: Federal Register
+  adapter: federal_register
+  roles: [anchor]
+  tier: 2
+  kind: policy
+  url: https://www.federalregister.gov/api/v1/documents.json?conditions[term]=%22artificial+intelligence%22&order=newest&per_page=3
+  probe: {kind: json, items: results, title: title, date: publication_date}
+
+- id: nist
+  name: NIST news
+  adapter: rss
+  roles: [anchor]
+  tier: 2
+  kind: policy
+  url: https://www.nist.gov/news-events/news/rss.xml
+  probe: {kind: feed}
+  notes: verify; needs AI keyword filtering
+
+- id: eu-ai-office
+  name: EU AI Office
+  adapter: listing_page
+  roles: [anchor]
+  tier: 2
+  kind: policy
+  url: https://digital-strategy.ec.europa.eu/en/policies/ai-office
+  probe: {kind: links, link_pattern: '^https://digital-strategy\.ec\.europa\.eu/en/(news|library)/[^/?#]+$'}
+  enabled: false
+  notes: CloudFront 403 to non-browser clients
+
+- id: uk-aisi
+  name: UK AI Security Institute
+  adapter: rss
+  roles: [anchor]
+  tier: 2
+  kind: policy
+  probe: {kind: feed}
+  url: https://www.gov.uk/government/organisations/ai-security-institute.atom
+  notes: verified (GOV.UK organisation feed)
+

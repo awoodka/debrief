@@ -1,0 +1,3 @@
+# Only deploy/ goes into the image build context, so .env, data and secrets never can.
+*
+!deploy/

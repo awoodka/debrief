@@ -1,0 +1,8 @@
+# Debrief v2 runtime dependencies. Exact pins live in requirements.lock (see deploy/README.md).
+requests
+feedparser
+PyYAML
+beautifulsoup4
+trafilatura
+jsonschema
+python-dotenv
