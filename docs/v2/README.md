@@ -6,7 +6,7 @@ v2 replaces the v1 collector and its five-seat council with three layers:
 2. **Triage.** Filters, classifies, and caps, then writes the index. Rules first; Claude through Claude Code headless for the judgment calls.
 3. **The skill.** One Claude Code skill reads the index and writes the brief. It's built separately.
 
-[PLAN.md](PLAN.md) is the approved design. [BRIEF.md](BRIEF.md) is the original brief; where they disagree, the plan wins. [SOURCES.md](SOURCES.md) is the latest source probe.
+[PLAN.md](PLAN.md) is the approved design. [CRITERIA.md](CRITERIA.md) holds the rules for what makes it into the index. [BRIEF.md](BRIEF.md) is the original brief; where they disagree, the plan and the criteria win. [SOURCES.md](SOURCES.md) is the latest source probe.
 
 Status: **M0 and M1 are done**: the source probe, plus `collect` with the five primary adapters, the raw store, the seen-set and story building. Discussion, triage and the output contract arrive in M2–M4. The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
 

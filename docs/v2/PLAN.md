@@ -267,3 +267,43 @@ Findings that changed the code:
 Left for later milestones:
 - The same announcement cross-posted under different URLs (OlmoEarth on both the HF and Ai2 blogs) is two stories until the triage merge (§6.1, M3).
 - PR Newswire's general feed is mostly off-topic press releases, which triage filters out.
+
+## Revision after M1: triage by section (2026-10-22)
+
+The inclusion rules are now in [CRITERIA.md](CRITERIA.md), which supersedes this plan's triage stages 3–5 and the brief's §6.3–6.5. In short:
+- **Releases:** keep all real ones.
+- **Lab announcements:** keep all.
+- **Press and policy:** only high-profile events (several outlets, Techmeme, notable HN discussion, or high stakes).
+- **Papers:** the top 10 from the last 7 days by rank fusion over traction signals.
+
+The model's role shrinks to press event grouping and the stakes label.
+
+Dropped from the plan:
+- the per-story judge (relevant, novelty, relevance level)
+- `config/profile.md`
+- the fixed section quotas and the wildcard slots
+
+Still open:
+- who writes the one-line `gist` in the index. It could be the summary's first sentence, deterministic, or an optional Haiku pass in M4.
+- the rule for Hugging Face org uploads (M5)
+
+The milestones are re-sequenced, because the paper and press rules depend on signals:
+- **M2: discussion and traction signals.**
+  - Hacker News: every story from Algolia via its cursor, attached to stories by URL or id, with comment trees for the attached threads.
+  - Hugging Face paper comments, from the page's embedded JSON, only for papers with `numComments > 0`.
+  - Engagement snapshots (migration 002) and the 6-hourly discussion poll.
+  - A daily re-read of the last 7 days of Daily Papers, so upvote counts stay current.
+  - HF paper-API lookups (repo stars, linked models, datasets and Spaces) for the paper pool.
+  - Mentions attached by URL or id: newsletters give `covered_by`, Techmeme gives press coverage.
+  - Discussion levels, trend, and `bootstrap-bands`.
+- **M3: rules triage and the output contract.**
+  - The section rules: the release filters, all announcements, paper rank fusion, and press with deterministic grouping and traction only.
+  - The merge step, the blocklist, `config/triage.yml`, and the reported ledger.
+  - Full-text fetch for index stories.
+  - The output files with JSON Schemas, and `run_report.md`.
+- **M4: Haiku.**
+  - Press event grouping and the stakes label.
+  - The attach pass for unmatched discussion, and discussion-only clusters.
+  - Caching, degraded mode (press falls back to deterministic grouping with no stakes label), usage reporting, and the Claude Code version bump.
+- **M5:** the remaining sources, as before.
+- **M6:** `snapshot-fixtures` plus the weekly newsletter recall check, which replaces a hand-labelled `must_include.yml` as the main measure.
