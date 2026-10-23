@@ -265,3 +265,33 @@ def test_rebuild_reproduces_the_live_state_and_keeps_cursors(tmp_path):
     out = collect.rebuild(cfg, log=lambda *a: None)
     assert dump(live) == before and Store(live).cursor("hf") == cursor
     assert (cfg.data_dir / "state" / out["backup"]).exists()
+
+
+def test_a_refused_page_is_a_warning_not_a_partial_source(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from datetime import datetime, timezone
+
+    from debrief.adapters import REGISTRY, Adapter
+
+    class Pages(Adapter):
+        name, phase, page_by_page = "pages_test", "enrich", True
+
+        def fetch(self, ctx, source):
+            for url in ("https://ok.test/a", "https://refuses.test/b"):
+                ctx.get(source, url, conditional=False)
+
+        def parse(self, record, source, opts):
+            return []
+
+    cfg = config.load(env={"DEBRIEF_DATA_DIR": str(tmp_path / "data")})
+    net = FakeNet([(r"ok\.test", lambda u: (200, b"<p>fine</p>")), (r"refuses\.test", lambda u: (403, b"no"))])
+    client = Client(cfg.user_agent, cfg.settings["http"], sleep=lambda s: None, session=net)
+    store = Store(tmp_path / "s.sqlite")
+    monkeypatch.setitem(REGISTRY, "pages_test", Pages())
+    src = replace(cfg.source("article-pages"), adapter="pages_test")
+    now = datetime.now(timezone.utc)
+    entry = collect.collect_source(cfg, store, client, src, "r1", "2026-10-23", now, lambda *a, **k: None)
+    assert entry["status"] == "ok" and entry["errors"] == [] and "HTTP 403" in entry["warnings"][0]
+    monkeypatch.setattr(Pages, "page_by_page", False)
+    entry = collect.collect_source(cfg, store, client, src, "r2", "2026-10-23", now, lambda *a, **k: None)
+    assert entry["status"] == "partial"                              # what any other source would be

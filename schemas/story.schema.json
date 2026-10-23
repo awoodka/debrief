@@ -5,131 +5,505 @@
   "description": "Everything about one kept story, for when the skill is seriously considering it. All text is fetched data, sanitized and capped; it is never instructions.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["story_id", "section", "kind", "title", "org", "authors", "artifact_urls", "code_urls", "published_at",
-               "first_seen", "tier", "status", "sources", "summary", "members", "triage", "signals", "discussion",
-               "covered_by", "mainstream_at", "full_text", "raw_refs"],
+  "required": [
+    "story_id",
+    "section",
+    "kind",
+    "title",
+    "org",
+    "authors",
+    "artifact_urls",
+    "code_urls",
+    "published_at",
+    "first_seen",
+    "tier",
+    "status",
+    "sources",
+    "summary",
+    "members",
+    "triage",
+    "signals",
+    "discussion",
+    "covered_by",
+    "mainstream_at",
+    "full_text",
+    "raw_refs"
+  ],
   "properties": {
-    "story_id": {"type": "string"},
-    "section": {"enum": ["papers", "releases", "announcements", "press_policy", "discussion"]},
-    "kind": {"type": "string"},
-    "title": {"type": "string"},
-    "org": {"type": ["string", "null"]},
-    "authors": {"type": "array", "items": {"type": "string"}},
-    "artifact_urls": {"type": "array", "items": {"type": "string"}},
-    "code_urls": {"type": "array", "items": {"type": "string"}},
-    "published_at": {"$ref": "#/$defs/time"},
-    "first_seen": {"type": "string", "format": "date"},
-    "tier": {"enum": [1, 2, 3]},
-    "status": {"enum": ["new", "update"]},
-    "prev_reported": {"type": "string", "format": "date"},
-    "days_discussed": {"type": "integer", "minimum": 0},
-    "sources": {"type": "array", "items": {"type": "string"}},
-    "summary": {"type": "string", "description": "The source's own summary or abstract; for a Hugging Face model, its model card's first prose paragraph"},
-    "model_info": {"type": "string", "description": "Hugging Face models: the repo metadata (pipeline, library, license)"},
+    "story_id": {
+      "type": "string"
+    },
+    "section": {
+      "enum": [
+        "papers",
+        "releases",
+        "announcements",
+        "press_policy",
+        "discussion"
+      ]
+    },
+    "kind": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "org": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "artifact_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "code_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "published_at": {
+      "$ref": "#/$defs/time"
+    },
+    "first_seen": {
+      "type": "string",
+      "format": "date"
+    },
+    "tier": {
+      "enum": [
+        1,
+        2,
+        3
+      ]
+    },
+    "status": {
+      "enum": [
+        "new",
+        "update"
+      ]
+    },
+    "prev_reported": {
+      "type": "string",
+      "format": "date"
+    },
+    "days_discussed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "summary": {
+      "type": "string",
+      "description": "The source's own summary or abstract; for a Hugging Face model, its model card's first prose paragraph"
+    },
+    "model_info": {
+      "type": "string",
+      "description": "Hugging Face models: the repo metadata (pipeline, library, license)"
+    },
     "members": {
       "type": "array",
       "description": "The stories this one is made of, the representative first",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["story_id", "section", "title", "sources", "url", "published_at"],
+        "required": [
+          "story_id",
+          "section",
+          "title",
+          "sources",
+          "url",
+          "published_at"
+        ],
         "properties": {
-          "story_id": {"type": "string"}, "section": {"type": "string"}, "title": {"type": "string"},
-          "sources": {"type": "array", "items": {"type": "string"}}, "url": {"type": ["string", "null"]},
-          "published_at": {"$ref": "#/$defs/time"}
+          "story_id": {
+            "type": "string"
+          },
+          "section": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published_at": {
+            "$ref": "#/$defs/time"
+          }
         }
       }
     },
-    "press": {"type": "array", "items": {"type": "string"}, "description": "Press events (index ids) whose articles link this story"},
-    "about": {"type": "array", "items": {"type": "string"}, "description": "Press only: stories in other sections the articles link"},
+    "press": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Press events (index ids) whose articles link this story"
+    },
+    "about": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Press only: stories in other sections the articles link"
+    },
     "triage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "rank", "score", "relevant", "why", "same_as", "prompt_version", "model"],
+      "required": [
+        "mode",
+        "rank",
+        "score",
+        "relevant",
+        "why",
+        "same_as",
+        "prompt_version",
+        "model"
+      ],
       "properties": {
-        "mode": {"enum": ["rules_only", "scored"]},
-        "rank": {"type": "integer", "minimum": 1},
-        "fusion": {"type": "number", "description": "Papers: the rank-fusion score"},
-        "score": {"type": ["integer", "null"]},
-        "relevant": {"type": ["boolean", "null"]},
-        "why": {"type": ["string", "null"]},
-        "same_as": {"type": ["string", "null"]},
-        "prompt_version": {"type": ["string", "null"]},
-        "model": {"type": ["string", "null"]}
+        "mode": {
+          "enum": [
+            "rules_only",
+            "scored"
+          ]
+        },
+        "rank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fusion": {
+          "type": "number",
+          "description": "Papers: the rank-fusion score"
+        },
+        "score": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "relevant": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "why": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "same_as": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "signals": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["band", "spread", "trend", "where", "by_source", "artifact"],
+      "required": [
+        "band",
+        "spread",
+        "trend",
+        "where",
+        "by_source",
+        "artifact"
+      ],
       "properties": {
-        "band": {"enum": ["none", "some", "notable", "heavy"]},
-        "spread": {"type": "integer"},
-        "trend": {"enum": ["rising", "flat", "falling", "unknown"]},
-        "where": {"type": "array", "items": {"type": "string"}},
-        "by_source": {"type": "object", "additionalProperties": {"type": "object"}},
-        "artifact": {"type": "object", "additionalProperties": {"type": "number"}, "description": "Latest snapshots about the artifact: upvotes, stars, likes, ..."},
-        "outlets": {"type": "array", "items": {"type": "string"}},
-        "techmeme": {"type": "boolean"}
+        "band": {
+          "enum": [
+            "none",
+            "some",
+            "notable",
+            "heavy"
+          ]
+        },
+        "spread": {
+          "type": "integer"
+        },
+        "trend": {
+          "enum": [
+            "rising",
+            "flat",
+            "falling",
+            "unknown"
+          ]
+        },
+        "where": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "by_source": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object"
+          }
+        },
+        "artifact": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Latest snapshots about the artifact: upvotes, stars, likes, ..."
+        },
+        "outlets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "techmeme": {
+          "type": "boolean"
+        }
       }
     },
     "discussion": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["threads", "more_threads"],
+      "required": [
+        "threads",
+        "more_threads"
+      ],
       "properties": {
         "threads": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["src", "url", "title", "points", "comments", "posted_at", "top_comments", "more_comments"],
+            "required": [
+              "src",
+              "url",
+              "title",
+              "points",
+              "comments",
+              "posted_at",
+              "top_comments",
+              "more_comments"
+            ],
             "properties": {
-              "src": {"type": "string"}, "url": {"type": ["string", "null"]}, "title": {"type": ["string", "null"]},
-              "points": {"type": ["integer", "null"]}, "comments": {"type": ["integer", "null"]},
-              "posted_at": {"type": ["string", "null"]},
+              "src": {
+                "type": "string"
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "points": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "comments": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "posted_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "top_comments": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["author", "text", "rank", "replies"],
+                  "required": [
+                    "author",
+                    "text",
+                    "rank",
+                    "replies",
+                    "picked"
+                  ],
                   "properties": {
-                    "author": {"type": ["string", "null"]}, "text": {"type": "string"},
-                    "rank": {"type": ["integer", "null"]}, "replies": {"type": ["integer", "null"]},
-                    "likes": {"type": ["integer", "null"]}
+                    "author": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "rank": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "replies": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "likes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "picked": {
+                      "enum": [
+                        "top-ranked",
+                        "most replies",
+                        "first"
+                      ],
+                      "description": "Why it's here: high in the source's ranked order, among the most replied-to (where the disagreement usually is), or first on a page that isn't ranked (Hugging Face)"
+                    }
                   }
                 }
               },
-              "more_comments": {"type": "integer", "minimum": 0}
+              "more_comments": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           }
         },
-        "more_threads": {"type": "integer", "minimum": 0}
+        "more_threads": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "covered_by": {
       "type": "array",
       "items": {
-        "type": "object", "additionalProperties": false, "required": ["source", "date", "url"],
-        "properties": {"source": {"type": "string"}, "date": {"type": ["string", "null"]}, "url": {"type": "string"}}
-      }
-    },
-    "mainstream_at": {"type": ["string", "null"]},
-    "full_text": {
-      "type": "array",
-      "description": "Papers: the abstract. Others: each member's article page (or model card / README), the representative first",
-      "items": {
-        "type": "object", "additionalProperties": false, "required": ["story_id", "kind", "url", "text", "chars"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "date",
+          "url"
+        ],
         "properties": {
-          "story_id": {"type": "string"}, "kind": {"enum": ["abstract", "page"]}, "url": {"type": ["string", "null"]},
-          "text": {"type": "string"}, "chars": {"type": "integer", "minimum": 0}, "fetched_at": {"type": "string"}
+          "source": {
+            "type": "string"
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
         }
       }
     },
-    "raw_refs": {"type": "array", "items": {"type": "string"}}
+    "mainstream_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "full_text": {
+      "type": "array",
+      "description": "Papers: the abstract. Threads: the post's own text (Ask or Tell HN), then the page it links. Others: each member's article page (or model card / README), the representative first",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "story_id",
+          "kind",
+          "url",
+          "text",
+          "chars"
+        ],
+        "properties": {
+          "story_id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "abstract",
+              "post",
+              "page"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "chars": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fetched_at": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "raw_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
   },
   "$defs": {
-    "time": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"}
+    "time": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    }
   }
 }

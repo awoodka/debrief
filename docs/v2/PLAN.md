@@ -453,7 +453,10 @@ What M4 adds:
   - inDrive's robotaxi tests into NVIDIA's Kazakhstan post, which does mention them
 - **New in the index from the threads:** Kimi K3.1 Pro (4), Sweden's government ban on ChatGPT and Claude (4), NVIDIA OpenShell (4), Google's Finnish data center (3), WorldTUI (3).
 
+Done after review, the same day:
+- **Pages and comments for unattached threads.** On daily runs, the collector fetches the linked page and the comment tree of the 40 most-discussed unattached threads. Triage's model reads the page instead of guessing from the title, and the index gets the page as the thread's gist and full text.
+- **Comment selection.** Comments under 150 characters without their links are left out before picking. The detail file shows 4 top-ranked plus 2 most-replied per thread, labeled. Before, the most-replied were selected but never shown.
+
 Left for later:
-- **A thread story is only its title, points and link.** The collector reads comment trees and pages only for stories, so Kimi K3.1 Pro was "guessed from title and link". Fetching the link and the tree for the threads that make the index would give the skill more to read.
 - **M5** (more sources, which also bring back the 3-source topic rule) and **M6** (the weekly newsletter recall check).
 - **The skill and the timers.**

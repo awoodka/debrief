@@ -7,14 +7,18 @@ run also re-reads the points and comment counts of threads already attached to a
 in the last hn.refresh_days days, 50 per request. Every story is kept (lossless); attach decides
 which ones belong to a story.
 
-hn_comments (threads): for threads attached to stories first seen in the last `days` days, with at
-least min_comments comments, the comment tree
+hn_comments (threads): for threads attached to stories first seen in the last `days` days, and on
+daily runs also the most-discussed threads that attached to nothing (triage.yml discussion.prefetch,
+the ones triage may score on their own), with at least min_comments comments: the comment tree
 from Algolia (text, authors, structure) and the ranked order from the official Firebase API (Algolia's
-order isn't the ranking). It keeps the top_ranked top-level comments plus the top_replied most-replied
-ones, so disagreement survives, not just the top of the page. A thread is re-read once its comment
-count has grown by `regrow` times. The full tree stays in the raw store.
+order isn't the ranking). Comments that say too little are left out first: shorter than min_chars
+once their links are taken out ("This.", a joke, a bare link). Of the rest it keeps the top_ranked
+top-level comments plus the top_replied most-replied ones, so disagreement survives, not just the
+top of the page. A thread is re-read once its comment count has grown by `regrow` times. The full
+tree stays in the raw store.
 """
 import json
+import re
 
 from .. import sanitize, times
 from ..store import raw
@@ -84,6 +88,14 @@ class Hn(Adapter):
         return out
 
 
+_URL = re.compile(r"https?://\S+")
+
+
+def substantive(html, min_chars):
+    """Whether a comment says enough to keep: at least min_chars of text once links are taken out."""
+    return len(_URL.sub("", sanitize.text(html))) >= min_chars
+
+
 def _descendants(node):
     return sum(1 + _descendants(ch) for ch in node.get("children") or [] if ch.get("text"))
 
@@ -105,6 +117,13 @@ class HnComments(Adapter):
                               WHERE m.source_id=? AND m.kind='thread' AND st.first_seen >= date(?, ?)""",
                            (threads_from, ctx.run_date, f"-{o['days'] - 1} days"))
         done = dict(ctx.store.cursor(source.id).get("fetched", {}))
+        if ctx.cadence == "daily":
+            from ..triage.candidates import unattached_threads
+            have = {k for k, _ in rows}
+            for m, _, comments in unattached_threads(ctx.store, ctx.settings, times.iso(ctx.now),
+                                                     ctx.settings["triage"]["discussion"]["prefetch"]):
+                if m["item_key"] not in have:
+                    rows.append((m["item_key"], comments))
         due = [(n, k) for k, n in rows
                if n and n >= o["min_comments"] and (k not in done or n >= o["regrow"] * done[k])]
         due.sort(key=lambda x: (-x[0], x[1]))
@@ -127,7 +146,8 @@ class HnComments(Adapter):
         o = opts["hn_comments"]
         tree = json.loads(raw.body(record))
         order = {cid: i for i, cid in enumerate(meta.get("ranked_kids") or [])}
-        kids = [ch for ch in tree.get("children") or [] if ch.get("text") and ch.get("author")]
+        kids = [ch for ch in tree.get("children") or [] if ch.get("text") and ch.get("author")
+                and substantive(ch["text"], o["min_chars"])]
         kids.sort(key=lambda ch: (order.get(ch["id"], len(order)), ch.get("created_at_i") or 0, ch["id"]))
         top = kids[: o["top_ranked"]]
         replied = sorted((ch for ch in kids if ch not in top), key=lambda ch: (-_descendants(ch), kids.index(ch)))

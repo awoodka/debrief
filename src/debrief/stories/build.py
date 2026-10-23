@@ -115,7 +115,7 @@ def apply(store, settings, source, adapter, records, refs, run_date):
                     c["signals_orphaned"] += 1
                 continue
             if it.role == "page":
-                if it.story_id and store.one("SELECT 1 FROM stories WHERE story_id=?", (it.story_id,)):
+                if it.story_id and _page_owner(store, it.story_id):
                     ok = 200 <= it.page["status"] < 300
                     page = {**it.page, "links": _urls(it.page.get("links") or [])}
                     if store.save_page(it.story_id, it.url, source.id, at, page, ref):
@@ -185,6 +185,13 @@ def apply(store, settings, source, adapter, records, refs, run_date):
     if new_mentions:
         c.update(attach.mentions(store, settings, new_mentions, last_at, source.roles))
     return c
+
+
+def _page_owner(store, story_id):
+    """A page belongs to a story, or to a thread that attached to nothing (hn:<item>)."""
+    if story_id.startswith("hn:"):
+        return store.one("SELECT 1 FROM mentions WHERE mention_id=?", ("hn|" + story_id[3:],))
+    return store.one("SELECT 1 FROM stories WHERE story_id=?", (story_id,))
 
 
 def _snapshots(store, source, story_id, mention_id, it, at):

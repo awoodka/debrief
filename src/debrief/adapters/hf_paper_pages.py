@@ -61,7 +61,7 @@ class HfPaperPage(Adapter):
         o = ctx.opts
         done = dict(ctx.store.cursor(source.id).get("fetched", {}))
         pool = paper_pool(ctx.store, ctx.run_date, o["hf_papers"]["lookback_days"])
-        ranked, _ = rank_papers(ctx.store, ctx.settings, ctx.fetched_at, pool)
+        ranked, _ = rank_papers(ctx.store, ctx.settings, times.iso(ctx.now), pool)
         for sid, _, v in ranked[: o["hf_paper_comments"]["top_n"]]:
             n = int(v["comments"])
             if n <= done.get(sid, 0):

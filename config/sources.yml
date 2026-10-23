@@ -331,6 +331,16 @@
   each: ['https://openai.com/news/']
   notes: 'one request per new announcement, press or release story: its page (or model card / README), for its main text and in-article links. Triage groups and merges by these links; the index takes its full text from here (the probe uses one sample page)'
 
+- id: hn-thread-pages
+  name: Pages linked by unattached Hacker News threads
+  roles: [context]
+  tier: 3
+  adapter: thread_pages
+  probe: {kind: status, expect: [200]}
+  url: '{each}'
+  each: ['https://news.ycombinator.com/']
+  notes: 'daily, after the discussion sources: the page each of the most-discussed threads that attached to nothing links to (a GitHub repo gives its README), stored under the thread id, so triage and the skill can read what it is about'
+
 - id: hf-trending-papers
   name: Hugging Face trending papers
   adapter: hf_trending_papers

@@ -88,7 +88,7 @@ The windows count back from the run. "Not yet in a brief" uses the reported ledg
 
 Hacker News threads from the last 48 hours, with at least the band floor in points (10), that attached to no story, ordered by points, then id. On 2026-10-23, only 4 of 202 such threads attached. Among the rest were Kimi K3.1 Pro (451 points), Sweden banning ChatGPT and Claude in government offices (309), and follow-ups on PHP2Shell; most of the rest weren't about AI.
 
-Each goes into the model call title-only, with its points, comments and link. A thread about another candidate is folded into it by `same_as`, as discussion. A thread about nothing we collected is scored like any story, so it can enter the index on its own.
+Each goes into the model call with its title, link, points and comments, and the start of the page it links to (or its own text, for an Ask or Tell HN): `collect` reads those pages and the threads' comment trees on daily runs, for the top 40. A thread about another candidate is folded into it by `same_as`, as discussion. A thread about nothing we collected is scored like any story, so it can enter the index on its own, with the linked page as its full text and its best comments as discussion.
 
 The rule from the brief, a topic with at least 3 independent sources, comes back once M5 adds more discussion sources. With Hacker News the only one built, no topic can reach 3.
 

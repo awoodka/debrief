@@ -250,6 +250,10 @@ def test_reported_stories_stay_out_unless_new_discussion_arrives(tmp_path):
 
 # ------------------------------------------------------------------------------------- outputs
 
+SHARP = ("The headline number holds only on the synthetic split; on the held-out tasks the gain shrinks to "
+         "about two points, which is within the variance the authors report in their own appendix.")
+
+
 def full_day(tmp_path):
     cfg = cfg_for(tmp_path)
     s, ids = press_setup(tmp_path, cfg)
@@ -261,7 +265,9 @@ def full_day(tmp_path):
                               title="x", links=("https://arxiv.org/abs/2610.00001",), published_at=EARLIER,
                               engagement={"points": 120, "comments": 40})])
     apply(s, cfg, "hn-items", [Item(item_key="8", role="mention", mention_kind="comment", parent_id="hn|7",
-                                    summary="A sharp comment.", authors=("pg",), rank=1, replies=4)])
+                                    summary=SHARP, authors=("pg",), rank=1, replies=4),
+                               Item(item_key="9", role="mention", mention_kind="comment", parent_id="hn|7",
+                                    summary="This.", authors=("x",), rank=2, replies=0)])
     s.close()
     return cfg, ids
 
@@ -276,7 +282,8 @@ def test_outputs_validate_are_ordered_and_byte_identical_on_a_rerun(tmp_path):
     paper1 = next(x for x in lines if x["id"] == "arxiv:2610.00001")
     assert paper1["discussion"]["where"] == ["hn"] and paper1["signals"]["hn_points"] == 120
     d = json.loads((out / paper1["detail"]).read_text())
-    assert d["discussion"]["threads"][0]["top_comments"][0]["text"] == "A sharp comment."
+    [c] = d["discussion"]["threads"][0]["top_comments"]          # "This." says too little to show
+    assert (c["text"], c["picked"]) == (SHARP, "top-ranked")
     assert d["full_text"][0]["kind"] == "abstract"
     event = next(x for x in lines if x.get("merged"))
     assert len(event["outlets"]) == 3

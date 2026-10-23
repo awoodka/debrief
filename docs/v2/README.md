@@ -109,6 +109,7 @@ Cursors, by adapter:
 | `hn_comments` | — | per thread: the comment count when its tree was read; re-read at 1.5× |
 | `hf_paper_api`, `hf_paper_page` | — | the paper pool (the last 3 days of HF-listed papers); comments only for the 30 best-ranked papers of the pool (triage's ranking), when they have comments |
 | `article_pages` | — | none: a story gets its page once (a 4xx isn't retried; other failures are, while it's in the window) |
+| `thread_pages` | — | none: daily, the page linked by each of the 40 most-discussed unattached HN threads, once |
 | `hf_org_watch`, `hf_trending` | model repo not in the seen-set; derivatives (by tag) only seen; format copies fold into the original's story; trending needs an org account and a model under 14 days old | — |
 | `openrouter`, `github_org` | model id or repo not in the seen-set | — |
 | `leaderboard` | a model's first time in the top N (the first run only records) | — |
@@ -117,6 +118,10 @@ Cursors, by adapter:
 - For feeds and APIs, whose dates are reliable, the guard always applies.
 - For scraped pages, it applies only on the source's first run, because a scraped date can be wrong. After that, a link missing from the seen-set is itself the evidence that the post is new.
 - Listing pages also fetch only their 5 newest links on a first run.
+
+**Threads that attach to nothing.** Most of Hacker News's busiest threads link pages none of our sources collect: on 2026-10-23, 198 of 202 with 10 points or more. On daily runs, the 40 most-discussed of the last 48 hours (`triage.yml` `discussion.prefetch`) get the same treatment as stories: `hn-thread-pages` fetches the page each links to (a GitHub repo gives its README; posts on X, PDFs, videos and Ask/Tell HN posts are skipped), stored under the thread's id (`hn:<item>`), and `hn-items` reads their comment trees. Triage scores 30 of them, reading those pages.
+
+**Which comments are kept.** From each comment tree, comments that say too little are left out first: under 150 characters once links are taken out ("This.", a joke, a bare link). Of the rest, the database keeps HN's 8 top-ranked top-level comments and the 3 most-replied others. A story's detail file shows 4 top-ranked and 2 most-replied per thread, each labeled with why it was picked. Replies aren't kept, and the full tree stays in the raw store.
 
 **Article pages (`adapters/article_pages.py`).** Most lab and press feeds carry a title and a teaser only, so after the anchors, `collect` fetches the page of each new announcement and press story (published in the last 2 days), and the model card or README of each new release. It keeps the main text (trafilatura, up to 8,000 characters) and the links inside it, in `story_pages`. Triage groups and merges by those links, and the index's full text comes from there. Listing-page sources fetch their posts anyway, so those carry their page and aren't requested twice. robots.txt is checked first, and paywalled domains (`article_pages.skip_domains`) are never requested.
 
@@ -209,7 +214,7 @@ The rest of the field reference:
 src/debrief/     cli.py config.py http.py robots.py urls.py probe.py collect.py
                  canon.py (URLs, story ids) sanitize.py times.py extract.py (HTML helpers)
 src/debrief/adapters/   base.py + rss, listing_page, hf_papers, arxiv, github_releases (M1);
-                        hn, hf_paper_pages, hf_hub, model_sources (M2); article_pages (M3)
+                        hn, hf_paper_pages, hf_hub, model_sources (M2); article_pages, thread pages (M3, M4)
 src/debrief/store/      db.py (state DB), raw.py (raw store), migrations/*.sql
 src/debrief/stories/    build.py (items -> seen-set, stories, mentions, snapshots, pages), attach.py, signals.py
 src/debrief/triage/     candidates.py, merge.py, ledger.py, score.py, output.py, run.py, calibrate.py

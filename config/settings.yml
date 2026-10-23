@@ -84,8 +84,9 @@ collect:
     thread_source: hn
     days: 3                     # threads posted this recently
     min_comments: 5
-    max_threads: 40             # per run
+    max_threads: 80             # per run: attached threads, plus (daily) the top unattached ones (triage.yml discussion.prefetch)
     regrow: 1.5                 # re-read a tree once its comment count has grown this many times
+    min_chars: 150              # a comment shorter than this, once its links are taken out, says too little to keep
     top_ranked: 8               # top-level comments kept, in HN's ranked order
     top_replied: 3              # plus this many of the most-replied others, so disagreement survives
     comment_max_chars: 1200

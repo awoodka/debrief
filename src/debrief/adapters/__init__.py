@@ -1,5 +1,5 @@
 """Adapters, one per source type. A source's `adapter` in sources.yml names one of these."""
-from .article_pages import ArticlePages
+from .article_pages import ArticlePages, ThreadPages
 from .arxiv import ArxivRss
 from .base import Adapter, FetchContext, Item
 from .github_releases import GithubReleases
@@ -15,6 +15,6 @@ REGISTRY = {a.name: a for a in (
     Rss(), ListingPage(), HfDailyPapers(), ArxivRss(), GithubReleases(),          # M1
     Hn(), HnComments(), HfPaperApi(), HfPaperPage(),                                # M2: discussion, paper signals
     HfOrgWatch(), HfTrending(), OpenRouter(), GithubOrg(), Leaderboard(),           # M2: model releases
-    ArticlePages())}                                                                # M3: article pages
+    ArticlePages(), ThreadPages())}                                                 # M3, M4: pages
 
 __all__ = ["REGISTRY", "Adapter", "FetchContext", "Item"]

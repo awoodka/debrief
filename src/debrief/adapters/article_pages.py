@@ -23,6 +23,12 @@ article_pages.skip_domains (paywalls) are never requested.
 parse: trafilatura's main text, as markdown so the links survive; text and links are stored
 apart. Listing-page sources (Anthropic, Meta) fetch the post anyway, so their anchors carry the
 page themselves and nothing is requested twice.
+
+ThreadPages (source hn-thread-pages, daily, after the discussion sources): the page linked by each of
+the most-discussed threads that attached to nothing (triage.yml discussion.prefetch), stored under
+the thread's id (hn:<item>), so triage and the skill can read what the thread is about. A GitHub repo
+gives its README. Skipped: Ask and Tell HN posts (their text is the thread's own), posts on X (they
+need JavaScript), PDFs and videos.
 """
 from urllib.parse import urlsplit
 
@@ -110,10 +116,11 @@ class ArticlePages(Adapter):
     name = "article_pages"
     phase = "enrich"
     windowed = False
+    page_by_page = True
 
     def fetch(self, ctx, source):
         o = ctx.settings["collect"]["article_pages"]
-        todo, skipped = due(ctx.store, ctx.settings, ctx.enabled, ctx.fetched_at)
+        todo, skipped = due(ctx.store, ctx.settings, ctx.enabled, times.iso(ctx.now))
         if len(todo) > o["max_per_run"]:
             ctx.warn(f"{len(todo) - o['max_per_run']} pages left for the next run (max_per_run)")
         blocked = 0
@@ -143,6 +150,60 @@ class ArticlePages(Adapter):
                 text, links = extract.article(body, url, o["max_chars"], o["max_links"])
         return [Item(item_key=sid, role="page", story_id=sid, url=record["url"],
                      page={"status": record.get("status", 0), "text": text, "links": links})]
+
+
+_NOT_PAGES = (("news.ycombinator.com", "a post on Hacker News itself (its text is the thread's)"),
+              ("x.com", "a post on X (needs JavaScript)"), ("youtube.com", "a video"), ("youtu.be", "a video"))
+
+
+def thread_target(m):
+    """(url, kind) to fetch for an unattached thread, or (None, why not)."""
+    links = loads(m["links"], []) if isinstance(m["links"], str) else list(m["links"] or [])
+    link = links[0] if links else m["url"]
+    if not link:
+        return None, "no link"
+    parts = urlsplit(link)
+    host = (parts.hostname or "").lower()
+    for domain, why in _NOT_PAGES:
+        if host == domain or host.endswith("." + domain):
+            return None, why
+    if parts.path.lower().endswith(".pdf"):
+        return None, "a PDF"
+    seg = [x for x in parts.path.split("/") if x]
+    if host == "github.com" and len(seg) == 2:
+        return f"https://raw.githubusercontent.com/{seg[0]}/{seg[1]}/HEAD/README.md", "readme"
+    return link, "html"
+
+
+class ThreadPages(ArticlePages):
+    name = "thread_pages"
+    phase = "threads"
+
+    def fetch(self, ctx, source):
+        from ..triage.candidates import unattached_threads
+        o = ctx.settings["collect"]["article_pages"]
+        skipped, blocked = {}, 0
+        for m, _, _ in unattached_threads(ctx.store, ctx.settings, times.iso(ctx.now),
+                                          ctx.settings["triage"]["discussion"]["prefetch"]):
+            sid = "hn:" + m["item_key"]
+            url, kind = thread_target(m)
+            if not url:
+                skipped[kind] = skipped.get(kind, 0) + 1
+                continue
+            prev = ctx.store.one("SELECT status FROM story_pages WHERE story_id=? AND url=?", (sid, url))
+            if prev and (200 <= prev[0] < 300 or 400 <= prev[0] < 500):
+                continue
+            if _host_matches(url, o["skip_domains"]):
+                skipped["paywalled domain"] = skipped.get("paywalled domain", 0) + 1
+                continue
+            if ctx.client.robots_allowed(url) is not True:
+                blocked += 1
+                continue
+            ctx.get(source, url, each=sid, meta={"story": sid, "kind": kind}, conditional=False)
+        if blocked:
+            ctx.warn(f"robots.txt disallows (or couldn't be read for) {blocked} page(s); not fetched")
+        for why, n in sorted(skipped.items()):
+            ctx.warn(f"{n} thread{'' if n == 1 else 's'} without a page: {why}")
 
 
 def stored_links(store, story_id):

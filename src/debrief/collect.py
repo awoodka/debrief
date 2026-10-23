@@ -13,6 +13,9 @@ A failing source is reported and the run goes on. Statuses:
   empty      responses arrived but contained nothing at all
   disabled / context / not_built   not collected (switched off, lookup-only, or no adapter yet)
 
+Page fetchers (article and thread pages) request one page per story on many sites, so a page that
+fails is a warning and the source stays ok unless every page fails.
+
 Sources run in phases (PHASES): anchors, lookups about them, discussion, comment trees, reference.
 After the last source, attach.retro() re-tries recent unattached posts against this run's stories.
 `--cadence 6h` runs only the sources whose options.cadence includes "6h" (the discussion poll).
@@ -84,11 +87,11 @@ def _errors(records, crash):
     return ([crash] if crash else []) + errs
 
 
-def collect_source(cfg, store, client, source, run_id, run_date, now, log, backfill_hours=None):
+def collect_source(cfg, store, client, source, run_id, run_date, now, log, backfill_hours=None, cadence="daily"):
     adapter = REGISTRY[source.adapter]
     ctx = FetchContext(client, store, os.environ, run_id, now, cfg.settings["collect"], log,
                        run_date=run_date, backfill_hours=backfill_hours, settings=cfg.settings,
-                       enabled=(s.id for s in cfg.sources if s.enabled))
+                       enabled=(s.id for s in cfg.sources if s.enabled), cadence=cadence)
     crash = None
     try:
         adapter.fetch(ctx, source)
@@ -100,6 +103,8 @@ def collect_source(cfg, store, client, source, run_id, run_date, now, log, backf
         with store.transaction():
             counts = build.apply(store, cfg.settings, source, adapter, ctx.records, refs, run_date)
             status = classify(ctx.records, counts, crash, nothing_due_ok=adapter.phase in ("enrich", "threads"))
+            if adapter.page_by_page and status == "partial" and not crash:
+                status = "ok"                    # some pages refused; the source itself works
             for rec, ref in zip(ctx.records, refs):
                 store.record_fetch(run_id, source.id, rec["seq"], rec["url"], rec["fetched_at"],
                                    rec.get("status", 0), len(raw.body(rec)), rec.get("error") or None, ref)
@@ -107,6 +112,9 @@ def collect_source(cfg, store, client, source, run_id, run_date, now, log, backf
                 for url, etag, last_modified in ctx.validators:
                     store.save_validators(url, etag, last_modified, now.isoformat(timespec="seconds"))
             errors = _errors(ctx.records, crash)
+            if adapter.page_by_page and status == "ok":
+                ctx.warnings[:0] = errors        # still listed in the report, as notes
+                errors = []
             store.save_source_state(source.id, run_id, status, "; ".join(errors)[:500] or None,
                                     now.isoformat(timespec="seconds"),
                                     cursor=ctx.cursor if status in ("ok", "empty") else None)
@@ -149,7 +157,7 @@ def run(cfg, only=None, run_date=None, client=None, log=print, cadence="daily", 
                 report["sources"].append({"id": source.id, "status": why})
             continue
         log(f"[{source.id}]", end=" ", flush=True)
-        entry = collect_source(cfg, store, client, source, run_id, run_date, local, log, backfill_hours)
+        entry = collect_source(cfg, store, client, source, run_id, run_date, local, log, backfill_hours, cadence)
         c = entry["counts"]
         log(f"{entry['status']}: {entry['requests']} req, {c.get('items', 0)} items, {c.get('new', 0)} new, "
             f"{c.get('stories_new', 0)} new stories" + (f" — {entry['errors'][0]}" if entry["errors"] else ""))

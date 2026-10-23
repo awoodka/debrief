@@ -39,6 +39,9 @@ discussion:
   sources: [hn]
   window_hours: 48
   max_threads: 30
+  # collect reads the linked page and the comments of this many (daily runs only), a margin above
+  # max_threads so a thread that climbs before triage is still covered
+  prefetch: 40
 
 # The scoring call (triage/score.py; CRITERIA.md "The model call").
 scoring:
@@ -95,5 +98,10 @@ output:
   full_text_max_chars: 8000
   abstract_max_chars: 2000
   max_threads: 8                # per story, by points; the rest are counted
-  max_comments: 6               # per thread, in the source's ranked order
+  # Per thread, of the comments that say enough (comment_min_chars once links are taken out): the
+  # first comments_top in the source's ranked order, then the comments_debated most-replied of the
+  # rest, each labeled with why it was picked.
+  comment_min_chars: 150
+  comments_top: 4
+  comments_debated: 2
   comment_max_chars: 600

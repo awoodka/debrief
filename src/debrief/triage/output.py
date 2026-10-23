@@ -130,6 +130,10 @@ def gist(ctx, g, cap):
         para = prose_paragraph(p["text"], s["title"])
         if para:
             return first_sentence(para, cap)
+    hn = s["extra"].get("hn")
+    if not text and hn:             # a thread whose page couldn't be read: say what it is
+        stats = f"{hn['points']} points, {hn['comments']} comments, " if hn.get("points") is not None else ""
+        return sanitize.text(f"A Hacker News discussion ({stats}linking {hn['link']}).", cap)
     return first_sentence(text, cap) if text else ""
 
 
@@ -181,20 +185,33 @@ def _threads(ctx, ids, mentions=()):
     out = []
     for _, _, t in threads[: o["max_threads"]]:
         if "_paper" in t:
-            q, args = "story_id=? AND kind='comment' AND parent_id IS NULL", (t.pop("_paper"),)
+            q, args, first = "story_id=? AND kind='comment' AND parent_id IS NULL", (t.pop("_paper"),), "first"
         else:
-            q, args = "parent_id=?", (t.pop("_id"),)
-        cs = store.q(f"""SELECT mention_id, author, text, rank, replies FROM mentions WHERE {q} AND first_seen_at <= ?
-                         ORDER BY rank IS NULL, rank, mention_id""", (*args, at))
+            q, args, first = "parent_id=?", (t.pop("_id"),), "top-ranked"
+        stored = store.q(f"""SELECT mention_id, author, text, rank, replies FROM mentions WHERE {q} AND first_seen_at <= ?
+                             ORDER BY rank IS NULL, rank, mention_id""", (*args, at))
         top = []
-        for mid, author, text, rank, replies in cs[: o["max_comments"]]:
-            c = {"author": author, "text": sanitize.text(text, o["comment_max_chars"]), "rank": rank, "replies": replies}
-            likes = signals._latest(store, mid, at).get("likes")
+        for c, picked in pick_comments(stored, o):
+            entry = {"author": c["author"], "text": sanitize.text(c["text"], o["comment_max_chars"]), "rank": c["rank"],
+                     "replies": c["replies"], "picked": picked if picked != "top-ranked" else first}
+            likes = signals._latest(store, c["mention_id"], at).get("likes")
             if likes is not None:
-                c["likes"] = likes
-            top.append(c)
-        out.append({**t, "top_comments": top, "more_comments": max(0, len(cs) - len(top))})
+                entry["likes"] = likes
+            top.append(entry)
+        out.append({**t, "top_comments": top, "more_comments": max(0, len(stored) - len(top))})
     return {"threads": out, "more_threads": max(0, len(threads) - len(out))}
+
+
+def pick_comments(stored, o):
+    """[(comment, why picked)]: of the comments that say enough (output.comment_min_chars without
+    their links), the comments_top first in the source's ranked order, then the comments_debated
+    most-replied of the rest, where the disagreement usually is."""
+    from ..adapters.hn import substantive
+    good = [c for c in stored if substantive(c["text"] or "", o["comment_min_chars"])]
+    top = good[: o["comments_top"]]
+    debated = sorted((c for c in good[o["comments_top"]:] if (c["replies"] or 0) > 0),
+                     key=lambda c: (-(c["replies"] or 0), c["rank"] or 0, c["mention_id"]))[: o["comments_debated"]]
+    return [(c, "top-ranked") for c in top] + [(c, "most replies") for c in debated]
 
 
 def _num(v):
@@ -263,9 +280,14 @@ def detail(ctx, g):
         full = [{"story_id": g.id, "kind": "abstract", "url": s["artifact_urls"][0] if s["artifact_urls"] else None,
                  "text": sanitize.text(s["summary"], o["abstract_max_chars"]), "chars": len(s["summary"])}]
     else:
-        full = [{"story_id": p["story_id"], "kind": "page", "url": p["url"], "fetched_at": p["fetched_at"],
-                 "text": sanitize.text(p["text"], o["full_text_max_chars"], keep_paragraphs=True), "chars": len(p["text"])}
-                for p in _pages(ctx, g)]
+        # A thread's own post (Ask HN, Tell HN) first, then each member's page, the representative's first.
+        full = [{"story_id": sid, "kind": "post", "url": g.stories[sid]["extra"]["hn"]["thread"],
+                 "text": sanitize.text(g.stories[sid]["summary"], o["full_text_max_chars"], keep_paragraphs=True),
+                 "chars": len(g.stories[sid]["summary"])}
+                for sid in g.members if sid.startswith("hn:") and g.stories[sid]["summary"]]
+        full += [{"story_id": p["story_id"], "kind": "page", "url": p["url"], "fetched_at": p["fetched_at"],
+                  "text": sanitize.text(p["text"], o["full_text_max_chars"], keep_paragraphs=True), "chars": len(p["text"])}
+                 for p in _pages(ctx, g)]
     sig = {"band": d["band"], "spread": d["spread"], "trend": d["trend"], "where": d["where"],
            "by_source": d["by_source"], "artifact": _artifact_signals(ctx, g.members)}
     if g.section == "press_policy":

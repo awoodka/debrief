@@ -73,6 +73,10 @@ def payload(ctx, groups, reported):
         for g in sorted((g for g in groups.get(sec, []) if g.alive), key=lambda g: (g.rank, g.id)):
             it = {"id": g.id, "section": sec, "source": g.story["sources"][0], "org": g.story["org"],
                   "title": g.story["title"], "text": teaser(ctx, g)}
+            hn = g.story["extra"].get("hn") if sec == "discussion" else None
+            if hn:
+                it["link"] = hn["link"]
+                it["comments"] = hn["comments"]
             others = [g.stories[sid]["title"] for sid in g.members[1:]][:3]
             if others:
                 it["also"] = others
@@ -241,23 +245,24 @@ def story_or_thread(ctx, sid):
     """A story row, or a Hacker News thread dressed as one (id hn:<item>)."""
     if sid.startswith("hn:"):
         m = ctx.store.mention(f"hn|{sid.split(':', 1)[1]}")
-        return thread_story(ctx, m) if m else None
+        return thread_story(ctx.store, ctx.settings, m) if m else None
     return ctx.store.story(sid)
 
 
-def thread_story(ctx, m, points=None, comments=None):
-    """A thread that attached to nothing, as a story of the discussion section."""
+def thread_story(store, settings, m, points=None, comments=None):
+    """A thread that attached to nothing, as a story of the discussion section. Its summary is the
+    post's own text (Ask HN, Tell HN), if it has one; the page it links is stored as its page
+    (adapters/article_pages.py ThreadPages), under the same id."""
     links = json.loads(m["links"] or "[]")
     link = links[0] if links else m["url"]
     sid = "hn:" + m["item_key"]
-    stats = f"{points} points, {comments} comments" if points is not None else "a thread"
     return {"story_id": sid, "kind": "discussion", "section": "discussion", "title": m["title"] or link,
             "org": None, "authors": [], "published_at": m["posted_at"] or m["first_seen_at"],
             "first_seen": m["first_seen_at"][:10], "first_seen_at": m["first_seen_at"],
-            "last_changed_at": m["first_seen_at"], "tier": 3,
-            "summary": f"Hacker News thread, {stats}. Links to {link}",
+            "last_changed_at": m["first_seen_at"], "tier": 3, "summary": m["text"] or "",
             "artifact_urls": [link] if link else [], "code_urls": [], "sources": [m["source_id"]],
-            "extra": {}, "content_hash": "", "merged_into": None}
+            "extra": {"hn": {"points": points, "comments": comments, "link": link, "thread": m["url"]}},
+            "content_hash": "", "merged_into": None}
 
 
 def apply(ctx, groups, result, ledger_doc):

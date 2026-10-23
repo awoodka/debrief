@@ -61,6 +61,9 @@ class Adapter:
     # On a source's first run, record every anchor as seen (for snapshots like a leaderboard,
     # where "new" only means something relative to a previous run).
     first_run_seen = False
+    # Each request is a separate page on someone else's site (article pages): one failing is a
+    # warning, not a partial source; the source fails only if every request does.
+    page_by_page = False
     # When collect runs it: None = by its roles (anchor, then discussion, then reference); or
     # "enrich" (lookups about stories, after the anchors) / "threads" (comment trees, after the
     # discussion sources they hang off).
@@ -78,11 +81,12 @@ class FetchContext:
     collect saves them once the source's items are stored."""
 
     def __init__(self, client, store, env, run_id, now, opts, log=print, run_date=None,
-                 backfill_hours=None, settings=None, enabled=()):
+                 backfill_hours=None, settings=None, enabled=(), cadence="daily"):
         self.client, self.store, self.env = client, store, env
         self.run_id, self.now, self.opts, self.log = run_id, now, opts, log
         self.settings = settings or {"collect": opts}    # all of settings.yml (+ triage.yml)
         self.enabled = frozenset(enabled)                 # ids of the enabled sources
+        self.cadence = cadence                            # "daily", or "6h" for the discussion poll
         self.run_date = run_date or now.date().isoformat()
         self.backfill_hours = backfill_hours     # bootstrap-bands: reach back this far, ignoring the cursor
         self.records, self.validators, self.warnings = [], [], []

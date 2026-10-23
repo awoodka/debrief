@@ -329,28 +329,38 @@ def _cap(order, cap, what):
             g.drop("cap", f"{what} #{i}, over the cap of {cap}")
 
 
-def threads(ctx, ledger_doc):
-    """[Group] for the discussion.max_threads most-discussed threads posted in the last
-    discussion.window_hours that attached to no story and aren't already in a brief: at least
-    the source's bands.floor in points, ordered by points, then id."""
-    from .score import thread_story
-    o = ctx.t["discussion"]
-    floors = ctx.settings["bands"].get("floor") or {}
+def unattached_threads(store, settings, at, limit, exclude=()):
+    """The most-discussed threads posted in the last discussion.window_hours that attached to no
+    story: [(mention row, points, comments)], each at least its source's bands.floor in points,
+    ordered by points, then id; ids in `exclude` (as hn:<item>) are skipped. Triage takes
+    discussion.max_threads of them as candidates; collect reads the linked page and the comments of
+    discussion.prefetch, a margin above that, so a thread that moves up by triage time is covered."""
+    o = settings["triage"]["discussion"]
+    floors = settings["bands"].get("floor") or {}
     marks = ",".join("?" * len(o["sources"]))
-    rows = ctx.store.q(f"""SELECT * FROM mentions WHERE source_id IN ({marks}) AND kind = 'thread' AND story_id IS NULL
-                           AND posted_at > ? AND posted_at <= ? AND first_seen_at <= ?""",
-                       (*o["sources"], since(ctx.at, o["window_hours"]), ctx.at, ctx.at))
+    rows = store.q(f"""SELECT * FROM mentions WHERE source_id IN ({marks}) AND kind = 'thread' AND story_id IS NULL
+                       AND posted_at > ? AND posted_at <= ? AND first_seen_at <= ?""",
+                   (*o["sources"], since(at, o["window_hours"]), at, at))
     found = []
     for m in rows:
-        e = signals._latest(ctx.store, m["mention_id"], ctx.at)
+        e = signals._latest(store, m["mention_id"], at)
         pts = e.get("points") or 0
-        if pts >= floors.get(m["source_id"], 0) and "hn:" + m["item_key"] not in ledger_doc["dates"]:
-            found.append((-pts, m["mention_id"], dict(m), e))
+        if pts >= floors.get(m["source_id"], 0) and "hn:" + m["item_key"] not in exclude:
+            found.append((-pts, m["mention_id"], dict(m), e.get("comments") or 0))
+    return [(m, -neg, comments) for neg, _, m, comments in sorted(found)[:limit]]
+
+
+def threads(ctx, ledger_doc):
+    """[Group] for the discussion.max_threads most-discussed unattached threads that aren't already
+    in a brief (unattached_threads)."""
+    from .score import thread_story
+    o = ctx.t["discussion"]
     out = []
-    for i, (neg, mid, m, e) in enumerate(sorted(found)[: o["max_threads"]], 1):
-        s = thread_story(ctx, m, -neg, e.get("comments") or 0)
+    for i, (m, points, comments) in enumerate(unattached_threads(ctx.store, ctx.settings, ctx.at, o["max_threads"],
+                                                                 exclude=ledger_doc["dates"]), 1):
+        s = thread_story(ctx.store, ctx.settings, m, points, comments)
         out.append(Group(id=s["story_id"], section="discussion", members=[s["story_id"]], stories={s["story_id"]: s},
-                         rank=i, info={"thread_mentions": [mid], "points": -neg, "candidate": True}))
+                         rank=i, info={"thread_mentions": [m["mention_id"]], "points": points, "candidate": True}))
     return out
 
 
