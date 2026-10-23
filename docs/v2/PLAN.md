@@ -414,3 +414,21 @@ For M4:
 - The announcements the fallback keeps are mostly routine, because the turn order is the only cut. AWS how-tos and NVIDIA customer stories got in, while "OpenAI and Poland's NASK partner to advance AI safety" was candidate #17 and dropped. The scoring call does the real cut.
 - Almost every press event has one outlet, so press order rests on Techmeme and discussion. The model's `same_as` has to do most of the grouping.
 - The TechCrunch Founder Summit (an event promo) passed the blocklist. A pattern for it would also catch real policy summits, so it's left to the model.
+
+## Revision 3: the shape of M4 (2026-10-23)
+
+Decided with Alex after reviewing the M3 index. CRITERIA.md ("The model call") has the details.
+
+- **Triage maps the sources; the skill picks.** Haiku drops only what isn't relevant, so nothing downstream spends tokens on it. Every relevant story goes into the index with a score and a `why`, so Opus can decide where to look without building its own map. This replaces "keep `score ≥ 4`".
+- **Relevance is a yes/no gate; the score grades what passes it.** 5 reshapes the field and 4 clearly moves the landscape: candidates for the brief's main body. 3 is worth knowing, one line in the brief's list of everything kept.
+- **The attach pass and discussion clusters fold into the one call.** The 30 most-discussed unattached HN threads join it title-only. A thread about a candidate merges into it by `same_as`; any other thread is scored like a story. On 2026-10-23 only 4 of 202 threads with at least 10 points had attached. The 3-source cluster rule returns once M5 adds discussion sources.
+- **A reference list of recently reported titles** lets a follow-up thread bring its story back as an `update`.
+- **`relevance.md` was rewritten from Alex's rulings** on 27 borderline cases. Informed opinion (lab leaders, investors, prominent technologists) is now relevant, as a read on consensus. The 120 labeled items in `tests/fixtures/relevance/2026-10-23.jsonl` are the calibration set.
+- **Ordering:** by score, then newest, within each section.
+- **Dropped stories** go only to `triage_log.jsonl`.
+
+M4 is done when:
+- the call agrees with the calibration labels well enough that Alex accepts the misses
+- a live day triages and reports its token use
+- a re-run is all cache hits with byte-identical output
+- a forced failure produces a degraded index

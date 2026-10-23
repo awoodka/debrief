@@ -1,15 +1,18 @@
 # What makes it into the index
 
-Decided with Alex on 2026-10-22. This supersedes BRIEF.md §6.3–6.5 and PLAN.md's triage stages. Thresholds and patterns live in `config/triage.yml`; what "relevant" means lives in `config/relevance.md`. The code is `src/debrief/triage/`, built in M3.
+Decided with Alex on 2026-10-22, and revised on 2026-10-23 (the model call). This supersedes BRIEF.md §6.3–6.5 and PLAN.md's triage stages. Thresholds and patterns live in `config/triage.yml`; what "relevant" means lives in `config/relevance.md`. The code is `src/debrief/triage/`, built in M3.
 
 ## The pipeline
 
 ```
 collect ──> candidates (deterministic, per section, capped; at most 100 in total)
-        ──> one Haiku call scores every candidate
-        ──> a rule keeps the best
-        ──> full text for what's kept ──> the index
+              + the 30 most-discussed Hacker News threads that attached to nothing
+        ──> one Haiku call: same_as, why, relevant, score for each
+        ──> code merges same_as groups and drops what isn't relevant
+        ──> the index: every relevant story, annotated, ordered by score
 ```
+
+Triage's job is to map the sources for the skill, not to pick the brief. Haiku drops what is clearly not relevant, so nothing downstream spends a token on it, and annotates the rest with a score and a reason. The skill (Opus) decides what to write about.
 
 **Determinism.** The candidate list is a pure function of three things: the state database, the run's recorded timestamp, and the config.
 - Every window is measured from the run's timestamp, not the clock.
@@ -81,36 +84,44 @@ The windows count back from the run. "Not yet in a brief" uses the reported ledg
   5. `story_id`
 - **Status pages:** only incidents marked major (M5).
 
-### Discussion-only stories: at most 10 (M2)
+### Discussion: the 30 most-discussed unattached threads
 
-A topic with at least 3 independent sources and no shared artifact. Ordered by spread, then discussion level, then `story_id`.
+Hacker News threads from the last 48 hours, with at least the band floor in points (10), that attached to no story, ordered by points, then id. On 2026-10-23, only 4 of 202 such threads attached. Among the rest were Kimi K3.1 Pro (451 points), Sweden banning ChatGPT and Claude in government offices (309), and follow-ups on PHP2Shell; most of the rest weren't about AI.
 
-The caps add up to 100. A normal day runs about 80–90: about 30 announcements, 30 press, 15 papers, and a few releases.
+Each goes into the model call title-only, with its points, comments and link. A thread about another candidate is folded into it by `same_as`, as discussion. A thread about nothing we collected is scored like any story, so it can enter the index on its own.
+
+The rule from the brief, a topic with at least 3 independent sources, comes back once M5 adds more discussion sources. With Hacker News the only one built, no topic can reach 3.
+
+The caps add up to 100, plus the 30 threads. A normal day runs about 80–90 candidates: about 30 announcements, 30 press, 15 papers, and a few releases.
 
 ## The model call (Haiku 5.5, one call per run)
 
-**Input.** Every candidate, in the deterministic order above, delimited as data. Each one carries:
-- its id, section, source and organization
-- its title
-- its teaser or abstract, about 600 characters
-- its signals
+**Input**, delimited as data, in the deterministic order above:
+- every candidate: its id, section, source and organization; its title; its summary, plus the start of its page when the summary is short, about 1,000 characters in all; its signals
+- the 30 threads, title-only
+- the titles of stories already in a brief in the last 7 days, as a reference list. A follow-up thread can then point at the story it continues, which comes back with status `update`, rather than standing alone.
+- `config/relevance.md` whole: the definition, the worked examples, the score
 
-Plus the rubric from `config/relevance.md`. Fetched text is untrusted, and the prompt says so.
+Fetched text is untrusted, and the prompt says so. The model has no tools.
 
-**Output**, schema-enforced, one entry per candidate:
-- `score`, 1 to 5:
-  - **5, reshapes the field:** a frontier model or major open release with a new capability; a tool that changes how developers build; a finding that changes how models are trained, evaluated or deployed; policy or geopolitics with broad effect.
-  - **4, clearly moves the landscape:** a notable model, tool or result in an important area; a major funding round or acquisition; an incident many people feel (the PHP2Shell vulnerability).
-  - **3, useful but narrower context:** a real but incremental advance; regional or sector policy; a notable product update.
-  - **2, routine:** minor updates, customer and partner stories.
-  - **1, not relevant:** tutorials, marketing, events, off-topic.
-- `relevant`: yes or no, against `relevance.md`
-- `why`: one line, at most 20 words
-- `same_as`: the id of another candidate covering the same event, or null. This is how the six PHP articles and OpenAI's "Patch the Planet" post become one story.
+**Output**, schema-enforced, one entry per candidate, in this order:
+1. `same_as`: the id of another candidate (or a reported story) about the same event or thing, or null
+2. `why`: one line on what it changes, or why it doesn't matter, at most 25 words
+3. `relevant`: yes or no, against `relevance.md`
+4. `score`: only when relevant. 5 reshapes the field, 4 clearly moves the landscape, 3 is worth knowing. The brief takes 4 and 5 as candidates for its main body, and gives 3 a line in the list of everything kept.
 
-**Then the rule.** Keep candidates with `score ≥ 4` and `relevant`, after merging by `same_as`. How many to keep isn't settled yet; it gets tuned with the recall check below once there's real output.
+Writing `why` before deciding makes the decision a reasoned one. Code checks the answers are consistent: a score from 3 to 5 exactly when relevant.
 
-**Degraded mode.** If Haiku is unavailable, keep each section's first few candidates in the deterministic order, and mark the run `degraded`.
+**Then code, not the model:**
+- merges each `same_as` group into one story, by the same rules as the deterministic merges
+- drops everything not relevant. Dropped stories go only to `triage_log.jsonl`, with their `why`, for auditing; the skill never reads it.
+- writes every relevant story to the index with its `score` and `why`, ordered within each section by score, then newest. Volume stays out of the order: points, upvotes and outlets are facts on the line, never sort keys.
+
+**Repeatability.** The answer is cached by a hash of the input, the prompt version, `relevance.md` and the model, so re-running triage on the same data replays it and writes the same index.
+
+**Calibration.** The 120 items of 2026-10-23 (90 candidates and the 30 threads), labeled with Alex, are in `tests/fixtures/relevance/2026-10-23.jsonl`: 38 relevant, 82 not. Before the call is trusted, its agreement with those labels is measured, Haiku against Sonnet 5.5 if Haiku misses on the edges. The worked examples in `relevance.md` come from those same items, so that score is optimistic; the next days' runs are the real check.
+
+**Degraded mode.** If the call fails (auth, quota, a timeout, or invalid output after one retry), each section keeps its first `fallback_keep` candidates in the deterministic order, and the run is marked `degraded`.
 
 ## How we check it (M6, weekly)
 
