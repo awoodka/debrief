@@ -317,8 +317,8 @@ def test_a_hub_model_is_summarized_by_its_cards_first_prose_paragraph(tmp_path):
     card = "\n\n".join(["# Big-1", "Blog | Hugging Face | Docs", "Technical Report 👁️", "> [!NOTE] > A preview.",
                         "| a | b |", "**Big-1** is a 30B mixture-of-experts model for coding agents. It runs on one GPU.",
                         "Later paragraph."])
-    assert output.card_paragraph(card) == "Big-1 is a 30B mixture-of-experts model for coding agents. It runs on one GPU."
-    assert output.card_paragraph("# Title\n\nJust a title line") is None
+    assert output.prose_paragraph(card) == "Big-1 is a 30B mixture-of-experts model for coding agents. It runs on one GPU."
+    assert output.prose_paragraph("# Title\n\nJust a title line") is None
     cfg = cfg_for(tmp_path)
     s = fresh(tmp_path, cfg)
     apply(s, cfg, "hf-org-watch", [model("lab/Big-1", "2026-10-23T02:00:00Z", 50)])
@@ -331,3 +331,28 @@ def test_a_hub_model_is_summarized_by_its_cards_first_prose_paragraph(tmp_path):
     assert line["gist"] == "Big-1 is a 30B mixture-of-experts model for coding agents."
     d = json.loads((out / line["detail"]).read_text())
     assert d["summary"].startswith("Big-1 is a 30B") and d["model_info"] == "text-generation · transformers"
+
+
+def test_a_gist_skips_labels_alt_text_and_page_furniture(tmp_path):
+    cfg = cfg_for(tmp_path)
+    s = fresh(tmp_path, cfg)
+    label = Item(item_key="tb", role="anchor", url="https://example.test/tb", title="Bringing models to TB screening",
+                 summary="Generative AI", published_at="2026-10-23T06:00:00Z", kind="announcement")
+    good = post("ok", "A post that has a real summary")
+    apply(s, cfg, "google-research", [label])
+    apply(s, cfg, "openai-news", [good])
+    tb = s.story_for_url("https://example.test/tb")
+    apply(s, cfg, "article-pages", [page(tb, [], text="October 23, 2026\n\nPreeti Singh, Lead, Technical Program Manager, "
+                                          "Google Research\n\nTuberculosis remains one of the world's deadliest infectious "
+                                          "diseases, claiming an estimated 1.23 million lives each year. Too many cases go undetected.")])
+    s.close()
+    _, out, _ = run.run(cfg, run_date="2026-10-23", at=AT, model=False)
+    gists = {x["title"]: x["gist"] for x in map(json.loads, (out / "stories_index.jsonl").read_text().splitlines())}
+    assert gists["Bringing models to TB screening"] == ("Tuberculosis remains one of the world's deadliest infectious "
+                                                       "diseases, claiming an estimated 1.23 million lives each year.")
+    assert gists["A post that has a real summary"] == "A post that has a real summary. More words follow here."
+    page_text = "Viewer • Updated • 60\n\n#\n\nDoes Your Model Run on AWS Trainium? Look It Up\n\nUpdate on GitHub\n\n" \
+                "In a previous post, we introduced TorchNeuron, the native PyTorch backend for AWS Trainium."
+    assert output.prose_paragraph(page_text, "Does Your Model Run on AWS Trainium? Look It Up").startswith("In a previous post")
+    assert not output.reads_as_prose("Collage showing five builds with Gemini 4 Argon")
+    assert not output.reads_as_prose("Viewer • Updated • 9.75k • 60 # Does Your Model Run on AWS Trainium?")

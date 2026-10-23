@@ -70,15 +70,21 @@ _HUB_ADAPTERS = ("hf_org_watch", "hf_trending")      # their summary is repo met
 _SENTENCE = re.compile(r"[.!?](\s|$)")
 
 
-def card_paragraph(text):
-    """The first paragraph of a model card that reads as prose. Skipped: headings, quotes, lists,
-    code, rules, tables and link bars (any "|"), Hub widgets ("•"), and title lines (fewer than
-    10 words, or no sentence end)."""
+def _words(text):
+    return re.findall(r"\w+", (text or "").lower())
+
+
+def prose_paragraph(text, title=None):
+    """The first paragraph of a page or model card that reads as prose. Skipped: headings, quotes,
+    lists, code, rules, tables and link bars (any "|"), Hub widgets ("•"), the title repeated, and
+    title, date and byline lines (fewer than 10 words, or no sentence end)."""
     for p in (text or "").split("\n\n"):
         p = p.strip()
         if not p or p.startswith(("#", ">", "- ", "|", "```", "---")) or any(c in p for c in "|｜•"):
             continue
         p = " ".join(p.replace("**", "").replace("__", "").replace("`", "").replace("*", "").split())
+        if title and _words(p) == _words(title):
+            continue
         if len(p.split()) >= 10 and _SENTENCE.search(p):
             return p
     return None
@@ -95,23 +101,36 @@ def summary(ctx, g):
         adapter = None
     if adapter in _HUB_ADAPTERS:
         for p in _pages(ctx, g):
-            para = card_paragraph(p["text"]) if "huggingface.co/" in p["url"] else None
+            para = prose_paragraph(p["text"]) if "huggingface.co/" in p["url"] else None
             if para:
                 return sanitize.text(para, ctx.settings["collect"]["summary_max_chars"])
     return s["summary"]
 
 
+def reads_as_prose(text):
+    """A summary that says something: at least 6 words with a sentence end, or 15 words, and no Hub
+    widgets. Not a feed's category label ("Generative AI") or an image's alt text ("Collage showing
+    five builds with Gemini 4 Argon")."""
+    words = (text or "").split()
+    return "•" not in text and ((len(words) >= 6 and bool(_SENTENCE.search(text))) or len(words) >= 15)
+
+
 def gist(ctx, g, cap):
+    """One line on what the story is: Hugging Face's AI summary for a paper; else the first sentence
+    of the summary, when it reads as prose; else of the first prose paragraph of the story's page;
+    else of whatever the summary has."""
     s = g.story
     ai = (s["extra"].get("hf-daily-papers") or {}).get("ai_summary")
     if s["section"] == "papers" and ai:
         return sanitize.text(ai, cap)
-    text = summary(ctx, g)
-    if text:
+    text = summary(ctx, g) or ""
+    if reads_as_prose(text):
         return first_sentence(text, cap)
     for p in _pages(ctx, g):
-        return first_sentence(p["text"], cap)
-    return ""
+        para = prose_paragraph(p["text"], s["title"])
+        if para:
+            return first_sentence(para, cap)
+    return first_sentence(text, cap) if text else ""
 
 
 def _pages(ctx, g):
