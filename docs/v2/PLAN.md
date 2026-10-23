@@ -469,4 +469,33 @@ Decided with Alex. Every dropped source is now `enabled: false` in `sources.yml`
 - **Dropped: the new anchors except one.** The Federal Register, SEC EDGAR, and the OpenAI and Anthropic status pages are out: "anything major that would be covered would be captured by other sources."
 - **Kept: HF trending papers**, a second traction list for the paper pool.
 - **Dropped: podcasts and Mastodon.**
-- **Under consideration: Bluesky (curated accounts), LessWrong with the Alignment Forum, and alphaXiv.**
+- **Deferred: Bluesky,** until there's a list of accounts worth following. Its value is trusted voices, and the list is the source.
+- **Dropped: alphaXiv.** Its overview duplicates the abstract and Hugging Face's AI summary, and its comments have no documented endpoint.
+
+### M5: the Alignment Forum, LessWrong, and HF trending papers
+
+- **The Alignment Forum and LessWrong** (one `lesswrong` adapter, two sources):
+  - **What it reads:** the official GraphQL API, for posts from the last 48 hours with their body, karma and comment count, plus the top comments by karma. LessWrong posts need the AI tag and a karma floor. The Alignment Forum needs only a floor, since everything there is about AI.
+  - **Attachment:** posts attach to stories like any discussion, by URL and id, and their karma counts toward discussion levels. A post cross-posted on both counts once.
+  - **What attaches to nothing still counts:** most posts are original work that links to none of our stories. So, like the HN threads, the top unattached posts join the scoring call as discussion candidates, each source with its own quota (about 5 each), because karma and HN points aren't on one scale. Their body is their full text, and no page fetch is needed.
+- **HF trending papers:** the Daily Papers API sorted by trending, as a second anchor source for the paper pool. It's nearly free, since the adapter already exists.
+- **A pruning decision** on the AWS ML and NVIDIA developer blogs, from a few more days of runs (on 2026-10-23 they gave 0 of 15 kept).
+- **The 3-source rule stays dormant.** HN plus the Alignment Forum and LessWrong rarely make 3 independent sources for one topic, since a cross-post counts once. It comes back with Bluesky.
+- **Done when:**
+  - a live day shows Alignment Forum and LessWrong posts attached to stories or scored as candidates
+  - calibration still agrees
+  - each new piece has fixture tests
+
+### M6: the weekly recall check, and frozen days
+
+- **`debrief recall --week`.** The reference set is every link the 7 newsletters carried that week: Import AI, Interconnects, Ahead of AI, Latent Space, DWATV, Last Week in AI, The Batch. They're already collected, so this needs no new fetching. For each item, it finds where the pipeline stopped, across the week's triage logs:
+  - kept in an index
+  - dropped by the model, with its `why`
+  - dropped at a deterministic stage (window, use bar, cap, ledger)
+  - collected but never a candidate
+  - never collected (a source gap)
+
+  The report gives the share kept, broken down by newsletter, and lists every miss with its stage and reason. Newsletters never feed a score, so it's an independent measure. It's the honest version of the calibration number.
+- **Misses you agree with become labels:** they're added to the calibration set and `relevance.md`'s worked examples, so the labeled set grows past one day.
+- **`debrief snapshot-fixtures --date`** freezes a day's raw data permanently. Raw is pruned after 60 days. A change to the prompt, `relevance.md` or a rule can then be replayed against known days before it ships.
+- **Needs a week of daily runs,** so the timers have to come first.

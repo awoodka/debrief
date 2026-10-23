@@ -353,13 +353,14 @@
   notes: verified; returns a different order from the default list
 
 - id: alphaxiv-overview
+  enabled: false
   name: alphaXiv overviews
   adapter: alphaxiv
   roles: [discussion, context]
   tier: 3
   url: https://alphaxiv.org/abs/2501.12948.md
   probe: {kind: status, expect: [200, 404]}
-  notes: verify; 404 means no overview yet. Comments are not probed (no documented endpoint)
+  notes: '2026-10-23: not worth adding: its overview duplicates the abstract and HF''s AI summary, and its comments have no documented endpoint. Before: verify; 404 means no overview yet. Comments are not probed (no documented endpoint)'
 
 - id: semantic-scholar
   enabled: false
@@ -634,13 +635,14 @@
   notes: 'comment trees for attached threads: Algolia for the text, the Firebase API for the ranked order'
 
 - id: bluesky
+  enabled: false
   name: Bluesky (curated accounts)
   adapter: bluesky
   roles: [discussion]
   tier: 3
   url: https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=bsky.app&limit=2
   probe: {kind: json, items: feed, title: post.record.text, date: post.record.createdAt}
-  notes: account list to be curated; bsky.app is a probe stand-in
+  notes: '2026-10-23: deferred (Alex): later, once there''s a list of accounts worth following. Before: account list to be curated; bsky.app is a probe stand-in'
 
 - id: bluesky-search
   name: Bluesky search (keyless)
