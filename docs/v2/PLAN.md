@@ -123,13 +123,13 @@ docs/v2/  BRIEF.md (the brief, verbatim), SOURCES.md (M0 probe table), README.md
   Each attachment records its method and score. Unmatched mentions stay unattached until triage.
 - **Discussion substance (§5.5).** Thread refs, top comments by score, a few high-reply or dissenting comments, and trusted voices, each with per-thread and per-story caps. Full trees stay in raw.
 - **6-hourly poll** (`collect --cadence 6h`). Fetches discussion sources only, and re-observes engagement for threads attached to stories from the last 3 days. That gives trend at least two points a day.
-- **Bands (§8.1).** A mention's percentile is computed against its source's threads in the trailing 14 days. A story's per-source percentile is the max over its threads. Then:
+- **Bands (§8.1).** A mention's percentile is computed against its source's threads in the trailing 7 days (was 14; cut 2026-10-23). A story's per-source percentile is the max over its threads. Then:
   - `none`: no discussion
   - `some`: below the 75th percentile
   - `notable`: ≥75th percentile, or spread ≥2
   - `heavy`: ≥95th percentile, or spread ≥3 with ≥75th
 
-  Thresholds are in `settings.yml`, documented in code and the README. `bootstrap-bands` seeds HN's distribution from 14 days of Algolia history. A source with fewer than N observations gets `pctl: null`, and its band rests on spread only.
+  Thresholds are in `settings.yml`, documented in code and the README. `bootstrap-bands` seeds HN's distribution from `bands.window_days` of Algolia history. A source with fewer than N observations gets `pctl: null`, and its band rests on spread only.
 - **Trend.** The engagement rate between the last two observations is compared with the previous interval. `rising` means at least 1.5×, or a new source joined. `falling` means at most 0.5×. Otherwise `flat`. Fewer than 3 observations and no new source gives `unknown`.
 
 ## Triage (`debrief triage --date`)

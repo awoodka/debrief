@@ -105,14 +105,15 @@ sections:
 
 # Attaching mentions to stories (stories/attach.py).
 attach:
-  title_days: 7                 # stories first seen this recently are candidates for the title rule
+  title_days: 3                 # stories first seen this recently can take new posts by name or title; older ones never reach the index
   title_min_jaccard: 0.6        # conservative on purpose; the model's same_as pass (M4) covers the rest
   title_min_shared: 4
-  retro_days: 7                 # the end-of-run pass retries unattached posts this recent
+  retro_days: 7                 # the end-of-run pass retries unattached posts this recent; longer than title_days on purpose,
+                                # so a story noticed late still finds discussion that started before it (DeepSeek V4.1 Flash: 5 days)
 
 # Discussion level and trend (stories/signals.py has the exact rules).
 bands:
-  window_days: 14
+  window_days: 7                 # a weekly cycle (~960 HN threads above the floor); 3 days would leave ~20 above the 95th
   min_observations: 200         # a source needs this many threads in the window before percentiles mean anything
   # Only threads with at least this many points count toward a source's distribution. Most HN
   # submissions die at 1-3 points: on 2026-10-22 the 75th percentile over all of them was 4 points,

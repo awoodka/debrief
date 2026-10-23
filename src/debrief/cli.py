@@ -4,7 +4,7 @@
                                          check every source once (Milestone 0)
   debrief collect [--source ID ...] [--date YYYY-MM-DD] [--cadence daily|6h]
                                          fetch, keep raw responses, build stories, attach discussion
-  debrief bootstrap-bands [--days 14]    read back HN history so discussion levels have a baseline
+  debrief bootstrap-bands [--days N]     read back HN history so discussion levels have a baseline
   debrief story ID_OR_TITLE              one story: sources, signals, discussion, coverage, level
   debrief collect --replay YYYY-MM-DD [--into PATH]
                                          rebuild a day from raw files, no network
@@ -50,7 +50,8 @@ def _collect(args, cfg):
 
 def _bootstrap_bands(args, cfg):
     from . import collect
-    report = collect.run(cfg, only={"hn"}, backfill_hours=args.days * 24)
+    days = args.days or cfg.settings["bands"]["window_days"]
+    report = collect.run(cfg, only={"hn"}, backfill_hours=days * 24)
     hn = next((x for x in report["sources"] if x["id"] == "hn"), {})
     print(f"hn: {hn.get('status')}, {hn.get('requests')} requests, {hn.get('counts', {}).get('new', 0)} new stories stored")
     return 0 if hn.get("status") == "ok" else 3
@@ -153,7 +154,7 @@ def main(argv=None):
     p.set_defaults(func=_collect)
 
     p = sub.add_parser("bootstrap-bands", help="read back HN history so discussion levels have a baseline")
-    p.add_argument("--days", type=int, default=14)
+    p.add_argument("--days", type=int, help="default: bands.window_days")
     p.set_defaults(func=_bootstrap_bands)
 
     p = sub.add_parser("story", help="show one story with its signals and attached discussion")

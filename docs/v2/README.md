@@ -43,7 +43,7 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 | `debrief collect --replay YYYY-MM-DD [--into PATH]` | Rebuilds that day from its raw files into a new database, with no network. Default target: `<data>/replay/`. |
 | `debrief collect --rebuild` | Rebuilds the whole state from all raw data after a parser change, keeping cursors, ETags and run history. The previous database is kept as a backup. Took 23 s for a day of 7 runs. |
 | `debrief collect --cadence 6h` | The discussion poll: only sources whose `options.cadence` includes `6h` (Hacker News and its comment trees). It's what gives trend more than one observation a day. |
-| `debrief bootstrap-bands [--days 14]` | Reads back Hacker News history, so discussion levels have a distribution to compare against from day one: 14,346 stories in 56 requests on 2026-10-22. |
+| `debrief bootstrap-bands [--days N]` | Reads back Hacker News history (default `bands.window_days`, 7), so discussion levels have a distribution to compare against from day one. 14 days was 14,346 stories in 56 requests on 2026-10-22. |
 | `debrief story ID_OR_TITLE` | One story: its sources, signals, the paper use bar, attached threads and comments, coverage, discussion level and trend. |
 | `debrief sections` | Which sources feed each section, straight from the config. |
 | `debrief triage`, `snapshot-fixtures` | Not built yet (M3, M6). |
@@ -84,7 +84,7 @@ At the end of the run, a retro pass re-tries recent unattached posts against the
 The method and score are stored. At the end of a run, posts attached by name or title move if a URL or id now points at a story. A reference post gets a coverage row for every story it links to instead. A source with both roles gets both.
 
 **Discussion level and trend (`stories/signals.py`, rules in its docstring).**
-- **Percentile:** within each source, a story's best thread's points are compared with that source's threads from the last 14 days. Only threads with at least `bands.floor` points count (10 for HN), because most submissions are never discussed. Without the floor, the 75th percentile was 4 points.
+- **Percentile:** within each source, a story's best thread's points are compared with that source's threads from the last 7 days (`bands.window_days`). Only threads with at least `bands.floor` points count (10 for HN), because most submissions are never discussed. Without the floor, the 75th percentile was 4 points.
 - **Spread:** a comment counts under its thread's source, so an HN comment tree is still HN.
 - **Level:**
   - none: nothing mentions it
