@@ -14,6 +14,9 @@ For each item, keyed by (source, item_key):
 - Every sighting, new or repeat, records the item's signals (about the artifact) and engagement
   (about the post) as timestamped snapshots, which is where bands and trend come from.
 - New seen: just recorded.
+- A page (an article's main text and links, from adapters/article_pages.py, or carried by an
+  anchor whose adapter fetched it anyway) is stored for its story; like a signal, it's not part
+  of the seen-set.
 """
 import hashlib
 from collections import Counter
@@ -111,6 +114,13 @@ def apply(store, settings, source, adapter, records, refs, run_date):
                 else:
                     c["signals_orphaned"] += 1
                 continue
+            if it.role == "page":
+                if it.story_id and store.one("SELECT 1 FROM stories WHERE story_id=?", (it.story_id,)):
+                    ok = 200 <= it.page["status"] < 300
+                    page = {**it.page, "links": _urls(it.page.get("links") or [])}
+                    if store.save_page(it.story_id, it.url, source.id, at, page, ref):
+                        c["pages" if ok else "pages_failed"] += 1
+                continue
             h = item_hash(it)
             prev = store.item(source.id, it.item_key)
             if prev:
@@ -150,6 +160,10 @@ def apply(store, settings, source, adapter, records, refs, run_date):
                 _save(store, s, at, old)
                 store.insert_item(source.id, it.item_key, "anchor", sid, None, at, h, ref)
                 _snapshots(store, source, sid, None, it, at)
+                if it.page:
+                    page = {**it.page, "links": _urls(it.page.get("links") or [])}
+                    store.save_page(sid, canon.canonical_url(it.url) or it.url, source.id, at, page, ref)
+                    c["pages"] += 1
             elif role == "mention":
                 mid = f"{source.id}|{it.item_key}"
                 store.insert_mention({

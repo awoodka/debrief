@@ -87,7 +87,8 @@ def _errors(records, crash):
 def collect_source(cfg, store, client, source, run_id, run_date, now, log, backfill_hours=None):
     adapter = REGISTRY[source.adapter]
     ctx = FetchContext(client, store, os.environ, run_id, now, cfg.settings["collect"], log,
-                       run_date=run_date, backfill_hours=backfill_hours)
+                       run_date=run_date, backfill_hours=backfill_hours, settings=cfg.settings,
+                       enabled=(s.id for s in cfg.sources if s.enabled))
     crash = None
     try:
         adapter.fetch(ctx, source)

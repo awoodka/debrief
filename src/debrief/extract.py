@@ -1,4 +1,4 @@
-"""HTML helpers shared by the probe and the listing-page adapter."""
+"""HTML helpers shared by the probe, the listing-page adapter and the article-page adapter."""
 import json
 import re
 from urllib.parse import urljoin
@@ -7,6 +7,9 @@ import trafilatura
 from bs4 import BeautifulSoup
 
 FEED_TYPES = {"application/rss+xml", "application/atom+xml", "application/feed+json"}
+_MD_LINK = re.compile(r"(!?)\[([^\]]*)\]\((\S+?)(?:\s+\"[^\"]*\")?\)")
+_BARE_URL = re.compile(r"(?<![(\[<\"'=])\bhttps?://[^\s<>\"'()\[\]]+[^\s<>\"'()\[\].,;:!?]")
+_FRONTMATTER = re.compile(r"\A---\n.*?\n---\n", re.S)
 
 
 def links(html, base_url, link_pattern=None, selector=None, exclude=()):
@@ -84,3 +87,42 @@ def page_metadata(html, url):
                   or bool(meta.get("article:published_time")))
     return {"title": title or "", "published": published or "", "summary": summary or "",
             "is_article": is_article, "date_from": date_from, "url": meta.get("og:url") or url}
+
+
+def _markdown_text_and_links(md, base_url, max_chars, max_links):
+    """Plain text with each [text](url) reduced to its text, and the http(s) links in order."""
+    found = []
+
+    def keep(m):
+        img, label, href = m.groups()
+        url = urljoin(base_url, href)
+        if not img and url.startswith("http"):
+            found.append(url.split("#")[0])
+        return "" if img else label
+
+    text = _MD_LINK.sub(keep, md)
+    found += [u for u in _BARE_URL.findall(text)]
+    links = list(dict.fromkeys(u for u in found if u))[:max_links]
+    # imported here: sanitize imports nothing from us, but keep extract importable on its own
+    from .sanitize import text as clean
+    return clean(text, max_chars, keep_paragraphs=True), links
+
+
+def article(html, url, max_chars, max_links=200):
+    """(main text, links inside the main text) of an article page. trafilatura finds the main
+    content and writes it as markdown, so the links survive; navigation and footers don't."""
+    if isinstance(html, bytes):
+        html = html.decode("utf-8", "replace")
+    md = trafilatura.extract(html, url=url, output_format="markdown", include_links=True,
+                             include_images=False, include_tables=True) or ""
+    return _markdown_text_and_links(md, url, max_chars, max_links)
+
+
+def readme(md, url, max_chars, max_links=200):
+    """(text, links) of a README or model card: front matter dropped, links reduced to their text.
+    Relative links are left out (they point at files in the repo, not at other artifacts)."""
+    if isinstance(md, bytes):
+        md = md.decode("utf-8", "replace")
+    md = _FRONTMATTER.sub("", md.replace("\r\n", "\n"))
+    text, links = _markdown_text_and_links(md, "", max_chars, max_links)
+    return text, links

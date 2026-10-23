@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/awoodka/debrief/schemas/report_header.schema.json",
+  "title": "The JSON block at the top of runs/<date>/run_report.md",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "date", "at", "status", "degraded_reasons", "mode", "ledger", "collect", "failed_sources",
+               "stages", "candidates", "kept", "tier1_dropped", "finished_at"],
+  "properties": {
+    "kind": {"const": "triage"},
+    "date": {"type": "string", "format": "date"},
+    "at": {"type": "string", "description": "The run's time: every window counts back from it"},
+    "status": {"enum": ["ok", "degraded"]},
+    "degraded_reasons": {"type": "array", "items": {"type": "string"}},
+    "mode": {"enum": ["rules_only", "scored"]},
+    "ledger": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "stories", "errors"],
+      "properties": {"kind": {"enum": ["reported", "index", "none"]}, "stories": {"type": "integer"},
+                     "errors": {"type": "array", "items": {"type": "string"}}}
+    },
+    "collect": {
+      "type": "object", "additionalProperties": false, "required": ["runs", "status", "sources"],
+      "description": "Each source's status in the latest of the day's collect runs that included it",
+      "properties": {
+        "runs": {"type": "array", "items": {"type": "string"}}, "status": {"type": ["string", "null"]},
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["id", "status"],
+            "properties": {"id": {"type": "string"}, "status": {"type": "string"}, "requests": {"type": "integer"},
+                           "items": {"type": "integer"}, "new": {"type": "integer"}, "error": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "failed_sources": {"type": "array", "items": {"type": "string"}, "description": "Failed or partial in the day's collect run: the skill reports these as unavailable"},
+    "stages": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object", "additionalProperties": {"type": "integer"},
+        "description": "pool = stories that entered; each stage = how many it dropped; candidates and kept"
+      }
+    },
+    "candidates": {"type": "integer"},
+    "kept": {"type": "integer"},
+    "tier1_dropped": {
+      "type": "array",
+      "description": "Tier-1 stories dropped at any stage except merge, outside papers (every paper is tier 1 through Hugging Face Daily Papers)",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "section", "title", "stage", "reason"],
+        "properties": {"id": {"type": "string"}, "section": {"type": "string"}, "title": {"type": "string"},
+                       "stage": {"type": "string"}, "reason": {"type": "string"}}
+      }
+    },
+    "finished_at": {"type": "string"}
+  }
+}

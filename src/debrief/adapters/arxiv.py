@@ -106,7 +106,7 @@ class ArxivRss(Adapter):
                 item_key=aid, role="anchor" if atype in NEW_TYPES else "seen",
                 story_id=f"arxiv:{aid}", url=f"https://arxiv.org/abs/{aid}",
                 title=sanitize.text(e.get("title"), opts["title_max_chars"]),
-                summary=sanitize.text(_ABSTRACT_PREFIX.sub("", e.get("summary") or ""), opts["summary_max_chars"]),
+                summary=sanitize.text(_ABSTRACT_PREFIX.sub("", e.get("summary") or ""), opts["abstract_max_chars"]),
                 published_at=announced or times.iso(e.get("published_parsed")),
                 authors=authors, kind="paper",
                 extra={"categories": [t.term for t in e.get("tags") or []], "announce_type": atype,
@@ -140,7 +140,7 @@ class ArxivRss(Adapter):
                 item_key=aid, role="anchor" if is_new else "seen",
                 story_id=f"arxiv:{aid}", url=f"https://arxiv.org/abs/{aid}",
                 title=sanitize.text(md.findtext("ax:title", "", NS), opts["title_max_chars"]),
-                summary=sanitize.text(md.findtext("ax:abstract", "", NS), opts["summary_max_chars"]),
+                summary=sanitize.text(md.findtext("ax:abstract", "", NS), opts["abstract_max_chars"]),
                 published_at=times.iso(stamp), authors=authors, kind="paper",
                 extra={"categories": cats, "via": "oai-backfill", "n_authors": n,
                        "n_versions": len(versions)}))

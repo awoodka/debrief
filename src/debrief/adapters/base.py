@@ -17,7 +17,9 @@ class Item:
 
     role: "anchor" can create or update a story; "mention" is a discussion or reference post,
     attached to stories by stories.attach; "seen" only records the key, so it's never new again;
-    "signal" is a lookup about an existing story (story_id required) that only adds signals.
+    "signal" is a lookup about an existing story (story_id required) that only adds signals;
+    "page" is a story's article page (story_id and page required). An anchor may carry its page
+    too, when the adapter fetched it anyway (listing pages).
     """
     item_key: str
     role: str
@@ -42,6 +44,8 @@ class Item:
     story_hint: str | None = None     # the story the adapter already knows it belongs to
     rank: int | None = None           # position in the source's own ranked order (comments)
     replies: int | None = None        # descendants (comments)
+    # Pages only: {"status": HTTP status, "text": main text, "links": [urls in the text]}
+    page: dict | None = None
 
 
 class Adapter:
@@ -74,9 +78,11 @@ class FetchContext:
     collect saves them once the source's items are stored."""
 
     def __init__(self, client, store, env, run_id, now, opts, log=print, run_date=None,
-                 backfill_hours=None):
+                 backfill_hours=None, settings=None, enabled=()):
         self.client, self.store, self.env = client, store, env
         self.run_id, self.now, self.opts, self.log = run_id, now, opts, log
+        self.settings = settings or {"collect": opts}    # all of settings.yml (+ triage.yml)
+        self.enabled = frozenset(enabled)                 # ids of the enabled sources
         self.run_date = run_date or now.date().isoformat()
         self.backfill_hours = backfill_hours     # bootstrap-bands: reach back this far, ignoring the cursor
         self.records, self.validators, self.warnings = [], [], []

@@ -374,3 +374,43 @@ For M3 and M4:
 - **The PHP2Shell event's biggest threads still attach to nothing.** "PHP 8.2.35" (1,075 points) and the PHP Foundation's post (794) name no identifier and link nothing we collect. The M4 attach pass has to catch these, so its pre-filter must not be "AI-related": security events like this one matter. A better pre-filter is threads that share a word with a candidate story.
 - **Hugging Face comments are the slowest part of the daily run:** 99 pages at HF's 100-per-5-minute page limit, about 6 minutes. Comments only matter for paper candidates, so once M3 ranks papers, they should be fetched for the top ~30 only.
 - **Triage must only consider stories from enabled sources.** Replay and rebuild reproduce everything that was collected, including from sources since disabled (PR Newswire, GitHub releases).
+
+## M3 results (2026-10-23)
+
+What M3 adds:
+- **Article pages** (`adapters/article_pages.py`, migration 003). After the anchors, `collect` fetches the page of each new announcement and press story, and the model card or README of each new release. It keeps the main text and the in-article links in `story_pages`. Alex chose collector-side fetching over "full text only after selection", because 15 of the 24 lab and press feeds carry no article body (CRITERIA.md, "Full text").
+- **`debrief triage`** (`src/debrief/triage/`): pools, hard rules, merges and press events, the ledger, each section's order and cap, and the rules-only keep. Every threshold is in `config/triage.yml`. The paper use bar moved there from `settings.yml`.
+- **The output contract**: `stories_index.jsonl`, `stories/<id>.json`, `triage_log.jsonl` and `run_report.md`, each validated against `schemas/` before anything is written.
+- **Hugging Face comments** are now read only for the 30 best-ranked papers of the pool, in triage's ranking.
+- Paper abstracts keep 2,000 characters.
+- There are 132 tests.
+
+**Live, on 2026-10-23:**
+- **Collect:** the daily run took 10 min 19 s. The per-paper Hugging Face lookups took 5 min of that (308 papers). Article pages took 3 min 18 s for 125 pages; this first run covered two days of stories, so a normal day is about half that. 123 pages came back fine. The other two were gated model repos, which refuse the README (401) but show the card on the model page, so the model page is now the fallback.
+- **Triage** takes 1.5 s:
+
+  | Section | Pool | Dropped by | Candidates | Kept |
+  |---|---|---|---|---|
+  | papers | 1,301 | use bar 1,185 | 15 | 10 |
+  | releases | 23 | ledger 10 | 10 | 10 |
+  | announcements | 52 | ledger 11 | 35 | 15 |
+  | press_policy | 50 | ledger 13, merge 6 | 30 | 15 |
+
+  That's 90 candidates and 50 kept, and a re-run gave byte-identical files.
+- **The ledger** read the 2026-10-22 index (a development run) as the previous day's, so 44 of yesterday's stories with no new discussion stayed out, DeepSeek-V4.1-Flash and PHP2Shell among them.
+- **Merges:**
+  - two cross-posts (LitPivot and OlmoEarth, each on the Ai2 and Hugging Face blogs)
+  - four press events: Microsoft's diagnosis claim (The Verge and TechCrunch), PHP2Shell (Wired twice), Meta and news scraping (The Verge and TechCrunch), and the TechCrunch Founder Summit pair
+- **No announcement merged with an artifact.** 30 announcements link artifacts, but none of them are stories we collect: older arXiv papers, sample repos, other orgs' datasets.
+
+Findings that changed the code:
+- **A same-site link isn't evidence of one event.** TechCrunch links its own earlier coverage inside the article, so its Claude Duet piece was grouped with its Meta Muse piece. Now one article linking another groups them only across sites.
+- **One page linked `http://localhost:8080**`.** `canonical_url` raised on the malformed port and crashed the article-pages build, so the pages were rebuilt from raw. It now returns "" for such URLs.
+- **Every paper is tier 1**, through Hugging Face Daily Papers. So the report's tier-1 drop list leaves papers out; otherwise it would list hundreds.
+- **HN points count toward paper fusion only from the band floor (10).** A 2-point submission was lifting a paper.
+- **The run report merges source status across the day's collect runs.** Re-running one source made it the only source in the table.
+
+For M4:
+- The announcements the fallback keeps are mostly routine, because the turn order is the only cut. AWS how-tos and NVIDIA customer stories got in, while "OpenAI and Poland's NASK partner to advance AI safety" was candidate #17 and dropped. The scoring call does the real cut.
+- Almost every press event has one outlet, so press order rests on Techmeme and discussion. The model's `same_as` has to do most of the grouping.
+- The TechCrunch Founder Summit (an event promo) passed the blocklist. A pattern for it would also catch real policy summits, so it's left to the model.

@@ -3,7 +3,7 @@
 Everything here reads the state database as of a reference time `at` (the run's time), so the same
 data always gives the same answer.
 
-Band (brief 8.1), for one story:
+Band (brief 8.1), for one story (or a merged group of stories, counted as one):
   For each discussion source with a thread on the story, the story's percentile is its best
   thread's points among that source's threads posted in the trailing bands.window_days days, each at
   its latest observation up to `at`, counting only threads at or above the source's bands.floor
@@ -28,8 +28,8 @@ Trend:
   observation. flat when neither interval grew by trend.min_growth (noise). unknown with fewer
   than three observations.
 
-Paper use bar (CRITERIA.md): at least paper_use_bar.min_artifacts models, datasets or Spaces built
-on the paper, or an official repo with at least paper_use_bar.min_stars stars.
+Paper use bar (CRITERIA.md; triage.yml papers.use_bar): at least min_artifacts models, datasets or
+Spaces built on the paper, or an official repo with at least min_stars stars.
 """
 from bisect import bisect_right
 
@@ -73,15 +73,22 @@ def percentile(values, v):
     return round(100.0 * bisect_right(values, v) / len(values), 1) if values else None
 
 
-def discussion(store, settings, story_id, at, dists=None):
-    """{band, spread, where, trend, by_source} for one story as of `at`."""
+def _ids(story_ids):
+    ids = [story_ids] if isinstance(story_ids, str) else list(story_ids)
+    return ids, ",".join("?" * len(ids))
+
+
+def discussion(store, settings, story_ids, at, dists=None):
+    """{band, spread, where, trend, by_source} for a story, or a list of stories taken as one, as
+    of `at`."""
     ob, ot = settings["bands"], settings["trend"]
     dists = dists or Distributions(store, at, ob["window_days"], ob.get("floor"))
+    ids, marks = _ids(story_ids)
     # A comment counts under its thread's source: HN comment trees are still HN (one community).
-    rows = store.q("""SELECT m.mention_id, COALESCE(p.source_id, m.source_id), m.kind FROM mentions m
-                      LEFT JOIN mentions p ON p.mention_id = m.parent_id
-                      WHERE m.story_id=? AND m.kind != 'reference' AND m.first_seen_at <= ?
-                      ORDER BY m.mention_id""", (story_id, at))
+    rows = store.q(f"""SELECT m.mention_id, COALESCE(p.source_id, m.source_id), m.kind FROM mentions m
+                       LEFT JOIN mentions p ON p.mention_id = m.parent_id
+                       WHERE m.story_id IN ({marks}) AND m.kind != 'reference' AND m.first_seen_at <= ?
+                       ORDER BY m.mention_id""", (*ids, at))
     by_source = {}
     for mid, src, kind in rows:
         b = by_source.setdefault(src, {"threads": 0, "comments_captured": 0, "points": 0, "comments": 0, "pctl": None})
@@ -110,12 +117,14 @@ def discussion(store, settings, story_id, at, dists=None):
     else:
         band = "heavy" if spread >= 3 else "notable" if spread >= 2 else "some"
     return {"band": band, "spread": spread, "where": sorted(by_source), "by_source": by_source,
-            "trend": trend(store, story_id, at, ot)}
+            "trend": trend(store, ids, at, ot)}
 
 
-def trend(store, story_id, at, o):
-    threads = [r[0] for r in store.q("""SELECT mention_id FROM mentions WHERE story_id=? AND kind IN ('thread', 'post')
-                                        ORDER BY mention_id""", (story_id,))]
+def trend(store, story_ids, at, o):
+    ids, smarks = _ids(story_ids)
+    threads = [r[0] for r in store.q(f"""SELECT mention_id FROM mentions WHERE story_id IN ({smarks})
+                                         AND kind IN ('thread', 'post') AND first_seen_at <= ? ORDER BY mention_id""",
+                                     (*ids, at))]
     if not threads:
         return "unknown"
     marks = ",".join("?" * len(threads))
@@ -131,10 +140,11 @@ def trend(store, story_id, at, o):
     def hours(a, b):
         return max((times.parse(b) - times.parse(a)).total_seconds() / 3600.0, 1e-6)
 
-    before = {r[0] for r in store.q("SELECT DISTINCT source_id FROM mentions WHERE story_id=? AND first_seen_at <= ?",
-                                    (story_id, t2))}
-    after = {r[0] for r in store.q("""SELECT DISTINCT source_id FROM mentions WHERE story_id=? AND kind != 'reference'
-                                      AND first_seen_at > ? AND first_seen_at <= ?""", (story_id, t2, at))}
+    before = {r[0] for r in store.q(f"""SELECT DISTINCT source_id FROM mentions WHERE story_id IN ({smarks})
+                                        AND first_seen_at <= ?""", (*ids, t2))}
+    after = {r[0] for r in store.q(f"""SELECT DISTINCT source_id FROM mentions WHERE story_id IN ({smarks})
+                                       AND kind != 'reference' AND first_seen_at > ? AND first_seen_at <= ?""",
+                                   (*ids, t2, at))}
     if after - before:
         return "rising"
     d1, d2 = total(t2) - total(t1), total(t3) - total(t2)
@@ -148,9 +158,10 @@ def trend(store, story_id, at, o):
     return "flat"
 
 
-def paper_usage(store, story_id):
-    """The paper's latest usage signals: upvotes, stars, and artifacts built on it."""
-    s = store.latest_signals(story_id)
+def paper_usage(store, story_id, at=None):
+    """The paper's latest usage signals (as of `at`, if given): upvotes, stars, and artifacts built
+    on it."""
+    s = store.latest_signals(story_id, at)
     return {"upvotes": s.get("hf_upvotes", 0), "stars": s.get("github_stars", 0),
             "artifacts": s.get("hf_models", 0) + s.get("hf_datasets", 0) + s.get("hf_spaces", 0),
             "comments": s.get("hf_comments", 0)}

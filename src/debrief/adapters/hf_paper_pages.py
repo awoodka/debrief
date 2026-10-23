@@ -6,8 +6,9 @@ signals only: upvotes, the official repo's stars, and how many models, datasets 
 Hub link the paper. These feed the use bar and the ranking (CRITERIA.md).
 
 hf_paper_page (threads): there is no comments API, so the paper page's embedded PaperContent data
-is read, only for pool papers that have comments and pass the use bar, and again when the comment
-count has grown. Comments become mentions attached to the paper; reactions count as likes.
+is read, only for the hf_paper_comments.top_n best papers of the pool in triage's ranking (the use
+bar, then rank fusion) that have comments, and again when the comment count has grown. Comments
+become mentions attached to the paper; reactions count as likes.
 """
 import json
 import re
@@ -15,7 +16,7 @@ from html import unescape
 
 from .. import sanitize, times
 from ..store import raw
-from ..stories.signals import passes_use_bar, paper_usage
+from ..triage.candidates import rank_papers
 from .base import Adapter, Item
 
 _PROPS = re.compile(r'data-target="PaperContent" data-props="([^"]+)"')
@@ -59,10 +60,11 @@ class HfPaperPage(Adapter):
     def fetch(self, ctx, source):
         o = ctx.opts
         done = dict(ctx.store.cursor(source.id).get("fetched", {}))
-        for sid in paper_pool(ctx.store, ctx.run_date, o["hf_papers"]["lookback_days"]):
-            usage = paper_usage(ctx.store, sid)
-            n = int(usage["comments"])
-            if n <= done.get(sid, 0) or not passes_use_bar(usage, o["paper_use_bar"]):
+        pool = paper_pool(ctx.store, ctx.run_date, o["hf_papers"]["lookback_days"])
+        ranked, _ = rank_papers(ctx.store, ctx.settings, ctx.fetched_at, pool)
+        for sid, _, v in ranked[: o["hf_paper_comments"]["top_n"]]:
+            n = int(v["comments"])
+            if n <= done.get(sid, 0):
                 continue
             rec = ctx.get(source, f"https://huggingface.co/papers/{sid.split(':', 1)[1]}", each=sid,
                           meta={"paper": sid}, conditional=False)

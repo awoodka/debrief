@@ -9,6 +9,7 @@ def write(tmp_path, sources, settings=None):
         "user_agent": "debrief/2.0 ({contact})", "contact_default": "+https://example.test",
         "sections": {"announcement": "announcements"}}))
     (tmp_path / "sources.yml").write_text(yaml.safe_dump(sources))
+    (tmp_path / "triage.yml").write_text("{}\n")
     return tmp_path
 
 

@@ -11,6 +11,7 @@ from debrief import canon, sanitize
     ("https://example.com:8080/x", "https://example.com:8080/x"),
     ("mailto:someone@example.com", ""),
     ("not a url", ""),
+    ("http://localhost:8080**", ""),          # a malformed port, as found in an article's text
 ])
 def test_canonical_url(url, expected):
     assert canon.canonical_url(url) == expected

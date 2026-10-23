@@ -77,6 +77,7 @@ def make_cfg(tmp_path):
     cdir = tmp_path / "config"
     cdir.mkdir()
     shutil.copy(Path(config.CONFIG_DIR) / "settings.yml", cdir / "settings.yml")
+    shutil.copy(Path(config.CONFIG_DIR) / "triage.yml", cdir / "triage.yml")
     (cdir / "sources.yml").write_text(yaml.safe_dump(SOURCES))
     return config.load(cdir, env={"DEBRIEF_DATA_DIR": str(tmp_path / "data")})
 
@@ -88,7 +89,8 @@ def run(cfg, net):
 
 TABLES = (("stories", "story_id"), ("items", "source_id, item_key"), ("mentions", "mention_id"),
           ("story_urls", "url"), ("engagement", "mention_id, observed_at"),
-          ("story_signals", "story_id, observed_at, source_id, name"), ("coverage", "story_id, mention_id"))
+          ("story_signals", "story_id, observed_at, source_id, name"), ("coverage", "story_id, mention_id"),
+          ("story_pages", "story_id, url"))
 
 
 def dump(path):
@@ -202,6 +204,7 @@ def make_discussion_cfg(tmp_path):
     cdir = tmp_path / "config"
     cdir.mkdir()
     shutil.copy(Path(config.CONFIG_DIR) / "settings.yml", cdir / "settings.yml")
+    shutil.copy(Path(config.CONFIG_DIR) / "triage.yml", cdir / "triage.yml")
     (cdir / "sources.yml").write_text(yaml.safe_dump(DISCUSSION))
     return config.load(cdir, env={"DEBRIEF_DATA_DIR": str(tmp_path / "data")})
 

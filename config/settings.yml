@@ -56,6 +56,7 @@ collect:
   window_days: 7
   title_max_chars: 300
   summary_max_chars: 1500
+  abstract_max_chars: 2000      # papers keep their abstract as their full text (CRITERIA.md)
   max_authors: 15
   raw_retention_days: 60
   listing:
@@ -67,9 +68,13 @@ collect:
     limit: 100                  # the API defaults to 50 a day; 64 were listed on 2026-10-21
   hf_papers:
     lookback_days: 3            # the paper pool: papers HF listed, first seen this many days back (CRITERIA.md)
-  paper_use_bar:                # evidence of use (CRITERIA.md): one of these
-    min_artifacts: 1            # models + datasets + Spaces on the Hub that link the paper
-    min_stars: 100              # the official repo's GitHub stars
+  article_pages:                # adapters/article_pages.py
+    sections: [announcements, press_policy, releases]
+    days: 2                     # stories first seen this recently (the candidate windows are 48 h)
+    max_per_run: 200
+    max_chars: 8000             # main text kept per page (CRITERIA.md: about 8,000 for the index)
+    max_links: 200
+    skip_domains: [wsj.com, ft.com, bloomberg.com, nytimes.com, theinformation.com, economist.com]   # paywalls
   hn:
     slice_hours: 6              # one request per slice (~400 stories per 6 h on 2026-10-22; the API returns up to 1000)
     overlap_minutes: 60         # re-read the last hour each run; Algolia indexes some stories late
@@ -85,6 +90,7 @@ collect:
     top_replied: 3              # plus this many of the most-replied others, so disagreement survives
     comment_max_chars: 1200
   hf_paper_comments:
+    top_n: 30                   # only the best-ranked papers of the pool (triage's paper ranking) get their page read
     # Automated accounts that comment on many papers (link lists, related-paper bots); not discussion.
     skip_authors: [librarian-bot, researchstudio-bot]
     skip_author_pattern: '(^|[-_])bot$'

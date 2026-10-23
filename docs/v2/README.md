@@ -8,12 +8,13 @@ v2 replaces the v1 collector and its five-seat council with three layers:
 
 [PLAN.md](PLAN.md) is the approved design. [CRITERIA.md](CRITERIA.md) holds the rules for what makes it into the index. [BRIEF.md](BRIEF.md) is the original brief; where they disagree, the plan and the criteria win. [SOURCES.md](SOURCES.md) is the latest source probe.
 
-Status: **M0–M2 are done.**
+Status: **M0–M3 are done.**
 - **M0:** the source probe.
 - **M1:** `collect` with the raw store, the seen-set and story building.
 - **M2:** discussion attached to stories (Hacker News threads and comment trees, Hugging Face paper comments, newsletter and Techmeme coverage); signal snapshots (paper upvotes, repo stars, models built on a paper); the model-release sources; discussion levels and trend.
+- **M3:** article pages (main text and in-article links) for new stories; `triage` with the deterministic candidate stage, merges and press events, the reported ledger, and the output contract (`schemas/`).
 
-Triage and the output contract arrive in M3–M4. The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
+The scoring call (one Haiku call over the candidates) arrives in M4; until then triage keeps each section's first candidates and marks the run degraded. The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
 
 ## Development setup
 
@@ -46,7 +47,8 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 | `debrief bootstrap-bands [--days N]` | Reads back Hacker News history (default `bands.window_days`, 7), so discussion levels have a distribution to compare against from day one. 14 days was 14,346 stories in 56 requests on 2026-10-22. |
 | `debrief story ID_OR_TITLE` | One story: its sources, signals, the paper use bar, attached threads and comments, coverage, discussion level and trend. |
 | `debrief sections` | Which sources feed each section, straight from the config. |
-| `debrief triage`, `snapshot-fixtures` | Not built yet (M3, M6). |
+| `debrief triage [--date YYYY-MM-DD]` | The day's candidates and index, written to `runs/<date>/` (below). The data's time is the last fetch of that day's collect runs, so re-running gives byte-identical files; `--at` sets it instead. |
+| `debrief snapshot-fixtures` | Not built yet (M6). |
 
 ## How `collect` works
 
@@ -66,7 +68,7 @@ Each source gets one status in the run report:
 
 Sources run in phases:
 1. anchors, which create stories
-2. lookups about them (per-paper Hugging Face signals)
+2. lookups about them (per-paper Hugging Face signals; article pages)
 3. discussion sources (Hacker News, Simon Willison)
 4. comment trees (Hacker News comments, Hugging Face paper comments)
 5. reference sources (the newsletters, Techmeme)
@@ -104,7 +106,8 @@ Cursors, by adapter:
 | `github_releases` (disabled) | release id not in the seen-set | ETag per repo |
 | `hn` | story id not in the seen-set | the last time read, minus an hour of overlap; attached threads are refreshed for 3 days |
 | `hn_comments` | — | per thread: the comment count when its tree was read; re-read at 1.5× |
-| `hf_paper_api`, `hf_paper_page` | — | the paper pool (the last 3 days of HF-listed papers); comments only for papers with comments that pass the use bar |
+| `hf_paper_api`, `hf_paper_page` | — | the paper pool (the last 3 days of HF-listed papers); comments only for the 30 best-ranked papers of the pool (triage's ranking), when they have comments |
+| `article_pages` | — | none: a story gets its page once (a 4xx isn't retried; other failures are, while it's in the window) |
 | `hf_org_watch`, `hf_trending` | model repo not in the seen-set; derivatives (by tag) only seen; format copies fold into the original's story; trending needs an org account and a model under 14 days old | — |
 | `openrouter`, `github_org` | model id or repo not in the seen-set | — |
 | `leaderboard` | a model's first time in the top N (the first run only records) | — |
@@ -114,6 +117,25 @@ Cursors, by adapter:
 - For scraped pages, it applies only on the source's first run, because a scraped date can be wrong. After that, a link missing from the seen-set is itself the evidence that the post is new.
 - Listing pages also fetch only their 5 newest links on a first run.
 
+**Article pages (`adapters/article_pages.py`).** Most lab and press feeds carry a title and a teaser only, so after the anchors, `collect` fetches the page of each new announcement and press story (published in the last 2 days), and the model card or README of each new release. It keeps the main text (trafilatura, up to 8,000 characters) and the links inside it, in `story_pages`. Triage groups and merges by those links, and the index's full text comes from there. Listing-page sources fetch their posts anyway, so those carry their page and aren't requested twice. robots.txt is checked first, and paywalled domains (`article_pages.skip_domains`) are never requested.
+
+## How `triage` works
+
+The rules are in [CRITERIA.md](CRITERIA.md) and every threshold is in `config/triage.yml`. The code is `src/debrief/triage/`. Each stage only drops, and every drop goes to `triage_log.jsonl` with its stage and reason:
+
+1. **pool.** Per section, the stories in its window that have an enabled source of that section: papers first seen in the last 3 days; releases first seen in the last 48 hours (org-watch repos created in them); announcements and press published in the last 48 hours.
+2. **rules.** No title, or a blocklisted domain or pattern (promotions, gaming, event promos, listicles; papers are exempt).
+3. **merge** (`triage/merge.py`, by links and titles only):
+   - An announcement that links exactly one artifact published within 7 days of it is one story with that artifact. A lab post about its model is filed as a release; a lab post about its paper stays an announcement and takes the paper out of the paper pool.
+   - Announcements with the same title are one story (a cross-post).
+   - Press articles with the same title, or where one links the other from another site, or that both link the same URL off their own sites, are one event. Profile, home and index pages don't count.
+4. **ledger** (`triage/ledger.py`). A story already in a brief stays out, unless it has a new thread at or above the HN floor since; then it's back as `update`. The ledger is the skill's `runs/<date>/reported.json` files, or, until the first one exists, earlier days' indexes.
+5. **order and cap**, per section: papers by the use bar, then rank fusion (at most 2 per organization, 15 in all); releases by tier, then likes (10); announcements with sources taking turns, tier 1 first (35); press events by outlets, then Techmeme, then discussion level, then newest (30).
+6. **score** (M4): one Haiku call over the candidates.
+7. **keep.** Until M4, each section's first `fallback_keep` candidates (10, 10, 15, 15); the run is `degraded`.
+
+The index is grouped by section, then newest first, never by volume. Every file is validated against its schema before anything is written, and the files are swapped in together.
+
 ## Data layout
 
 ```
@@ -121,6 +143,11 @@ $DEBRIEF_DATA_DIR/
   raw/<date>/<source>/<run>.jsonl.gz   every response, byte-exact, pruned after raw_retention_days (60)
   state/debrief.sqlite                 cursors, ETags, the seen-set (items), stories, mentions, runs
   runs/<date>/collect-<run>.{md,json}  the per-run report
+  runs/<date>/stories_index.jsonl      triage: one line per kept story (schemas/index_line.schema.json)
+  runs/<date>/stories/<id>.json        triage: everything about one kept story (schemas/story.schema.json)
+  runs/<date>/triage_log.jsonl         triage: every story that entered a pool, and where it stopped
+  runs/<date>/run_report.md            triage: a JSON header (schemas/report_header.schema.json), then tables
+  runs/<date>/reported.json            written by the skill: what went into that day's brief
   probe/                               probe-sources results
   replay/                              databases built by --replay
 ```
@@ -178,10 +205,13 @@ The rest of the field reference:
 src/debrief/     cli.py config.py http.py robots.py urls.py probe.py collect.py
                  canon.py (URLs, story ids) sanitize.py times.py extract.py (HTML helpers)
 src/debrief/adapters/   base.py + rss, listing_page, hf_papers, arxiv, github_releases (M1);
-                        hn, hf_paper_pages, hf_hub, model_sources (M2)
+                        hn, hf_paper_pages, hf_hub, model_sources (M2); article_pages (M3)
 src/debrief/store/      db.py (state DB), raw.py (raw store), migrations/*.sql
-src/debrief/stories/    build.py (items -> seen-set, stories, mentions, snapshots), attach.py, signals.py
-config/          settings.yml (UA, timeouts, rate buckets), sources.yml (every source)
+src/debrief/stories/    build.py (items -> seen-set, stories, mentions, snapshots, pages), attach.py, signals.py
+src/debrief/triage/     candidates.py, merge.py, ledger.py, output.py, run.py
+config/          settings.yml (UA, timeouts, rate buckets, collect), sources.yml (every source),
+                 triage.yml (windows, caps, merge and blocklist rules), relevance.md (for M4)
+schemas/         the output contract: index line, story detail, triage log line, report header, reported.json
 tests/           unit and end-to-end tests (fixtures/ are real responses, trimmed); scripts/dev pytest -q
 deploy/          Dockerfile, requirements*.in/.lock (see deploy/README.md)
 scripts/dev      the dev container wrapper

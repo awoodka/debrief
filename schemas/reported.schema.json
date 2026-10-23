@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/awoodka/debrief/schemas/reported.schema.json",
+  "title": "runs/<date>/reported.json",
+  "description": "Written by the skill (or its publish step): the stories that went into that day's brief. Triage leaves these out of later candidates unless they have new discussion.",
+  "type": "object",
+  "required": ["date", "story_ids"],
+  "properties": {
+    "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "story_ids": {"type": "array", "items": {"type": "string", "minLength": 3}, "uniqueItems": true}
+  }
+}

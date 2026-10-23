@@ -44,6 +44,7 @@ def canonical_url(url):
     url = (url or "").strip()
     try:
         p = urlsplit(url)
+        port = p.port                 # raises on a malformed port ("localhost:8080**" in a page's text)
     except ValueError:
         return ""
     if p.scheme.lower() not in ("http", "https") or not p.hostname:
@@ -54,7 +55,6 @@ def canonical_url(url):
             host = host[len(prefix):]
     if host in X_HOSTS:
         host = "x.com"
-    port = p.port
     netloc = host if port in (None, 80, 443) else f"{host}:{port}"
     query = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
              if k.lower() not in TRACKING_PARAMS and not k.lower().startswith(TRACKING_PREFIXES)]

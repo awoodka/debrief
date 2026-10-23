@@ -106,7 +106,7 @@ def test_signals_are_recorded_on_every_sighting(tmp_path):
     apply(s, "hf-paper-detail", [Item(item_key="2610.28708", role="signal", story_id="arxiv:2610.28708",
                                        signals={"github_stars": 150, "hf_models": 0})], at="2026-10-22T17:00:00Z")
     u = signals.paper_usage(s, "arxiv:2610.28708")
-    assert u["stars"] == 150 and signals.passes_use_bar(u, S["collect"]["paper_use_bar"])
+    assert u["stars"] == 150 and signals.passes_use_bar(u, S["triage"]["papers"]["use_bar"])
     assert s.one("SELECT COUNT(*) FROM items WHERE source_id='hf-paper-detail'")[0] == 0   # lookups aren't seen-set items
 
 

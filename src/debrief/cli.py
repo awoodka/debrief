@@ -10,7 +10,9 @@
                                          rebuild a day from raw files, no network
   debrief collect --rebuild              rebuild the whole state from raw (after a parser change)
   debrief sections                       which sources feed each section (from the config)
-  debrief triage | snapshot-fixtures     arrive in M3 and M6
+  debrief triage [--date YYYY-MM-DD] [--at ISO]
+                                         the day's candidates and index, in runs/<date>/
+  debrief snapshot-fixtures              arrives in M6
 """
 import argparse
 import sys
@@ -79,7 +81,7 @@ def _story(args, cfg):
         print("  signals: " + ", ".join(f"{k} {v:g}" for k, v in sig.items()))
     if st["section"] == "papers":
         u = signals.paper_usage(store, st["story_id"])
-        print(f"  use bar: {'passes' if signals.passes_use_bar(u, cfg.settings['collect']['paper_use_bar']) else 'fails'} {u}")
+        print(f"  use bar: {'passes' if signals.passes_use_bar(u, cfg.settings['triage']['papers']['use_bar']) else 'fails'} {u}")
     print(f"  discussion: band {d['band']}, spread {d['spread']}, trend {d['trend']}, where {d['where']}")
     for src, b in d["by_source"].items():
         print(f"    {src}: {b}")
@@ -97,6 +99,9 @@ def _story(args, cfg):
         print(f"  comment {c['author']}: {c['text'][:110]}")
     for cv in store.q("SELECT source_id, covered_at, url FROM coverage WHERE story_id=? ORDER BY covered_at", (st["story_id"],)):
         print(f"  covered by {cv['source_id']} {cv['covered_at']} {cv['url']}")
+    for pg in store.pages(st["story_id"]):
+        print(f"  page {pg['status']} {pg['url']}: {len(pg['text'])} chars, {len(pg['links'])} links"
+              + (f" ({', '.join(pg['links'][:3])}{', …' if len(pg['links']) > 3 else ''})" if pg["links"] else ""))
     return 0
 
 
@@ -122,6 +127,20 @@ def _sections(args, cfg):
         print("  " + ", ".join(s.id for s in rows))
     off = [s.id for s in cfg.sources if not s.enabled]
     print(f"disabled ({len(off)}): " + ", ".join(off))
+    return 0
+
+
+def _triage(args, cfg):
+    from .triage import run
+    try:
+        h, out = run.run(cfg, run_date=args.date, at=args.at)
+    except run.TriageError as e:
+        print(f"triage: {e}", file=sys.stderr)
+        return 1
+    st = h["stages"]
+    print(f"triage {h['date']}: {h['status']} ({h['mode']}) · {h['candidates']} candidates, {h['kept']} kept · " +
+          ", ".join(f"{sec} {x['kept']}/{x['candidates']}" for sec, x in st.items() if x["pool"]) +
+          f" · {out}/run_report.md")
     return 0
 
 
@@ -163,8 +182,12 @@ def main(argv=None):
 
     sub.add_parser("sections", help="list the sources that feed each section").set_defaults(func=_sections)
 
-    for name, milestone in (("triage", "M3"), ("snapshot-fixtures", "M6")):
-        sub.add_parser(name).set_defaults(func=_not_yet(milestone))
+    p = sub.add_parser("triage", help="pick the day's candidates and write the index (runs/<date>/)")
+    p.add_argument("--date", help="run date (default: today); its collect runs give the data's time")
+    p.add_argument("--at", help="the data's time instead (ISO 8601 UTC, e.g. 2026-10-23T12:00:00Z)")
+    p.set_defaults(func=_triage)
+
+    sub.add_parser("snapshot-fixtures").set_defaults(func=_not_yet("M6"))
 
     args = ap.parse_args(argv)
     try:

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/awoodka/debrief/schemas/triage_log.schema.json",
+  "title": "One line of runs/<date>/triage_log.jsonl",
+  "description": "Every story that entered a section's pool, where it ended up, and why (brief 6.6).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "section", "title", "tier", "sources", "outcome", "stage", "reason", "rank", "candidate"],
+  "properties": {
+    "id": {"type": "string"},
+    "section": {"type": "string"},
+    "title": {"type": "string"},
+    "tier": {"enum": [1, 2, 3]},
+    "sources": {"type": "array", "items": {"type": "string"}},
+    "outcome": {"enum": ["kept", "dropped", "merged"]},
+    "stage": {"enum": ["rules", "merge", "ledger", "use_bar", "org_cap", "cap", "keep", "kept"]},
+    "reason": {"type": "string"},
+    "rank": {"type": ["integer", "null"]},
+    "candidate": {"type": "boolean", "description": "It made the section's capped candidate list"},
+    "merged_into": {"type": "string"},
+    "merged": {"type": "array", "items": {"type": "string"}},
+    "status": {"enum": ["new", "update"]},
+    "signals": {"type": "object"}
+  }
+}

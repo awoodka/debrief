@@ -8,7 +8,9 @@ Options (in the source's `options`, falling back to its probe spec and then coll
                             recorded as seen so years of archive don't become today's news
   max_new_per_run           cap on post fetches per run; the rest wait for the next run
 
-robots.txt is checked before every page and post. A disallowed one is never fetched.
+robots.txt is checked before every page and post. A disallowed one is never fetched. A post's
+main text and links are kept as its story's page (adapters/article_pages.py), so it isn't
+requested again.
 """
 from .. import canon, extract, sanitize, times
 from ..store import raw
@@ -81,8 +83,12 @@ class ListingPage(Adapter):
             return [Item(item_key=key, role="seen", url=key, extra={"reason": "no title"})]
         # Known category pages are excluded by pattern before fetching; whether the page carries
         # article markup is kept as a signal, not a gate (Meta's posts have none).
+        ap = opts["article_pages"]
+        text, links = extract.article(raw.body(record), record.get("final_url") or record["url"],
+                                      ap["max_chars"], ap["max_links"])
         return [Item(
             item_key=key, role="anchor" if "anchor" in source.roles else "mention", url=key,
             title=title, summary=sanitize.text(m["summary"], opts["summary_max_chars"]),
             published_at=times.iso(m["published"]), kind=source.kind, org=source.org,
-            extra={"article_markup": m["is_article"], "date_from": m["date_from"]})]
+            extra={"article_markup": m["is_article"], "date_from": m["date_from"]},
+            page={"status": record.get("status", 200), "text": text, "links": links})]

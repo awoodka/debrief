@@ -1,0 +1,79 @@
+# Debrief v2 triage: which stories become candidates, and what the index keeps.
+# The rules are in docs/v2/CRITERIA.md; the code is src/debrief/triage/. Every window counts back
+# from the run's time `at` (the last fetch of that day's collect runs), never from the clock.
+
+# Index order of the sections.
+sections: [papers, releases, announcements, press_policy, discussion]
+
+papers:
+  pool_days: 3                  # papers first seen this recently
+  use_bar:                      # evidence of use, one of these (upvotes alone are attention, not use)
+    min_artifacts: 1            # models + datasets + Spaces on the Hub that link the paper
+    min_stars: 100              # the official repo's GitHub stars
+  # Rank fusion: each signal ranks the eligible papers (ties share a rank, a missing or zero value
+  # adds nothing), and a paper scores the sum of 1 / (k + rank).
+  signals: [upvotes, stars, adoption, hn_points, spread]
+  k: 20
+  max_per_org: 2
+  cap: 15
+
+releases:
+  window_hours: 48
+  # These sources count a model from its creation time (a new repo); the others from when we
+  # first saw it (a model trending, an API listing, a leaderboard entry).
+  by_creation: [hf-org-watch]
+  cap: 10
+
+announcements:
+  window_hours: 48
+  cap: 35                       # over the cap, sources take turns: tier 1 first, then sources.yml order
+
+press_policy:
+  window_hours: 48
+  cap: 30
+  wires: [prnewswire, businesswire, globenewswire]   # never count as an outlet
+
+discussion:
+  cap: 10                       # topic clusters arrive with the M4 attach pass
+
+# Stories that are one thing (triage/merge.py).
+merge:
+  window_days: 7                # an announcement merges with an artifact published this close to it
+  # When an announcement links exactly one artifact, the merged story lives in whichever of the two
+  # sections comes first here (a lab post about its model is a release; about its paper, an
+  # announcement).
+  section_precedence: [releases, announcements, papers]
+  # Links that never make two articles one event: profiles, home pages and index pages.
+  ignore_links:
+    - '^https://(x\.com|bsky\.app|threads\.net|instagram\.com|facebook\.com|youtube\.com|tiktok\.com|mastodon\.social)/[^/]+/?$'
+    - '^https://[^/]+/?$'
+    - 'linkedin\.com/(in|company)/'
+    - '/(tag|tags|topic|topics|author|authors|category|categories|newsletters?|subscribe|about|contact|careers|privacy|terms)(/|$)'
+
+# The reported ledger (triage/ledger.py). A story already in a brief is left out unless it has
+# meaningful new discussion, in which case it comes back with status "update".
+ledger:
+  update_min_new_threads: 1     # new threads at or above the source's bands.floor since the report
+
+# Hard rules (brief 6.2). Patterns match the title plus the first 200 characters of the summary.
+blocklist:
+  exempt_sections: [papers]
+  domains: []
+  patterns:
+    promo: '\b(early.?bird|pricing ends|price goes up|save up to|\d+% off|\d+ ?% discount|limited.time|ends (tonight|today|soon|this week)|buy now|coupon|promo code|on sale|flash sale|black friday|cyber monday|deal of the|last chance|don.?t miss out|lifetime deal|use code)\b'
+    gaming: '\b(geforce now|gfn thursday|game ?pass|steam (sale|deal|game|next fest)|now on steam|free.to.play|season pass|humble bundle)\b'
+    event_promo: '\b(register (now|today)|save your seat|get your ticket|early.?bird ticket|book your (spot|seat)|reserve your (spot|seat)|join us at|webinar)\b'
+    lifestyle: '(\b\d+ ways\b|\b\d+ (best )?tips\b|\btips for\b|\b(parents|families|students|teachers) use\b|\bhow (parents|families|students|teachers|you) (can )?use\b|productivity hacks|life ?hacks|morning routine|\bfor parents\b|\bfor families\b|best gifts|holiday (guide|gift)|get the most out of)'
+
+# Until the scoring call (M4), and whenever it fails: keep each section's first candidates, in
+# the deterministic order. The run is marked degraded.
+fallback_keep: {papers: 10, releases: 10, announcements: 15, press_policy: 15, discussion: 10}
+
+# What the index and detail files carry.
+output:
+  gist_max_chars: 200
+  full_text_max_chars: 8000
+  abstract_max_chars: 2000
+  max_threads: 8                # per story, by points; the rest are counted
+  max_comments: 6               # per thread, in the source's ranked order
+  comment_max_chars: 600

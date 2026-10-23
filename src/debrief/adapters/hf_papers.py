@@ -55,7 +55,7 @@ class HfDailyPapers(Adapter):
             out.append(Item(
                 item_key=aid, role="anchor", story_id=f"arxiv:{aid}", url=f"https://arxiv.org/abs/{aid}",
                 title=sanitize.text(p.get("title") or d.get("title"), opts["title_max_chars"]),
-                summary=sanitize.text(p.get("summary") or d.get("summary"), opts["summary_max_chars"]),
+                summary=sanitize.text(p.get("summary") or d.get("summary"), opts["abstract_max_chars"]),
                 published_at=times.iso(p.get("publishedAt")),
                 authors=tuple(sanitize.text(a, 120) for a in authors[: opts["max_authors"]]),
                 kind="paper", org=sanitize.text(org, 120) or source.org,

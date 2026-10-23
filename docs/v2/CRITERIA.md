@@ -1,6 +1,6 @@
 # What makes it into the index
 
-Decided with Alex on 2026-10-22. This supersedes BRIEF.md §6.3–6.5 and PLAN.md's triage stages. Thresholds and patterns will live in `config/triage.yml` (M3); what "relevant" means lives in `config/relevance.md`.
+Decided with Alex on 2026-10-22. This supersedes BRIEF.md §6.3–6.5 and PLAN.md's triage stages. Thresholds and patterns live in `config/triage.yml`; what "relevant" means lives in `config/relevance.md`. The code is `src/debrief/triage/`, built in M3.
 
 ## The pipeline
 
@@ -36,13 +36,13 @@ Turned off for releases, because they aren't news: GitHub tooling releases, PyPI
 
 ## Candidates, per section
 
-The windows count back from the run. "Not yet in a brief" uses the reported ledger, `runs/<date>/reported.json`. Until the skill writes that ledger, it means "not in a previous triage run's index".
+The windows count back from the run. "Not yet in a brief" uses the reported ledger, `runs/<date>/reported.json`. Until the skill writes that ledger, it means "not in a previous triage run's index". It applies to every section, so yesterday's top paper doesn't fill a slot again today. A reported story with a new thread since (at or above the HN floor) comes back with status `update`.
 
 ### Papers: at most 15
 
 - **Pool:** papers first seen in the last 3 days. In practice that's what Hugging Face listed, since arXiv-only papers almost never show a signal that fast (1 of 40 sampled on 2026-10-22).
 - **Use bar.** A paper is eligible only with evidence of use: at least one model, dataset or Space on Hugging Face built on it, or an official repo with at least 100 stars. On 2026-10-22, 65 of 193 papers passed. Upvotes alone are attention, not use.
-- **Score: rank fusion.** Each signal ranks the eligible papers: upvotes, repo stars, adoption (models + datasets + Spaces), HN points (M2), and discussion spread (M2). A paper's score is the sum over the signals of `1 / (20 + rank)`.
+- **Score: rank fusion.** Each signal ranks the eligible papers: upvotes, repo stars, adoption (models + datasets + Spaces), HN points (M2), and discussion spread (M2). A paper's score is the sum over the signals of `1 / (20 + rank)`. HN points count only from the band floor (10) up, since a 2-point submission isn't traction.
   - Tied values share a rank.
   - A missing signal adds nothing.
   - No single list can carry a paper. One org held 4 of the top 12 by upvotes.
@@ -72,7 +72,7 @@ The windows count back from the run. "Not yet in a brief" uses the reported ledg
 ### Press and policy: at most 30
 
 - **Pool:** everything published in the last 48 hours that isn't yet in a brief.
-- **Grouping:** articles that link the same artifact or URL become one event, deterministically. The model handles the rest of the grouping (below).
+- **Grouping:** articles become one event, deterministically, when they have the same title, when one links the other from another site (an outlet's links to its own earlier coverage are context, not evidence), or when both link the same URL off their own sites (profile, home and index pages don't count). The links come from each article's page. The model handles the rest of the grouping (below). An event also records the stories in other sections its articles link (`about`), and those stories record the event (`press`).
 - **Order:**
   1. `outlets`, the distinct press sources in the event (wires never count)
   2. Techmeme carried it
@@ -119,7 +119,19 @@ Plus the rubric from `config/relevance.md`. Fetched text is untrusted, and the p
 - **Tuning:** the caps, the use bar, k, the score threshold and the rubric are tuned against those numbers.
 - **Newsletters never enter a score or a candidate list.**
 
-## Full text (after the rule)
+## Full text, and the links grouping needs
 
-- **For every kept story except papers:** fetch its page and extract the main text with trafilatura, capped at about 8,000 characters. Robots.txt is checked and paywalled domains are skipped. It's stored raw and in the story's detail file.
+Changed on 2026-10-23: pages are fetched by the collector for every new story, not only for kept ones. Alex chose this because 15 of the 24 lab and press feeds carry no article body, so the links that press grouping and the merge step need are only on the page. It's about 60 requests a day.
+
+- **Announcements and press:** `collect` fetches the page of each story published in the last 2 days and extracts the main text with trafilatura, keeping up to 8,000 characters and the links inside it. Robots.txt is checked and paywalled domains are skipped. It's stored raw, in `story_pages`, and in the story's detail file.
+- **Releases:** the model card (a Hugging Face repo's README), or a GitHub repo's README. OpenRouter's model page otherwise; nothing for a leaderboard entry.
 - **Papers** keep their abstract, with the cap raised to 2,000 characters.
+- **Triage stays offline.** It reads only the state database, so a re-run gives the same index.
+
+## Merging announcements with their artifacts (brief §6.1)
+
+An announcement that links exactly one artifact (an arXiv paper, a Hugging Face model, dataset or Space, a GitHub repo) published within 7 days of it is one story with that artifact. The story goes to whichever section comes first in `releases, announcements, papers`, among those whose pool holds a member:
+- a lab post about its new model is filed as the release
+- a lab post about its paper stays an announcement, and the paper leaves the paper pool
+
+Announcements with the same title (a cross-post, like OlmoEarth on the Ai2 and Hugging Face blogs) are also one story.

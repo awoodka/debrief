@@ -183,16 +183,35 @@ class Store:
                 self.run("INSERT OR REPLACE INTO story_signals VALUES (?,?,?,?,?)",
                          (story_id, at, source_id, name, float(value)))
 
-    def latest_signals(self, story_id):
-        """{name: value} from the most recent observation of each signal."""
+    def latest_signals(self, story_id, at=None):
+        """{name: value} from the most recent observation of each signal (up to `at`, if given)."""
+        at = at or "9999"
         rows = self.q("""SELECT name, value FROM story_signals s WHERE story_id=? AND observed_at =
                          (SELECT MAX(observed_at) FROM story_signals t
-                          WHERE t.story_id=s.story_id AND t.name=s.name) ORDER BY name""", (story_id,))
+                          WHERE t.story_id=s.story_id AND t.name=s.name AND t.observed_at <= ?)
+                         ORDER BY name""", (story_id, at))
         return {r[0]: r[1] for r in rows}
 
     def add_coverage(self, story_id, mention_id, source_id, url, covered_at):
         self.run("INSERT OR IGNORE INTO coverage VALUES (?,?,?,?,?)",
                  (story_id, mention_id, source_id, url, covered_at))
+
+    def save_page(self, story_id, url, source_id, at, page, raw_ref):
+        """Store a story's page. A failure never replaces a page we already have."""
+        ok = 200 <= page["status"] < 300
+        if not ok and self.one("SELECT 1 FROM story_pages WHERE story_id=? AND url=? AND status BETWEEN 200 AND 299",
+                               (story_id, url)):
+            return False
+        self.run("INSERT OR REPLACE INTO story_pages VALUES (?,?,?,?,?,?,?,?)",
+                 (story_id, url, source_id, at, page["status"], page.get("text") or "",
+                  dumps(list(page.get("links") or [])), raw_ref))
+        return True
+
+    def pages(self, story_id):
+        """The story's pages, fetched ones first."""
+        rows = self.q("""SELECT * FROM story_pages WHERE story_id=?
+                         ORDER BY status BETWEEN 200 AND 299 DESC, fetched_at, url""", (story_id,))
+        return [{**dict(r), "links": loads(r["links"], [])} for r in rows]
 
     def story_for_url(self, url):
         row = self.one("SELECT story_id FROM story_urls WHERE url=?", (url,))
