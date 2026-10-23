@@ -460,3 +460,13 @@ Done after review, the same day:
 Left for later:
 - **M5** (more sources, which also bring back the 3-source topic rule) and **M6** (the weekly newsletter recall check).
 - **The skill and the timers.**
+
+## Revision 4: the scope of M5 (2026-10-23)
+
+Decided with Alex. Every dropped source is now `enabled: false` in `sources.yml`, with the reason in its notes.
+
+- **Dropped: every lookup source.** Semantic Scholar, OpenAlex, OpenReview, Epoch AI, `arxiv-oai`, `github-api`. Papers are in the pool for 3 days, and citations take weeks to appear. arXiv's gap backfill doesn't need `arxiv-oai`; `arxiv-rss` has its own `oai_base`.
+- **Dropped: the new anchors except one.** The Federal Register, SEC EDGAR, and the OpenAI and Anthropic status pages are out: "anything major that would be covered would be captured by other sources."
+- **Kept: HF trending papers**, a second traction list for the paper pool.
+- **Dropped: podcasts and Mastodon.**
+- **Under consideration: Bluesky (curated accounts), LessWrong with the Alignment Forum, and alphaXiv.**

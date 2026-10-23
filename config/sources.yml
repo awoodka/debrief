@@ -271,7 +271,7 @@
   each: [cs.LG, cs.CL, cs.AI, cs.CV, stat.ML]
   probe: {kind: feed}
   options: {oai_base: 'https://oaipmh.arxiv.org/oai', oai_sets: [cs, stat], oai_max_pages: 40}
-  notes: holds only the latest announcement; gaps are backfilled from arxiv-oai
+  notes: holds only the latest announcement; gaps are backfilled from arXiv's OAI-PMH endpoint (oai_base)
 
 - id: arxiv-api
   name: arXiv query API (lookups by id)
@@ -284,13 +284,14 @@
   notes: 'not needed: export.arxiv.org robots.txt is Disallow / for all agents, and arxiv-oai GetRecord does the same lookups (verified 2026-10-22)'
 
 - id: arxiv-oai
+  enabled: false
   name: arXiv OAI-PMH (gap backfill and lookups by id)
   adapter: arxiv_oai
   roles: [context]
   tier: 2
   url: https://oaipmh.arxiv.org/oai?verb=Identify
   probe: {kind: status, expect: [200], contains: '<Identify>'}
-  notes: 'verified 2026-10-22. Backfill: ListRecords set=cs / set=stat from=<cursor>. Lookup: GetRecord identifier=oai:arXiv.org:<id> metadataPrefix=arXiv. Same 3 s budget as all arXiv'
+  notes: 'dropped from the plan 2026-10-23 (Alex): lookups are out of scope; arxiv-rss backfills gaps through its own oai_base option. Before: verified 2026-10-22. Backfill: ListRecords set=cs / set=stat from=<cursor>. Lookup: GetRecord identifier=oai:arXiv.org:<id> metadataPrefix=arXiv. Same 3 s budget as all arXiv'
 
 - id: hf-daily-papers
   name: Hugging Face Daily Papers
@@ -361,6 +362,7 @@
   notes: verify; 404 means no overview yet. Comments are not probed (no documented endpoint)
 
 - id: semantic-scholar
+  enabled: false
   name: Semantic Scholar API
   adapter: semantic_scholar
   roles: [context]
@@ -368,9 +370,10 @@
   url: https://api.semanticscholar.org/graph/v1/paper/ARXIV:1706.03762?fields=title,citationCount,influentialCitationCount
   probe: {kind: json, single: true, title: title}
   auth: {env: SEMANTIC_SCHOLAR_API_KEY, header: x-api-key, format: '{}'}
-  notes: keyless shared pool answered 429; needs a free API key (SEMANTIC_SCHOLAR_API_KEY)
+  notes: 'dropped from the plan 2026-10-23 (Alex): lookups are out of scope (papers are in the pool for 3 days; citations take weeks). Before: keyless shared pool answered 429; needs a free API key (SEMANTIC_SCHOLAR_API_KEY)'
 
 - id: openalex
+  enabled: false
   name: OpenAlex API
   adapter: openalex
   roles: [context]
@@ -378,16 +381,17 @@
   url: https://api.openalex.org/works/doi:10.48550/arXiv.1706.03762
   probe: {kind: json, single: true, title: title}
   auth: {env: OPENALEX_API_KEY, header: Authorization, format: 'Bearer {}'}
-  notes: fallback citations
+  notes: 'dropped from the plan 2026-10-23 (Alex): lookups are out of scope (papers are in the pool for 3 days; citations take weeks). Before: fallback citations'
 
 - id: openreview
+  enabled: false
   name: OpenReview API
   adapter: openreview
   roles: [context]
   tier: 2
   url: https://api2.openreview.net/groups?id=ICLR.cc/2026/Conference
   probe: {kind: json, items: groups, title: id}
-  notes: verify
+  notes: 'dropped from the plan 2026-10-23 (Alex): lookups are out of scope. Before: verify'
 
 - id: proceedings
   name: Conference proceedings sites
@@ -494,6 +498,7 @@
   notes: 'off since 2026-10-22: repos are not model releases'
 
 - id: github-api
+  enabled: false
   name: GitHub REST API (stars, issues)
   adapter: github_api
   roles: [context, discussion]
@@ -501,6 +506,7 @@
   url: https://api.github.com/repos/vllm-project/vllm
   probe: {kind: json, single: true, title: full_name}
   auth: {env: GITHUB_PAT, header: Authorization, format: 'Bearer {}'}
+  notes: 'dropped from the plan 2026-10-23 (Alex): lookups are out of scope'
 
 - id: pypi
   name: PyPI releases (tracked SDKs)
@@ -572,15 +578,17 @@
   notes: 401 without a key; free key needed (ARTIFICIAL_ANALYSIS_API_KEY)
 
 - id: epoch-ai
+  enabled: false
   name: Epoch AI data
   adapter: epoch
   roles: [context]
   tier: 2
   url: https://epoch.ai/data
   probe: {kind: links, link_pattern: '\.(csv|zip)(\?|$)'}
-  notes: low priority; looks for downloadable datasets
+  notes: 'dropped from the plan 2026-10-23 (Alex): lookups are out of scope. Before: low priority; looks for downloadable datasets'
 
 - id: status-openai
+  enabled: false
   name: OpenAI status
   adapter: statuspage
   roles: [anchor]
@@ -589,9 +597,10 @@
   org: OpenAI
   probe: {kind: feed}
   url: https://status.openai.com/history.rss
-  notes: verified; emit stories only for major incidents
+  notes: 'dropped from the plan 2026-10-23 (Alex): anything major is covered by the press and lab sources. Before: verified; emit stories only for major incidents'
 
 - id: status-anthropic
+  enabled: false
   name: Anthropic status
   adapter: statuspage
   roles: [anchor]
@@ -600,7 +609,7 @@
   org: Anthropic
   probe: {kind: feed}
   url: https://status.anthropic.com/history.rss
-  notes: verified; emit stories only for major incidents
+  notes: 'dropped from the plan 2026-10-23 (Alex): anything major is covered by the press and lab sources. Before: verified; emit stories only for major incidents'
 
 # ------------------------------------------------------------------------------------ discussion
 - id: hn
@@ -691,13 +700,14 @@
   notes: verify
 
 - id: mastodon
+  enabled: false
   name: Mastodon (sigmoid.social)
   adapter: mastodon
   roles: [discussion]
   tier: 3
   url: https://sigmoid.social/api/v1/timelines/tag/machinelearning?limit=2
   probe: {kind: json, items: '', title: content, date: created_at}
-  notes: verify; account/hashtag list to be curated
+  notes: 'dropped from the plan 2026-10-23 (Alex): not worth adding. Before: verify; account/hashtag list to be curated'
 
 - id: youtube
   name: YouTube channels
@@ -711,13 +721,14 @@
   notes: 'robots.txt disallows /feeds/videos.xml. Alternative: YouTube Data API v3 with a free key (YOUTUBE_API_KEY)'
 
 - id: podcasts
+  enabled: false
   name: Podcasts
   adapter: podcast
   roles: [discussion]
   tier: 3
   each: [Latent Space, Dwarkesh Podcast, The Cognitive Revolution, No Priors]
   probe: {kind: itunes}
-  notes: feed URLs found through the iTunes search API, then probed
+  notes: 'dropped from the plan 2026-10-23 (Alex): not worth adding. Before: feed URLs found through the iTunes search API, then probed'
 
 - id: discord
   name: Discord (invited bot only)
@@ -923,6 +934,7 @@
   notes: Akamai 'Access Denied' (403) to non-browser clients
 
 - id: sec-edgar
+  enabled: false
   name: SEC EDGAR filings (AI-company allowlist)
   adapter: sec_edgar
   roles: [anchor]
@@ -933,9 +945,10 @@
   each: ['0001045810', '0000789019', '0001652044', '0001326801', '0001018724', '0000320193',
          '0000002488', '0001341439']
   probe: {kind: json, single: true, title: name}
-  notes: 'the official EDGAR API (data.sec.gov). sec.gov/cgi-bin/browse-edgar is disallowed by robots.txt. Needs DEBRIEF_CONTACT to be an email (SEC fair-access policy). Each response lists ~1000 recent filings; the adapter keeps forms like 8-K, 10-K, 10-Q, S-1 and skips insider-trade Form 4s'
+  notes: 'dropped from the plan 2026-10-23 (Alex): anything major is covered by the press and lab sources. Before: the official EDGAR API (data.sec.gov). sec.gov/cgi-bin/browse-edgar is disallowed by robots.txt. Needs DEBRIEF_CONTACT to be an email (SEC fair-access policy). Each response lists ~1000 recent filings; the adapter keeps forms like 8-K, 10-K, 10-Q, S-1 and skips insider-trade Form 4s'
 
 - id: federal-register
+  enabled: false
   name: Federal Register
   adapter: federal_register
   roles: [anchor]
@@ -943,6 +956,7 @@
   kind: policy
   url: https://www.federalregister.gov/api/v1/documents.json?conditions[term]=%22artificial+intelligence%22&order=newest&per_page=3
   probe: {kind: json, items: results, title: title, date: publication_date}
+  notes: 'dropped from the plan 2026-10-23 (Alex): anything major is covered by the press and lab sources'
 
 - id: nist
   name: NIST news

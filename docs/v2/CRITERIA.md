@@ -30,7 +30,7 @@ A story's section comes only from its source's `kind`, mapped through `settings.
 | papers | arxiv-rss, hf-daily-papers, hf-trending-papers |
 | releases | hf-org-watch (25 labs), hf-trending-models, openrouter-models, deepseek-github, lmarena |
 | announcements | 19 lab and company blogs (OpenAI, DeepMind, Google ×3, Anthropic ×2, Meta, Microsoft Research, Mistral, Cohere, Ai2, Apple, Thinking Machines, NVIDIA ×2, Hugging Face, AWS, Together) |
-| press_policy | TechCrunch, Ars Technica, MIT Technology Review, MIT News, The Verge, Wired, NIST, UK AISI, Federal Register, SEC EDGAR, OpenAI status, Anthropic status |
+| press_policy | TechCrunch, Ars Technica, MIT Technology Review, MIT News, The Verge, Wired, NIST, UK AISI. The Federal Register, SEC EDGAR and the OpenAI and Anthropic status pages were dropped on 2026-10-23: anything major they'd carry reaches the press and lab sources. |
 | discussion | none. These stories are clusters of discussion posts (M2) |
 
 Discussion sources (HN, Bluesky, LessWrong, the Alignment Forum, Mastodon, podcasts, Simon Willison) only attach to stories. Reference sources (the newsletters and Techmeme) only record coverage and feed the recall check. Neither kind ever becomes a story itself.
@@ -82,7 +82,7 @@ The windows count back from the run. "Not yet in a brief" uses the reported ledg
   3. the HN discussion level (M2)
   4. newest
   5. `story_id`
-- **Status pages:** only incidents marked major (M5).
+- **Status pages:** dropped from the plan (2026-10-23).
 
 ### Discussion: the 30 most-discussed unattached threads
 
