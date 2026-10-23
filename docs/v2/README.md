@@ -134,7 +134,7 @@ The rules are in [CRITERIA.md](CRITERIA.md) and every threshold is in `config/tr
 6. **score** (M4): one Haiku call over the candidates.
 7. **keep.** Until M4, each section's first `fallback_keep` candidates (10, 10, 15, 15); the run is `degraded`.
 
-The index is grouped by section, then newest first, never by volume. Every file is validated against its schema before anything is written, and the files are swapped in together.
+The index is grouped by section, then newest first, never by volume. Each line's `gist` is Hugging Face's AI summary for a paper, and otherwise the first sentence of the story's summary. A Hugging Face model's stored summary is repo metadata ("text-generation · transformers · license mit"), so its summary in the index is its model card's first prose paragraph instead, and the metadata moves to `model_info`. Every file is validated against its schema before anything is written, and the files are swapped in together.
 
 ## Data layout
 

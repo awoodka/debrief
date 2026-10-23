@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 import jsonschema
 
 from .. import sanitize, times
-from ..config import REPO
+from ..config import REPO, ConfigError
 from ..store import loads
 from ..stories import signals
 from .candidates import published
@@ -64,13 +64,49 @@ def first_sentence(text, cap):
     return sanitize.text(text, cap)
 
 
+_HUB_ADAPTERS = ("hf_org_watch", "hf_trending")      # their summary is repo metadata, not prose
+_SENTENCE = re.compile(r"[.!?](\s|$)")
+
+
+def card_paragraph(text):
+    """The first paragraph of a model card that reads as prose. Skipped: headings, quotes, lists,
+    code, rules, tables and link bars (any "|"), Hub widgets ("•"), and title lines (fewer than
+    10 words, or no sentence end)."""
+    for p in (text or "").split("\n\n"):
+        p = p.strip()
+        if not p or p.startswith(("#", ">", "- ", "|", "```", "---")) or any(c in p for c in "|｜•"):
+            continue
+        p = " ".join(p.replace("**", "").replace("__", "").replace("`", "").replace("*", "").split())
+        if len(p.split()) >= 10 and _SENTENCE.search(p):
+            return p
+    return None
+
+
+def summary(ctx, g):
+    """The story's summary, except for a Hugging Face model, whose stored summary is repo
+    metadata ("text-generation · transformers · license mit"): its model card's first prose
+    paragraph instead, when the card has one."""
+    s = g.story
+    try:
+        adapter = ctx.cfg.source(s["sources"][0]).adapter
+    except ConfigError:
+        adapter = None
+    if adapter in _HUB_ADAPTERS:
+        for p in _pages(ctx, g):
+            para = card_paragraph(p["text"]) if "huggingface.co/" in p["url"] else None
+            if para:
+                return sanitize.text(para, ctx.settings["collect"]["summary_max_chars"])
+    return s["summary"]
+
+
 def gist(ctx, g, cap):
     s = g.story
     ai = (s["extra"].get("hf-daily-papers") or {}).get("ai_summary")
     if s["section"] == "papers" and ai:
         return sanitize.text(ai, cap)
-    if s["summary"]:
-        return first_sentence(s["summary"], cap)
+    text = summary(ctx, g)
+    if text:
+        return first_sentence(text, cap)
     for p in _pages(ctx, g):
         return first_sentence(p["text"], cap)
     return ""
@@ -217,13 +253,15 @@ def detail(ctx, g):
         "story_id": g.id, "section": g.section, "kind": s["kind"], "title": s["title"], "org": s["org"],
         "authors": s["authors"], "artifact_urls": union("artifact_urls"), "code_urls": union("code_urls"),
         "published_at": published(s), "first_seen": s["first_seen"], "tier": g.tier, "status": g.status,
-        "sources": g.sources, "summary": s["summary"], "members": members,
+        "sources": g.sources, "summary": summary(ctx, g), "members": members,
         "triage": {"mode": ctx.mode, "rank": g.rank, "score": g.info.get("score"), "relevant": g.info.get("relevant"),
                    "why": g.info.get("why"), "same_as": g.info.get("same_as"),
                    "prompt_version": g.info.get("prompt_version"), "model": g.info.get("model")},
         "signals": sig, "discussion": _threads(ctx, g.members), "covered_by": cov,
         "mainstream_at": cov[0]["date"] if cov else None, "full_text": full, "raw_refs": list(dict.fromkeys(refs)),
     }
+    if doc["summary"] != s["summary"]:
+        doc["model_info"] = s["summary"]          # the Hub metadata the card's paragraph replaced
     if "fusion" in g.info:
         doc["triage"]["fusion"] = g.info["fusion"]
     for key in ("press", "about"):

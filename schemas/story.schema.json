@@ -24,7 +24,8 @@
     "prev_reported": {"type": "string", "format": "date"},
     "days_discussed": {"type": "integer", "minimum": 0},
     "sources": {"type": "array", "items": {"type": "string"}},
-    "summary": {"type": "string"},
+    "summary": {"type": "string", "description": "The source's own summary or abstract; for a Hugging Face model, its model card's first prose paragraph"},
+    "model_info": {"type": "string", "description": "Hugging Face models: the repo metadata (pipeline, library, license)"},
     "members": {
       "type": "array",
       "description": "The stories this one is made of, the representative first",

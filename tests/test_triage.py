@@ -311,3 +311,23 @@ def test_source_status_comes_from_the_latest_run_that_included_it(tmp_path):
     ctx = candidates.Ctx(s, cfg, AT)
     got = {x["id"]: x["status"] for x in output.collect_summary(ctx, "2026-10-23")["sources"]}
     assert got == {"hn": "ok", "article-pages": "ok"}
+
+
+def test_a_hub_model_is_summarized_by_its_cards_first_prose_paragraph(tmp_path):
+    card = "\n\n".join(["# Big-1", "Blog | Hugging Face | Docs", "Technical Report 👁️", "> [!NOTE] > A preview.",
+                        "| a | b |", "**Big-1** is a 30B mixture-of-experts model for coding agents. It runs on one GPU.",
+                        "Later paragraph."])
+    assert output.card_paragraph(card) == "Big-1 is a 30B mixture-of-experts model for coding agents. It runs on one GPU."
+    assert output.card_paragraph("# Title\n\nJust a title line") is None
+    cfg = cfg_for(tmp_path)
+    s = fresh(tmp_path, cfg)
+    apply(s, cfg, "hf-org-watch", [model("lab/Big-1", "2026-10-23T02:00:00Z", 50)])
+    apply(s, cfg, "article-pages", [Item(item_key="hf-model:lab/big-1", role="page", story_id="hf-model:lab/big-1",
+                                         url="https://huggingface.co/lab/Big-1/raw/main/README.md",
+                                         page={"status": 200, "text": card, "links": []})])
+    s.close()
+    _, out = run.run(cfg, run_date="2026-10-23", at=AT)
+    line = json.loads((out / "stories_index.jsonl").read_text().splitlines()[0])
+    assert line["gist"] == "Big-1 is a 30B mixture-of-experts model for coding agents."
+    d = json.loads((out / line["detail"]).read_text())
+    assert d["summary"].startswith("Big-1 is a 30B") and d["model_info"] == "text-generation · transformers"
