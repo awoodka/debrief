@@ -8,13 +8,12 @@ v2 replaces the v1 collector and its five-seat council with three layers:
 
 [PLAN.md](PLAN.md) is the approved design. [CRITERIA.md](CRITERIA.md) holds the rules for what makes it into the index. [BRIEF.md](BRIEF.md) is the original brief; where they disagree, the plan and the criteria win. [SOURCES.md](SOURCES.md) is the latest source probe.
 
-Status: **M0–M3 are done.**
+Status: **M0–M4 are done.**
 - **M0:** the source probe.
 - **M1:** `collect` with the raw store, the seen-set and story building.
 - **M2:** discussion attached to stories (Hacker News threads and comment trees, Hugging Face paper comments, newsletter and Techmeme coverage); signal snapshots (paper upvotes, repo stars, models built on a paper); the model-release sources; discussion levels and trend.
 - **M3:** article pages (main text and in-article links) for new stories; `triage` with the deterministic candidate stage, merges and press events, the reported ledger, and the output contract (`schemas/`).
-
-The scoring call (one Haiku call over the candidates) arrives in M4; until then triage keeps each section's first candidates and marks the run degraded. The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
+- **M4:** the scoring call: one Claude call (Sonnet 5.5, on the Max plan) that merges same-story candidates, drops what isn't relevant, and gives the rest a score and a one-line why; the most-discussed unattached HN threads join it; `calibrate` checks it against a labeled day. The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
 
 ## Development setup
 
@@ -47,7 +46,9 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 | `debrief bootstrap-bands [--days N]` | Reads back Hacker News history (default `bands.window_days`, 7), so discussion levels have a distribution to compare against from day one. 14 days was 14,346 stories in 56 requests on 2026-10-22. |
 | `debrief story ID_OR_TITLE` | One story: its sources, signals, the paper use bar, attached threads and comments, coverage, discussion level and trend. |
 | `debrief sections` | Which sources feed each section, straight from the config. |
-| `debrief triage [--date YYYY-MM-DD]` | The day's candidates and index, written to `runs/<date>/` (below). The data's time is the last fetch of that day's collect runs, so re-running gives byte-identical files; `--at` sets it instead. |
+| `scripts/dev --claude python -m debrief triage [--date YYYY-MM-DD]` | The day's candidates, the scoring call and the index, written to `runs/<date>/` (below). The data's time is the last fetch of that day's collect runs and the answer is cached, so re-running gives byte-identical files; `--at` sets the time instead. `--claude` gives the container the Claude token and no source keys. Exit code 3 when the run is degraded. |
+| `debrief triage --no-model` | Rules only: each section's first `fallback_keep` candidates, marked degraded. `--model M` scores with another model; `--fresh` ignores the cache. |
+| `scripts/dev --claude python -m debrief calibrate [--model M] [--fresh]` | Scores the labeled calibration set (`tests/fixtures/relevance/2026-10-23.jsonl`) and writes the agreement, every disagreement and the model's reasons to `calibration/<set>-<model>.md`. |
 | `debrief snapshot-fixtures` | Not built yet (M6). |
 
 ## How `collect` works
@@ -131,10 +132,11 @@ The rules are in [CRITERIA.md](CRITERIA.md) and every threshold is in `config/tr
    - Press articles with the same title, or where one links the other from another site, or that both link the same URL off their own sites, are one event. Profile, home and index pages don't count.
 4. **ledger** (`triage/ledger.py`). A story already in a brief stays out, unless it has a new thread at or above the HN floor since; then it's back as `update`. The ledger is the skill's `runs/<date>/reported.json` files, or, until the first one exists, earlier days' indexes.
 5. **order and cap**, per section: papers by the use bar, then rank fusion (at most 2 per organization, 15 in all); releases by tier, then likes (10); announcements with sources taking turns, tier 1 first (35); press events by outlets, then Techmeme, then discussion level, then newest (30).
-6. **score** (M4): one Haiku call over the candidates.
-7. **keep.** Until M4, each section's first `fallback_keep` candidates (10, 10, 15, 15); the run is `degraded`.
+6. **threads.** The 30 most-discussed Hacker News threads of the last 48 hours that attached to no story join the discussion section (at least 10 points, not already in a brief).
+7. **score** (`triage/score.py`, CRITERIA.md "The model call"). One call over every candidate, with `config/relevance.md` as the definition and the titles of recently reported stories as a reference list. For each candidate, the model answers `same_as`, `why`, `relevant` and `score`. Code then merges each `same_as` group (one that reaches a reported story brings it back as an `update`), drops every group the model found not relevant, and keeps the rest with their score and why. The call runs through Claude Code with no tools, an explicit system prompt, no settings, MCP servers or slash commands, in an empty directory; fetched text goes in as data. Triage refuses to run with `ANTHROPIC_API_KEY` set, so it never bills the API.
+8. **keep.** Only when the call fails (after one retry) or with `--no-model`: each section's first `fallback_keep` candidates (10, 10, 15, 15, none of the threads), and the run is `degraded`.
 
-The index is grouped by section, then newest first, never by volume. Each line's `gist` is Hugging Face's AI summary for a paper, and otherwise the first sentence of the story's summary. A Hugging Face model's stored summary is repo metadata ("text-generation · transformers · license mit"), so its summary in the index is its model card's first prose paragraph instead, and the metadata moves to `model_info`. Every file is validated against its schema before anything is written, and the files are swapped in together.
+The index is grouped by section, then by score, then newest first, never by volume. Stories the model dropped are written only to `triage_log.jsonl`; the run report gives their count. Each line's `gist` is Hugging Face's AI summary for a paper, and otherwise the first sentence of the story's summary. A Hugging Face model's stored summary is repo metadata ("text-generation · transformers · license mit"), so its summary in the index is its model card's first prose paragraph instead, and the metadata moves to `model_info`. Every file is validated against its schema before anything is written, and the files are swapped in together.
 
 ## Data layout
 
@@ -148,6 +150,8 @@ $DEBRIEF_DATA_DIR/
   runs/<date>/triage_log.jsonl         triage: every story that entered a pool, and where it stopped
   runs/<date>/run_report.md            triage: a JSON header (schemas/report_header.schema.json), then tables
   runs/<date>/reported.json            written by the skill: what went into that day's brief
+  cache/score/<key>.json               the scoring call's answers, keyed by a hash of everything the call saw
+  calibration/                         calibrate reports
   probe/                               probe-sources results
   replay/                              databases built by --replay
 ```
@@ -208,9 +212,10 @@ src/debrief/adapters/   base.py + rss, listing_page, hf_papers, arxiv, github_re
                         hn, hf_paper_pages, hf_hub, model_sources (M2); article_pages (M3)
 src/debrief/store/      db.py (state DB), raw.py (raw store), migrations/*.sql
 src/debrief/stories/    build.py (items -> seen-set, stories, mentions, snapshots, pages), attach.py, signals.py
-src/debrief/triage/     candidates.py, merge.py, ledger.py, output.py, run.py
+src/debrief/triage/     candidates.py, merge.py, ledger.py, score.py, output.py, run.py, calibrate.py
 config/          settings.yml (UA, timeouts, rate buckets, collect), sources.yml (every source),
-                 triage.yml (windows, caps, merge and blocklist rules), relevance.md (for M4)
+                 triage.yml (windows, caps, merge and blocklist rules, scoring), relevance.md (what's relevant)
+prompts/         score_v1.md: the scoring call's instructions (relevance.md is appended)
 schemas/         the output contract: index line, story detail, triage log line, report header, reported.json
 tests/           unit and end-to-end tests (fixtures/ are real responses, trimmed); scripts/dev pytest -q
 deploy/          Dockerfile, requirements*.in/.lock (see deploy/README.md)

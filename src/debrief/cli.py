@@ -10,8 +10,10 @@
                                          rebuild a day from raw files, no network
   debrief collect --rebuild              rebuild the whole state from raw (after a parser change)
   debrief sections                       which sources feed each section (from the config)
-  debrief triage [--date YYYY-MM-DD] [--at ISO]
-                                         the day's candidates and index, in runs/<date>/
+  debrief triage [--date YYYY-MM-DD] [--at ISO] [--no-model] [--model M] [--fresh]
+                                         the day's candidates, the scoring call, the index (runs/<date>/)
+  debrief calibrate [--model M] [--fresh]
+                                         score the labeled calibration set; report agreement
   debrief snapshot-fixtures              arrives in M6
 """
 import argparse
@@ -133,14 +135,32 @@ def _sections(args, cfg):
 def _triage(args, cfg):
     from .triage import run
     try:
-        h, out = run.run(cfg, run_date=args.date, at=args.at)
+        h, out, cached = run.run(cfg, run_date=args.date, at=args.at, model=not args.no_model,
+                                 model_name=args.model, fresh=args.fresh)
     except run.TriageError as e:
         print(f"triage: {e}", file=sys.stderr)
         return 1
-    st = h["stages"]
+    st, sc = h["stages"], h["scoring"] or {}
+    how = ("" if not sc else f" · scoring failed: {sc['error'][:120]}" if sc.get("error") else
+           f" · {sc['model']} {'replayed from the cache' if cached else 'called'}, "
+           f"{sc['usage']['input_tokens']:,} in / {sc['usage']['output_tokens']:,} out tokens")
     print(f"triage {h['date']}: {h['status']} ({h['mode']}) · {h['candidates']} candidates, {h['kept']} kept · " +
           ", ".join(f"{sec} {x['kept']}/{x['candidates']}" for sec, x in st.items() if x["pool"]) +
-          f" · {out}/run_report.md")
+          how + f" · {out}/run_report.md")
+    return 0 if h["status"] == "ok" else 3
+
+
+def _calibrate(args, cfg):
+    from .triage import calibrate, score
+    try:
+        result, cmp, out = calibrate.run(cfg, fixture=args.fixture or calibrate.DEFAULT, model=args.model,
+                                         fresh=args.fresh)
+    except score.ScoringError as e:
+        print(f"calibrate: {e}", file=sys.stderr)
+        return 1
+    took = "cached" if result["cached"] else f"{result['usage']['duration_s']} s"
+    print(f"{result['model']}: agrees on {cmp['agree']} of {cmp['n']}; kept {cmp['kept_in']} of "
+          f"{cmp['kept_in'] + cmp['missed_in']} relevant, let {cmp['let_through']} not-relevant through · {took} · {out}")
     return 0
 
 
@@ -185,7 +205,16 @@ def main(argv=None):
     p = sub.add_parser("triage", help="pick the day's candidates and write the index (runs/<date>/)")
     p.add_argument("--date", help="run date (default: today); its collect runs give the data's time")
     p.add_argument("--at", help="the data's time instead (ISO 8601 UTC, e.g. 2026-10-23T12:00:00Z)")
+    p.add_argument("--no-model", action="store_true", help="skip the scoring call: rules only, marked degraded")
+    p.add_argument("--model", help="score with this model instead of triage.yml's (e.g. claude-sonnet-5-5)")
+    p.add_argument("--fresh", action="store_true", help="call the model even if the answer is cached")
     p.set_defaults(func=_triage)
+
+    p = sub.add_parser("calibrate", help="score the labeled calibration set and compare with the labels")
+    p.add_argument("--fixture", help="a labeled set (default tests/fixtures/relevance/2026-10-23.jsonl)")
+    p.add_argument("--model", help="score with this model instead of triage.yml's")
+    p.add_argument("--fresh", action="store_true", help="call the model even if the answer is cached")
+    p.set_defaults(func=_calibrate)
 
     sub.add_parser("snapshot-fixtures").set_defaults(func=_not_yet("M6"))
 

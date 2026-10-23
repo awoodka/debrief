@@ -34,7 +34,26 @@ press_policy:
   wires: [prnewswire, businesswire, globenewswire]   # never count as an outlet
 
 discussion:
-  cap: 10                       # topic clusters arrive with the M4 attach pass
+  # The most-discussed threads that attached to no story join the scoring call (CRITERIA.md): a
+  # thread about a candidate merges into it by same_as; any other is scored like a story.
+  sources: [hn]
+  window_hours: 48
+  max_threads: 30
+
+# The scoring call (triage/score.py; CRITERIA.md "The model call").
+scoring:
+  # Through Claude Code on the Max plan. On the 2026-10-23 calibration set, run twice each, Sonnet 5.5
+  # agreed with Alex's labels on 119 and 119 of 120 with no answer flipping between runs; Haiku 5.5
+  # on 118 and 115, with 5 flips at the edges, and slower (it thinks first). Haiku is one line away.
+  model: claude-sonnet-5-5
+  effort: null                  # Claude Code's --effort; null leaves the model's default
+  prompt: prompts/score_v1.md   # the instructions; config/relevance.md is appended whole
+  relevance: config/relevance.md
+  timeout_s: 900
+  text_max_chars: 1000          # per candidate: its summary, plus the start of its page when that's short
+  short_summary_chars: 300
+  why_max_chars: 240
+  reported_days: 3              # titles of stories in a brief this recently go in as a reference list
 
 # Stories that are one thing (triage/merge.py).
 merge:
@@ -42,7 +61,7 @@ merge:
   # When an announcement links exactly one artifact, the merged story lives in whichever of the two
   # sections comes first here (a lab post about its model is a release; about its paper, an
   # announcement).
-  section_precedence: [releases, announcements, papers]
+  section_precedence: [releases, announcements, papers, press_policy, discussion]
   # Links that never make two articles one event: profiles, home pages and index pages.
   ignore_links:
     - '^https://(x\.com|bsky\.app|threads\.net|instagram\.com|facebook\.com|youtube\.com|tiktok\.com|mastodon\.social)/[^/]+/?$'
@@ -65,9 +84,10 @@ blocklist:
     event_promo: '\b(register (now|today)|save your seat|get your ticket|early.?bird ticket|book your (spot|seat)|reserve your (spot|seat)|join us at|webinar)\b'
     lifestyle: '(\b\d+ ways\b|\b\d+ (best )?tips\b|\btips for\b|\b(parents|families|students|teachers) use\b|\bhow (parents|families|students|teachers|you) (can )?use\b|productivity hacks|life ?hacks|morning routine|\bfor parents\b|\bfor families\b|best gifts|holiday (guide|gift)|get the most out of)'
 
-# Until the scoring call (M4), and whenever it fails: keep each section's first candidates, in
-# the deterministic order. The run is marked degraded.
-fallback_keep: {papers: 10, releases: 10, announcements: 15, press_policy: 15, discussion: 10}
+# Whenever the scoring call fails (or triage runs with --no-model): keep each section's first
+# candidates, in the deterministic order, and mark the run degraded. Unattached threads are left
+# out, since most aren't about AI.
+fallback_keep: {papers: 10, releases: 10, announcements: 15, press_policy: 15, discussion: 0}
 
 # What the index and detail files carry.
 output:

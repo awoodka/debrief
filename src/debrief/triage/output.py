@@ -1,11 +1,13 @@
 """The output contract (brief 8; schemas/): what triage writes to runs/<date>/.
 
-  stories_index.jsonl   one line per kept story, grouped by section, then newest first (never by
-                        volume). What the skill reads first.
+  stories_index.jsonl   one line per kept story, grouped by section, then by the model's score,
+                        then newest first (never by volume). What the skill reads first.
   stories/<id>.json     everything about one kept story: members, signals, discussion, coverage,
                         full text, raw refs
-  triage_log.jsonl      every story that entered a pool: where it stopped and why
-  run_report.md         a JSON header (schemas/report_header.schema.json), then tables for people
+  triage_log.jsonl      every story that entered a pool: where it stopped and why. The only place
+                        the model's drops are written, for auditing; the skill doesn't read it.
+  run_report.md         a JSON header (schemas/report_header.schema.json), then tables for people.
+                        Model drops appear only as a count.
 
 Every document is validated against its schema before anything is written, and the files are
 swapped in together, so a failed run leaves the previous output whole. Output is byte-for-byte
@@ -27,7 +29,7 @@ from .candidates import published
 from .ledger import days_discussed
 
 SCHEMAS = REPO / "schemas"
-STAGES = ("rules", "merge", "ledger", "use_bar", "org_cap", "cap", "keep")
+STAGES = ("rules", "merge", "ledger", "use_bar", "org_cap", "cap", "score", "keep")
 
 
 class Validator:
@@ -133,12 +135,15 @@ def _coverage(ctx, ids):
     return out
 
 
-def _threads(ctx, ids):
+def _threads(ctx, ids, mentions=()):
     o = ctx.t["output"]
     store, at = ctx.store, ctx.at
     marks = ",".join("?" * len(ids))
+    extra = list(mentions) or [""]
+    emarks = ",".join("?" * len(extra))
     rows = store.q(f"""SELECT mention_id, source_id, url, title, posted_at FROM mentions
-                       WHERE story_id IN ({marks}) AND kind IN ('thread', 'post') AND first_seen_at <= ?""", (*ids, at))
+                       WHERE (story_id IN ({marks}) OR mention_id IN ({emarks})) AND kind IN ('thread', 'post')
+                       AND first_seen_at <= ?""", (*ids, *extra, at))
     threads = []
     for mid, src, url, title, posted in rows:
         e = signals._latest(store, mid, at)
@@ -197,11 +202,13 @@ def _compact_signals(g):
         return {"likes": _num(g.info.get("likes", 0))}
     if g.section == "press_policy":
         return {"techmeme": bool(g.info.get("techmeme"))}
+    if g.section == "discussion" and "points" in g.info:
+        return {"points": g.info["points"]}
     return {}
 
 
 def index_line(ctx, g):
-    d = ctx.discussion(g.members)
+    d = ctx.discussion(g.members, g.mentions)
     s = g.story
     cov = _coverage(ctx, g.members)
     line = {
@@ -227,7 +234,7 @@ def index_line(ctx, g):
 def detail(ctx, g):
     o = ctx.t["output"]
     s = g.story
-    d = ctx.discussion(g.members)
+    d = ctx.discussion(g.members, g.mentions)
     cov = _coverage(ctx, g.members)
     members = [{"story_id": sid, "section": m["section"], "title": m["title"], "sources": m["sources"],
                 "url": m["artifact_urls"][0] if m["artifact_urls"] else None, "published_at": published(m)}
@@ -255,9 +262,9 @@ def detail(ctx, g):
         "published_at": published(s), "first_seen": s["first_seen"], "tier": g.tier, "status": g.status,
         "sources": g.sources, "summary": summary(ctx, g), "members": members,
         "triage": {"mode": ctx.mode, "rank": g.rank, "score": g.info.get("score"), "relevant": g.info.get("relevant"),
-                   "why": g.info.get("why"), "same_as": g.info.get("same_as"),
-                   "prompt_version": g.info.get("prompt_version"), "model": g.info.get("model")},
-        "signals": sig, "discussion": _threads(ctx, g.members), "covered_by": cov,
+                   "why": g.info.get("why"), "same_as": None,
+                   "prompt_version": (ctx.scoring or {}).get("prompt_version"), "model": (ctx.scoring or {}).get("model")},
+        "signals": sig, "discussion": _threads(ctx, g.members, g.mentions), "covered_by": cov,
         "mainstream_at": cov[0]["date"] if cov else None, "full_text": full, "raw_refs": list(dict.fromkeys(refs)),
     }
     if doc["summary"] != s["summary"]:
@@ -281,6 +288,9 @@ def log_line(g):
             "candidate": bool(g.info.get("candidate")), "status": g.status}
     if g.info.get("merged_into"):
         line["merged_into"] = g.info["merged_into"]
+    for key in ("why", "relevant", "score"):
+        if key in g.info:
+            line[key] = g.info[key]
     if g.alive and len(g.members) > 1:
         line["merged"] = g.members[1:]
     sig = _compact_signals(g)
@@ -338,18 +348,30 @@ def header(ctx, groups, run_date, ledger_doc, degraded):
         reasons.append(f"sources failed or partial in the day's collect runs: {', '.join(failed)}")
     # Papers are left out: Hugging Face Daily Papers is a tier-1 source, so every paper is tier 1,
     # and their drops are the ranking working (triage_log.jsonl has them all).
+    # The model's drops are left out too: nothing the skill reads lists them (triage_log.jsonl does).
     tier1 = [{"id": g.id, "section": g.section, "title": g.story["title"], "stage": g.stage, "reason": g.reason}
              for g in section_order(ctx, groups)
-             if not g.alive and g.tier == 1 and g.stage != "merge" and g.section != "papers"]
+             if not g.alive and g.tier == 1 and g.stage not in ("merge", "score") and g.section != "papers"]
     return {
         "kind": "triage", "date": run_date, "at": ctx.at, "status": "degraded" if reasons else "ok",
-        "degraded_reasons": reasons, "mode": ctx.mode,
+        "degraded_reasons": reasons, "mode": ctx.mode, "scoring": ctx.scoring,
         "ledger": {"kind": ledger_doc["kind"], "stories": len(ledger_doc["dates"]), "errors": ledger_doc["errors"]},
         "collect": coll, "failed_sources": failed, "stages": stages,
         "candidates": sum(st["candidates"] for st in stages.values()),
         "kept": sum(st["kept"] for st in stages.values()), "tier1_dropped": tier1,
         "finished_at": ctx.finished_at,
     }
+
+
+def _scoring_line(sc):
+    if sc.get("error"):
+        return [f"Scoring: **failed** ({_esc(sc['error'])[:300]}).", ""]
+    u = sc.get("usage") or {}
+    how = "replayed from the cache" if sc.get("cached") else f"{sc.get('attempts')} attempt(s), {u.get('duration_s')} s"
+    return [f"Scoring: {sc['model']} ({sc['prompt_version']}), {how}; {u.get('input_tokens', 0):,} input and "
+            f"{u.get('output_tokens', 0):,} output tokens ({u.get('thinking_tokens', 0):,} thinking), "
+            f"${u.get('cost_usd_list_price', 0)} at list price (on the Max plan, quota rather than a bill)."
+            + (f" Notes: {_esc('; '.join(sc['notes'][:5]))}." if sc.get("notes") else ""), ""]
 
 
 def _esc(s):
@@ -361,10 +383,12 @@ def render(ctx, h, groups, kept):
          f"# Triage {h['date']}", "",
          f"Status: **{h['status']}**" + (f" ({'; '.join(h['degraded_reasons'])})" if h["degraded_reasons"] else "") +
          f". Mode: {h['mode']}. Data as of {h['at']}. {h['candidates']} candidates, {h['kept']} kept.", "",
+         *(_scoring_line(h["scoring"]) if h["scoring"] else []),
          f"Ledger: {h['ledger']['kind']} ({h['ledger']['stories']} stories)" +
          (f"; errors: {'; '.join(h['ledger']['errors'])}" if h["ledger"]["errors"] else "") + ".", "",
          "## Stages", "",
-         "How many stories entered each section's pool, how many each stage dropped, and what's left.", "",
+         "How many stories entered each section's pool, how many each stage dropped, and what's left. "
+         "`score` is what the model found not relevant; those are listed only in triage_log.jsonl.", "",
          "| Section | Pool | " + " | ".join(STAGES) + " | Candidates | Kept |",
          "|---|---|" + "---|" * len(STAGES) + "---|---|"]
     for sec, st in h["stages"].items():
@@ -375,8 +399,9 @@ def render(ctx, h, groups, kept):
         rows = [line for line in kept if line["section"] == sec]
         if not rows:
             continue
-        L += [f"### {sec} ({len(rows)})", "", "| # | Story | Sources | Discussion | Notes |", "|---|---|---|---|---|"]
-        for line in sorted(rows, key=lambda x: x["rank"]):
+        L += [f"### {sec} ({len(rows)})", "", "| Score | Story | Why | Sources | Discussion | Notes |",
+              "|---|---|---|---|---|---|"]
+        for line in rows:
             notes = []
             if line.get("merged"):
                 notes.append(f"+{len(line['merged'])} merged")
@@ -388,12 +413,13 @@ def render(ctx, h, groups, kept):
             if line["status"] == "update":
                 notes.append(f"update (reported {line['prev_reported']})")
             d = line["discussion"]
-            L.append(f"| {line['rank']} | {_esc(line['title'][:110])} `{line['id']}` | {', '.join(line['sources'])} "
+            L.append(f"| {line['score'] if line['score'] is not None else '–'} | {_esc(line['title'][:110])} `{line['id']}` "
+                     f"| {_esc(line['why'] or '')} | {', '.join(line['sources'])} "
                      f"| {d['band']}, {d['trend']} | {_esc('; '.join(notes))} |")
         L.append("")
-    merged = [g for g in section_order(ctx, groups) if len(g.members) > 1 and (g.alive or g.info.get("candidate"))]
+    merged = [g for g in section_order(ctx, groups) if len(g.members) > 1 and g.alive]
     if merged:
-        L += ["## Merged and grouped", "", "Candidates made of more than one story, with what was folded in.", ""]
+        L += ["## Merged and grouped", "", "Kept stories made of more than one story, with what was folded in.", ""]
         for g in merged:
             L.append(f"- `{g.id}` {_esc(g.story['title'][:100])}")
             for sid in g.members[1:]:
@@ -427,7 +453,8 @@ def build(ctx, groups, run_date, ledger_doc, degraded, validator):
         validator.validate("index_line", line)
         lines.append(line)
     sec_rank = {sec: i for i, sec in enumerate(ctx.t["sections"])}
-    lines.sort(key=lambda x: (sec_rank[x["section"]], -times.parse(x["published_at"]).timestamp(), x["id"]))
+    lines.sort(key=lambda x: (sec_rank[x["section"]], -(x["score"] or 0), -times.parse(x["published_at"]).timestamp(),
+                              x["id"]))
     files = {"stories_index.jsonl": "".join(dumps(x) + "\n" for x in lines)}
     for g in kept:
         doc = detail(ctx, g)

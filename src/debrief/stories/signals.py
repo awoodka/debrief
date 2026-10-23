@@ -78,17 +78,20 @@ def _ids(story_ids):
     return ids, ",".join("?" * len(ids))
 
 
-def discussion(store, settings, story_ids, at, dists=None):
+def discussion(store, settings, story_ids, at, dists=None, mentions=()):
     """{band, spread, where, trend, by_source} for a story, or a list of stories taken as one, as
-    of `at`."""
+    of `at`. `mentions` adds threads attached in memory (triage's same_as), with their comments."""
     ob, ot = settings["bands"], settings["trend"]
     dists = dists or Distributions(store, at, ob["window_days"], ob.get("floor"))
     ids, marks = _ids(story_ids)
+    extra = list(mentions) or [""]
+    emarks = ",".join("?" * len(extra))
     # A comment counts under its thread's source: HN comment trees are still HN (one community).
     rows = store.q(f"""SELECT m.mention_id, COALESCE(p.source_id, m.source_id), m.kind FROM mentions m
                        LEFT JOIN mentions p ON p.mention_id = m.parent_id
-                       WHERE m.story_id IN ({marks}) AND m.kind != 'reference' AND m.first_seen_at <= ?
-                       ORDER BY m.mention_id""", (*ids, at))
+                       WHERE (m.story_id IN ({marks}) OR m.mention_id IN ({emarks}) OR m.parent_id IN ({emarks}))
+                       AND m.kind != 'reference' AND m.first_seen_at <= ?
+                       ORDER BY m.mention_id""", (*ids, *extra, *extra, at))
     by_source = {}
     for mid, src, kind in rows:
         b = by_source.setdefault(src, {"threads": 0, "comments_captured": 0, "points": 0, "comments": 0, "pctl": None})
@@ -117,14 +120,16 @@ def discussion(store, settings, story_ids, at, dists=None):
     else:
         band = "heavy" if spread >= 3 else "notable" if spread >= 2 else "some"
     return {"band": band, "spread": spread, "where": sorted(by_source), "by_source": by_source,
-            "trend": trend(store, ids, at, ot)}
+            "trend": trend(store, ids, at, ot, mentions)}
 
 
-def trend(store, story_ids, at, o):
+def trend(store, story_ids, at, o, mentions=()):
     ids, smarks = _ids(story_ids)
-    threads = [r[0] for r in store.q(f"""SELECT mention_id FROM mentions WHERE story_id IN ({smarks})
-                                         AND kind IN ('thread', 'post') AND first_seen_at <= ? ORDER BY mention_id""",
-                                     (*ids, at))]
+    extra = list(mentions) or [""]
+    emarks = ",".join("?" * len(extra))
+    threads = [r[0] for r in store.q(f"""SELECT mention_id FROM mentions WHERE (story_id IN ({smarks})
+                                         OR mention_id IN ({emarks})) AND kind IN ('thread', 'post')
+                                         AND first_seen_at <= ? ORDER BY mention_id""", (*ids, *extra, at))]
     if not threads:
         return "unknown"
     marks = ",".join("?" * len(threads))

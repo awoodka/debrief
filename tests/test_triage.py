@@ -268,7 +268,7 @@ def full_day(tmp_path):
 
 def test_outputs_validate_are_ordered_and_byte_identical_on_a_rerun(tmp_path):
     cfg, ids = full_day(tmp_path)
-    h, out = run.run(cfg, run_date="2026-10-23", at=AT)
+    h, out, _ = run.run(cfg, run_date="2026-10-23", at=AT, model=False)
     assert h["status"] == "degraded" and h["mode"] == "rules_only" and h["kept"] == 8
     lines = [json.loads(x) for x in (out / "stories_index.jsonl").read_text().splitlines()]
     assert [x["section"] for x in lines] == ["papers", "papers", "releases", "announcements",
@@ -287,7 +287,7 @@ def test_outputs_validate_are_ordered_and_byte_identical_on_a_rerun(tmp_path):
     report = (out / "run_report.md").read_text()
     assert report.startswith("```json") and "## Stages" in report
     before = {p.relative_to(out): p.read_bytes() for p in out.rglob("*") if p.is_file()}
-    run.run(cfg, run_date="2026-10-23", at=AT)
+    run.run(cfg, run_date="2026-10-23", at=AT, model=False)
     after = {p.relative_to(out): p.read_bytes() for p in out.rglob("*") if p.is_file()}
     assert before == after
 
@@ -326,7 +326,7 @@ def test_a_hub_model_is_summarized_by_its_cards_first_prose_paragraph(tmp_path):
                                          url="https://huggingface.co/lab/Big-1/raw/main/README.md",
                                          page={"status": 200, "text": card, "links": []})])
     s.close()
-    _, out = run.run(cfg, run_date="2026-10-23", at=AT)
+    _, out, _ = run.run(cfg, run_date="2026-10-23", at=AT, model=False)
     line = json.loads((out / "stories_index.jsonl").read_text().splitlines()[0])
     assert line["gist"] == "Big-1 is a 30B mixture-of-experts model for coding agents."
     d = json.loads((out / line["detail"]).read_text())

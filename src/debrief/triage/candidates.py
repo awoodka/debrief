@@ -15,6 +15,8 @@ The stages, in order. triage/run.py logs every drop with its stage.
   rules    hard rules (brief 6.2): no title, or a blocklisted domain or pattern
   merge    stories that are one thing become one candidate (triage/merge.py)
   ledger   already in a brief, unless there's meaningful new discussion (triage/ledger.py)
+  threads  the most-discussed threads of the last 48 hours that attached to no story join the
+           discussion section, for the scoring call (triage/score.py)
   order and cap, per section:
              papers         the use bar, then rank fusion; at most max_per_org per organization
              releases       tier, then likes, then story_id
@@ -63,6 +65,11 @@ class Group:
     def sources(self):
         return list(dict.fromkeys(x for sid in self.members for x in self.stories[sid]["sources"]))
 
+    @property
+    def mentions(self):
+        """Threads attached in memory (a thread candidate, or one the model's same_as folded in)."""
+        return self.info.get("thread_mentions", [])
+
     def drop(self, stage, reason):
         self.stage, self.reason = stage, reason
 
@@ -71,6 +78,9 @@ class Group:
             if sid not in self.stories:
                 self.members.append(sid)
                 self.stories[sid] = other.stories[sid]
+        for m in other.mentions:
+            if m not in self.mentions:
+                self.info.setdefault("thread_mentions", []).append(m)
 
 
 def published(s):
@@ -99,10 +109,11 @@ class Ctx:
         self.section_sources = section_sources(cfg)
         self._discussion = {}
 
-    def discussion(self, story_ids):
-        key = tuple(sorted(story_ids))
+    def discussion(self, story_ids, mentions=()):
+        key = (tuple(sorted(story_ids)), tuple(sorted(mentions)))
         if key not in self._discussion:
-            self._discussion[key] = signals.discussion(self.store, self.settings, list(key), self.at, self.dists)
+            self._discussion[key] = signals.discussion(self.store, self.settings, list(key[0]), self.at, self.dists,
+                                                       mentions=key[1])
         return self._discussion[key]
 
 
@@ -293,7 +304,7 @@ def press_facts(ctx, g):
     techmeme = bool(ctx.store.one(f"""SELECT 1 FROM coverage c JOIN mentions m ON m.mention_id = c.mention_id
                                       WHERE c.story_id IN ({marks}) AND c.source_id = 'techmeme'
                                       AND m.first_seen_at <= ? LIMIT 1""", (*g.members, ctx.at)))
-    d = ctx.discussion(g.members)
+    d = ctx.discussion(g.members, g.mentions)
     newest = max(published(g.stories[sid]) for sid in g.members)
     return {"outlets": outlets, "techmeme": techmeme, "band": d["band"], "newest": newest}
 
@@ -316,6 +327,31 @@ def _cap(order, cap, what):
         g.rank = i
         if i > cap:
             g.drop("cap", f"{what} #{i}, over the cap of {cap}")
+
+
+def threads(ctx, ledger_doc):
+    """[Group] for the discussion.max_threads most-discussed threads posted in the last
+    discussion.window_hours that attached to no story and aren't already in a brief: at least
+    the source's bands.floor in points, ordered by points, then id."""
+    from .score import thread_story
+    o = ctx.t["discussion"]
+    floors = ctx.settings["bands"].get("floor") or {}
+    marks = ",".join("?" * len(o["sources"]))
+    rows = ctx.store.q(f"""SELECT * FROM mentions WHERE source_id IN ({marks}) AND kind = 'thread' AND story_id IS NULL
+                           AND posted_at > ? AND posted_at <= ? AND first_seen_at <= ?""",
+                       (*o["sources"], since(ctx.at, o["window_hours"]), ctx.at, ctx.at))
+    found = []
+    for m in rows:
+        e = signals._latest(ctx.store, m["mention_id"], ctx.at)
+        pts = e.get("points") or 0
+        if pts >= floors.get(m["source_id"], 0) and "hn:" + m["item_key"] not in ledger_doc["dates"]:
+            found.append((-pts, m["mention_id"], dict(m), e))
+    out = []
+    for i, (neg, mid, m, e) in enumerate(sorted(found)[: o["max_threads"]], 1):
+        s = thread_story(ctx, m, -neg, e.get("comments") or 0)
+        out.append(Group(id=s["story_id"], section="discussion", members=[s["story_id"]], stories={s["story_id"]: s},
+                         rank=i, info={"thread_mentions": [mid], "points": -neg, "candidate": True}))
+    return out
 
 
 ORDER = {"papers": order_papers, "releases": order_releases, "announcements": order_announcements,

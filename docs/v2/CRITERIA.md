@@ -94,7 +94,9 @@ The rule from the brief, a topic with at least 3 independent sources, comes back
 
 The caps add up to 100, plus the 30 threads. A normal day runs about 80–90 candidates: about 30 announcements, 30 press, 15 papers, and a few releases.
 
-## The model call (Haiku 5.5, one call per run)
+## The model call (Sonnet 5.5, one call per run)
+
+The model is `scoring.model` in `triage.yml`. It was planned as Haiku 5.5; the calibration below moved it to Sonnet 5.5.
 
 **Input**, delimited as data, in the deterministic order above:
 - every candidate: its id, section, source and organization; its title; its summary, plus the start of its page when the summary is short, about 1,000 characters in all; its signals
@@ -119,7 +121,14 @@ Writing `why` before deciding makes the decision a reasoned one. Code checks the
 
 **Repeatability.** The answer is cached by a hash of the input, the prompt version, `relevance.md` and the model, so re-running triage on the same data replays it and writes the same index.
 
-**Calibration.** The 120 items of 2026-10-23 (90 candidates and the 30 threads), labeled with Alex, are in `tests/fixtures/relevance/2026-10-23.jsonl`: 38 relevant, 82 not. Before the call is trusted, its agreement with those labels is measured, Haiku against Sonnet 5.5 if Haiku misses on the edges. The worked examples in `relevance.md` come from those same items, so that score is optimistic; the next days' runs are the real check.
+**Calibration.** The 120 items of 2026-10-23 (90 candidates and the 30 threads), labeled with Alex, are in `tests/fixtures/relevance/2026-10-23.jsonl`: 38 relevant, 82 not. `debrief calibrate` scores them and compares. Each model ran twice:
+
+| | Agreement | Relevant kept | Not relevant let through | Answers that flipped between runs | Time |
+|---|---|---|---|---|---|
+| Haiku 5.5 | 118, then 115 of 120 | 38, then 37 of 38 | 2, then 4 | 5 (Spotify's agents, Linux kernel leaks, WeVisOne, TB screening, the PHP embargo thread) | 134 s, 107 s |
+| Sonnet 5.5 | 119, then 119 | 38, 38 | 1, 1 (inDrive's robotaxi tests) | 0 | 44 s, 45 s |
+
+Haiku thinks before answering (15k tokens of it), which is why it was slower. So the default is Sonnet. The worked examples in `relevance.md` come from those same items, so these numbers are optimistic; the next days' runs are the real check.
 
 **Degraded mode.** If the call fails (auth, quota, a timeout, or invalid output after one retry), each section keeps its first `fallback_keep` candidates in the deterministic order, and the run is marked `degraded`.
 

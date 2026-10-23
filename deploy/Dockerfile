@@ -10,7 +10,7 @@ FROM python:3.13-slim AS base
 
 LABEL app=debrief-v2
 
-ARG CLAUDE_VERSION=2.1.270
+ARG CLAUDE_VERSION=2.1.309
 ARG CLAUDE_PLATFORM=linux-x64
 
 # Claude Code, pinned: fetch exactly this release and verify it against the published SHA-256.

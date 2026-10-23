@@ -432,3 +432,28 @@ M4 is done when:
 - a live day triages and reports its token use
 - a re-run is all cache hits with byte-identical output
 - a forced failure produces a degraded index
+
+## M4 results (2026-10-23)
+
+What M4 adds:
+- **The scoring call** (`triage/score.py`, `prompts/score_v1.md`): the payload, the call through Claude Code (2.1.309, now pinned in the image), validation, the cache, one retry, and applying the answers (same_as merges, reported stories back as updates, drops).
+- **The unattached threads** join the discussion section.
+- **`debrief calibrate`**, the labeled set, and the model comparison (CRITERIA.md "Calibration"). It moved the default from Haiku 5.5 to Sonnet 5.5: 119 of 120 twice, no flips, and faster.
+- **Degraded mode, usage reporting, and the API-key guard.**
+- There are 142 tests. The call is a stub in tests.
+
+**Live, on 2026-10-23, with Sonnet 5.5:**
+- **The call:** one call, 42 s, 42,847 input and 7,233 output tokens ($0.23 at list price; quota on the Max plan).
+- **Result:** 122 candidates (90, the 30 threads, and 2 reported stories brought back), 38 kept: 7 papers, 6 releases, 7 announcements, 13 press, 5 discussion. The model dropped 80.
+- **A re-run** replayed the cache and wrote byte-identical files.
+- **A forced failure** (an unknown model) retried once, then fell back to the rules-only keep, marked degraded with the reason.
+- **What the model merged:**
+  - TechCrunch's "OpenAI makes its Jev competitor widely available" into the Decisions API announcement from the 2026-10-22 index, which came back as an update
+  - two PHP2Shell threads (608 and 313 points) into the Ars article from that index, also back as an update
+  - inDrive's robotaxi tests into NVIDIA's Kazakhstan post, which does mention them
+- **New in the index from the threads:** Kimi K3.1 Pro (4), Sweden's government ban on ChatGPT and Claude (4), NVIDIA OpenShell (4), Google's Finnish data center (3), WorldTUI (3).
+
+Left for later:
+- **A thread story is only its title, points and link.** The collector reads comment trees and pages only for stories, so Kimi K3.1 Pro was "guessed from title and link". Fetching the link and the tree for the threads that make the index would give the skill more to read.
+- **M5** (more sources, which also bring back the 3-source topic rule) and **M6** (the weekly newsletter recall check).
+- **The skill and the timers.**
