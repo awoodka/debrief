@@ -8,7 +8,7 @@ v2 replaces the v1 collector and its five-seat council with three layers:
 
 [PLAN.md](PLAN.md) is the approved design. [CRITERIA.md](CRITERIA.md) holds the rules for what makes it into the index. [BRIEF.md](BRIEF.md) is the original brief; where they disagree, the plan and the criteria win. [SOURCES.md](SOURCES.md) is the latest source probe.
 
-Status: **M0–M4 are done; M5 is built** (one decision left: whether to drop the AWS ML and NVIDIA developer blogs).
+Status: **M0–M5 are done.**
 - **M0:** the source probe.
 - **M1:** `collect` with the raw store, the seen-set and story building.
 - **M2:** discussion attached to stories (Hacker News threads and comment trees, Hugging Face paper comments, newsletter and Techmeme coverage); signal snapshots (paper upvotes, repo stars, models built on a paper); the model-release sources; discussion levels and trend.

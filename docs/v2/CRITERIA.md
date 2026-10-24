@@ -29,7 +29,7 @@ A story's section comes only from its source's `kind`, mapped through `settings.
 |---|---|
 | papers | arxiv-rss, hf-daily-papers. hf-trending-papers is a signal, not a source of stories (2026-10-24): its top 100 were mostly old papers with popular repos, and its recent ones were already in the pool |
 | releases | hf-org-watch (25 labs), hf-trending-models, openrouter-models, deepseek-github, lmarena |
-| announcements | 19 lab and company blogs (OpenAI, DeepMind, Google ×3, Anthropic ×2, Meta, Microsoft Research, Mistral, Cohere, Ai2, Apple, Thinking Machines, NVIDIA ×2, Hugging Face, AWS, Together) |
+| announcements | 17 lab and company blogs (OpenAI, DeepMind, Google ×3, Anthropic ×2, Meta, Microsoft Research, Mistral, Cohere, Ai2, Apple, Thinking Machines, NVIDIA, Hugging Face, Together). The AWS ML and NVIDIA developer blogs were dropped on 2026-10-24: 28 candidates over two scored days, none kept. |
 | press_policy | TechCrunch, Ars Technica, MIT Technology Review, MIT News, The Verge, Wired, NIST, UK AISI. The Federal Register, SEC EDGAR and the OpenAI and Anthropic status pages were dropped on 2026-10-23: anything major they'd carry reaches the press and lab sources. |
 | discussion | none. These stories are clusters of discussion posts (M2) |
 

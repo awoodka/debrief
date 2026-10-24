@@ -206,6 +206,7 @@
   notes: worked in v1
 
 - id: nvidia-dev-blog
+  enabled: false
   name: NVIDIA developer blog
   adapter: rss
   roles: [anchor]
@@ -214,7 +215,7 @@
   org: NVIDIA
   url: https://developer.nvidia.com/blog/feed
   probe: {kind: feed}
-  notes: verify
+  notes: 'dropped 2026-10-24 (Alex): 7 candidates on the two scored days (2026-10-23, 10-24), 0 kept (TensorRT tuning series, robot tutorials). Real NVIDIA news reaches nvidia-blog and the press. Before: verify'
 
 - id: apple-ml
   name: Apple Machine Learning Research
@@ -239,6 +240,7 @@
   notes: feed advertised by the blog; posts are infrequent
 
 - id: aws-ml-blog
+  enabled: false
   name: AWS Machine Learning blog
   adapter: rss
   roles: [anchor]
@@ -247,7 +249,7 @@
   org: AWS
   url: https://aws.amazon.com/blogs/machine-learning/feed/
   probe: {kind: feed}
-  notes: verify
+  notes: 'dropped 2026-10-24 (Alex): 21 candidates on the two scored days (2026-10-23, 10-24), 0 kept (SageMaker how-tos, customer stories). Real AWS news reaches the press. Before: verify'
 
 - id: together-ai-blog
   name: Together AI blog

@@ -133,11 +133,11 @@ def test_announcement_sources_take_turns_over_the_cap(tmp_path):
     apply(s, cfg, "nvidia-blog", [post(f"n{i}", f"NVIDIA keynote news number {i}", f"2026-10-23T0{i}:00:00Z")
                                   for i in range(1, 6)])
     apply(s, cfg, "openai-news", [post("o1", "An OpenAI post about models", "2026-10-22T20:00:00Z")])
-    apply(s, cfg, "aws-ml-blog", [post("a1", "An AWS post about inference", "2026-10-23T01:00:00Z")])
+    apply(s, cfg, "together-ai-blog", [post("a1", "A Together post about inference", "2026-10-23T01:00:00Z")])
     _, groups = select(s, cfg)
     titles = [next(g for g in groups["announcements"] if g.id == x).story["title"] for x in alive(groups, "announcements")]
-    # tier 1 in sources.yml order (OpenAI before NVIDIA), then tier 2 (AWS); NVIDIA's newest first
-    assert titles == ["An OpenAI post about models", "NVIDIA keynote news number 5", "An AWS post about inference",
+    # tier 1 in sources.yml order (OpenAI before NVIDIA), then tier 2 (Together); NVIDIA's newest first
+    assert titles == ["An OpenAI post about models", "NVIDIA keynote news number 5", "A Together post about inference",
                       "NVIDIA keynote news number 4"]
 
 

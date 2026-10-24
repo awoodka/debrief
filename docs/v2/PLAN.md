@@ -517,4 +517,4 @@ Calibration with the revised prompt (it now describes LessWrong posts): 118 and 
 
 Regression: rules-only triage on a frozen copy of the state for 10-22, 10-23 and 10-24 is byte-identical to the code before M5, and so is the scoring call's user message.
 
-The pruning decision on the AWS ML and NVIDIA developer blogs: on the two scored days, aws-ml-blog gave 21 candidates and 0 kept, nvidia-dev-blog 7 and 0. (NVIDIA's main blog: 1 of 7.)
+The pruning decision on the AWS ML and NVIDIA developer blogs: on the two scored days, aws-ml-blog gave 21 candidates and 0 kept, nvidia-dev-blog 7 and 0 (NVIDIA's main blog: 1 of 7). Alex dropped both (`enabled: false`, with the numbers in their notes). M5 is done.
