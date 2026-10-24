@@ -27,7 +27,7 @@ def markdown(doc):
             sp = s["split"]
             L += [f"- **For:** {sp['for']}", f"- **Against:** {sp['against']}", f"- **My read:** {sp['read']}", ""]
         for q in s["quotes"]:
-            who = ", ".join(x for x in (q["author"], q["source"]) if x)
+            who = ", ".join(x for x in (q["author"], q["source"]) if x) or ("source" if q["url"] else "")
             L += [f"> {q['text']}" + (f" ({_link(who, q['url'])})" if who else ""), ""]
         L += [f"_Sources: {_sources(doc, s['stories'])}_", ""]
     if doc["updates"]:

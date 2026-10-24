@@ -233,3 +233,61 @@ def test_days_before_the_first_brief_count_by_their_index(tmp_path):
     # 10-22 is from before there were briefs; 10-24's brief failed, so it reported nothing
     assert got["kind"] == "reported" and got["dates"] == {"a": ["2026-10-22"], "b": ["2026-10-23"], "b2": ["2026-10-23"]}
     assert ledger.load(tmp_path, "2026-10-23")["kind"] == "index"
+
+
+# ------------------------------------------------------------------------------------ the session
+
+def test_the_session_gets_the_skill_and_nothing_else(tmp_path):
+    from debrief.brief import run
+    cfg, day = setup_day(tmp_path)
+    argv = run.argv_for(day)
+    assert argv[:3] == ["claude", "-p", f"/debrief:brief {DATE}"]
+    opt = {a: argv[i + 1] for i, a in enumerate(argv) if a.startswith("--") and i + 1 < len(argv)}
+    assert opt["--setting-sources"] == "" and opt["--plugin-dir"].endswith("/skill")
+    assert opt["--tools"] == "Read,Write,Edit,WebFetch" and opt["--permission-mode"] == "dontAsk"
+    assert opt["--model"] == cfg.settings["brief"]["model"]
+    assert "--bare" not in argv and "--disable-slash-commands" not in argv
+    s = json.loads(opt["--settings"])
+    assert f"Edit(/{day.dir}/brief.draft.json)" in s["permissions"]["allow"]
+    assert "Read(./triage_log.jsonl)" in s["permissions"]["deny"]
+    assert s["hooks"]["PreToolUse"][0]["matcher"] == "WebFetch"
+    assert s["hooks"]["Stop"][0]["hooks"][0]["command"].endswith("-P -m debrief brief hook stop")
+
+
+def stream(*events):
+    return "".join(json.dumps(e) + "\n" for e in events)
+
+
+INIT = {"type": "system", "subtype": "init", "session_id": "sess-1", "model": "claude-opus-5-5",
+        "tools": ["Read", "Write", "Edit", "WebFetch"], "plugins": [{"name": "debrief", "path": "/app/skill"}]}
+RESULT = {"type": "result", "subtype": "success", "is_error": False, "session_id": "sess-1", "num_turns": 12,
+          "duration_ms": 95000, "total_cost_usd": 1.5, "modelUsage": {"claude-opus-5-5": {}},
+          "usage": {"input_tokens": 10, "cache_read_input_tokens": 50000, "output_tokens": 4000},
+          "permission_denials": [{"tool_name": "Read"}]}
+
+
+def test_a_run_writes_the_brief_with_the_session_in_its_meta(tmp_path):
+    from debrief.brief import run
+    cfg, day = setup_day(tmp_path)
+    seen = {}
+
+    def stub(argv, cwd, env, timeout):
+        seen.update(cwd=cwd, env=env)
+        (cwd / "brief.draft.json").write_text(json.dumps(good_draft(day)))
+        return 0, stream(INIT, RESULT), ""
+    write_draft(day, {"left": "over"})                        # moved aside by context, not reused
+    doc, ses = run.run(cfg, DATE, runner=stub, log=lambda *a: None)
+    assert seen["cwd"] == day.dir and seen["env"]["DEBRIEF_BRIEF_DATE"] == DATE and "ANTHROPIC_API_KEY" not in seen["env"]
+    assert doc["mode"] == "written" and (day.dir / "reported.json").exists()
+    assert (ses["plugin_loaded"], ses["webfetch"], ses["turns"], ses["input_tokens"], ses["denied"]) == (True, True, 12, 50010, 1)
+    assert doc["meta"]["session"] == ses and (day.dir / "brief_session.jsonl").read_text().count("\n") == 2
+
+
+def test_a_failed_session_still_gives_the_scan(tmp_path):
+    from debrief.brief import run
+    cfg, day = setup_day(tmp_path)
+    warnings = []
+    doc, ses = run.run(cfg, DATE, runner=lambda *a: (124, stream({**INIT, "tools": ["Read"], "plugins": []}), "timed out"),
+                       log=warnings.append)
+    assert doc["mode"] == "scan_only" and ses["result"] == "timeout" and ses["error"]
+    assert not (day.dir / "reported.json").exists() and len(warnings) == 2           # no plugin, no WebFetch

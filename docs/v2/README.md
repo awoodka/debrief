@@ -154,6 +154,35 @@ The rules are in [CRITERIA.md](CRITERIA.md) and every threshold is in `config/tr
 
 The index is grouped by section, then by score, then newest first, never by volume. Stories the model dropped are written only to `triage_log.jsonl`; the run report gives their count. Each line's `gist` is Hugging Face's AI summary for a paper, and otherwise the first sentence of the story's summary. A Hugging Face model's stored summary is repo metadata ("text-generation · transformers · license mit"), so its summary in the index is its model card's first prose paragraph instead, and the metadata moves to `model_info`. Every file is validated against its schema before anything is written, and the files are swapped in together.
 
+## How the brief works
+
+The brief is layer 3: the day's triage output becomes an article-style brief, written in the voice of a senior advisor keeping an informed peer current on the field. The skill decides what goes in the article; code does everything around it. The brief is data, not a page: `brief.json` is what a page renders, and styling lives with the page.
+
+`debrief brief run --date D` (`src/debrief/brief/run.py`) runs four steps:
+
+1. **context.** Writes `brief_context.json`, the skill's first read. It holds triage's status for the day, failed sources, the follow-ups (`status: update`), what the last 3 briefs covered, and the limits.
+2. **The skill.** It runs as a Claude Code session in the run folder: `claude -p "/debrief:brief D"`, on Opus 5.5, on the Max plan. The skill is a plugin folder, `skill/` (`SKILL.md`, plus `references/voice.md` and `references/format.md`), loaded with `--plugin-dir` and `--setting-sources ""`, so v1's `.claude/` commands and agents never load. The session's limits:
+   - **Tools:** Read, Write, Edit and WebFetch, with no shell.
+   - **Allowed:** reading the skill folder, writing `brief.draft.json`, and WebFetch.
+   - **Denied:** reading `triage_log.jsonl` (triage's drops are never shown to the skill), the collect reports, the session's own logs and old drafts.
+   - **WebFetch:** a hook allows at most 5 per run (the 6th is refused), and only to sites today's stories link to, so a link planted in a comment can't be fetched. Every call is logged in `brief_fetches.jsonl`.
+   - **A Stop hook** runs the check (`debrief brief check`). While the draft fails it, the session can't end, and the errors go back to the model.
+3. **The draft.** The model writes only `brief.draft.json` (`schemas/brief_draft.schema.json`): headline, `what_happened` (3–6 events tied to story ids), lead, sections (heading, body, stories, an optional for/against/read split, verbatim quotes), updates, notes, and why it fetched each page. The check rejects:
+   - ids that aren't in today's index;
+   - quotes that aren't word for word in the detail files;
+   - links or ids inside prose;
+   - item counts out of range;
+   - long headings;
+   - an article far over the length aim (1,500–2,500 words).
+4. **finalize.** Writes three files:
+   - **`brief.json`** (`schemas/brief.schema.json`): the draft, plus the **scan** (every story triage kept, headline and gist, marked when the article covers it), each story's links and threads, quote attributions, the fetch log, and the session's model, tokens and time. Every link comes from the data, never from the model.
+   - **`brief.md`**, the same as plain text.
+   - **`reported.json`**, the ledger, written last: every story in the scan.
+
+   If the session fails or its draft never passes the check, the brief is **scan only** and no `reported.json` is written, so those stories come back the next day.
+
+The session's stream is kept in `brief_session.jsonl` and summarized in `brief_session.json`. `debrief brief context|check|finalize` run the steps one at a time.
+
 ## Data layout
 
 ```
@@ -165,7 +194,9 @@ $DEBRIEF_DATA_DIR/
   runs/<date>/stories/<id>.json        triage: everything about one kept story (schemas/story.schema.json)
   runs/<date>/triage_log.jsonl         triage: every story that entered a pool, and where it stopped
   runs/<date>/run_report.md            triage: a JSON header (schemas/report_header.schema.json), then tables
-  runs/<date>/reported.json            written by the skill: what went into that day's brief
+  runs/<date>/brief.json               the brief: what a page renders (schemas/brief.schema.json); also brief.md
+  runs/<date>/brief.draft.json         the skill's draft; brief_context.json, brief_fetches.jsonl, brief_session.*
+  runs/<date>/reported.json            written by brief finalize: every story the brief showed (the ledger)
   cache/score/<key>.json               the scoring call's answers, keyed by a hash of everything the call saw
   calibration/                         calibrate reports
   probe/                               probe-sources results
@@ -230,6 +261,8 @@ src/debrief/adapters/   base.py + rss, listing_page, hf_papers, arxiv, github_re
 src/debrief/store/      db.py (state DB), raw.py (raw store), migrations/*.sql
 src/debrief/stories/    build.py (items -> seen-set, stories, mentions, snapshots, pages), attach.py, signals.py
 src/debrief/triage/     candidates.py, merge.py, ledger.py, score.py, output.py, run.py, calibrate.py
+src/debrief/brief/      day.py, context.py, check.py, hooks.py, finalize.py, render.py, run.py
+skill/           the brief skill, a Claude Code plugin: skills/brief/SKILL.md and references/
 config/          settings.yml (UA, timeouts, rate buckets, collect), sources.yml (every source),
                  triage.yml (windows, caps, merge and blocklist rules, scoring), relevance.md (what's relevant)
 prompts/         score_v1.md: the scoring call's instructions (relevance.md is appended)

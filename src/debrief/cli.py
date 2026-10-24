@@ -14,9 +14,11 @@
                                          the day's candidates, the scoring call, the index (runs/<date>/)
   debrief calibrate [--model M] [--fresh]
                                          score the labeled calibration set; report agreement
+  debrief brief run [--date YYYY-MM-DD] [--model M]
+                                         the day's brief: context, the skill (Claude Code), finalize
   debrief brief context|check|finalize [--date YYYY-MM-DD]
-                                         around the brief skill: its context file, the draft's check,
-                                         and brief.json / brief.md / reported.json
+                                         the steps around the skill: its context file, the draft's
+                                         check, and brief.json / brief.md / reported.json
   debrief brief hook fetch|stop          the skill session's hooks (the fetch cap, the check on stop)
   debrief snapshot-fixtures              arrives in M6
 """
@@ -186,6 +188,15 @@ def _brief(args, cfg):
               f"{len(ctx['updates'])} updates, {len(ctx['failed_sources'])} failed sources, "
               f"{len(ctx['recent_briefs'])} earlier briefs · {day.dir / 'brief_context.json'}")
         return 0
+    if args.step == "run":
+        from .brief import run
+        doc, ses = run.run(cfg, day.date, model=args.model)
+        m = doc["meta"]
+        print(f"brief {day.date}: {doc['mode']} · {m['covered']} of {m['kept']} stories in the article, {m['words']} words, "
+              f"{sum(f['allowed'] for f in doc['fetches'])} fetches · session {ses['result']}, {ses['turns']} turns, "
+              f"{ses['duration_s']} s, {ses['input_tokens']:,} in / {ses['output_tokens']:,} out tokens, "
+              f"{ses['denied']} denied · {day.dir / 'brief.json'}")
+        return 0 if doc["mode"] == "written" else 3
     if args.step == "check":
         r = check(day)
         print(json.dumps(r, ensure_ascii=False, indent=1))
@@ -252,6 +263,9 @@ def main(argv=None):
 
     p = sub.add_parser("brief", help="the brief around the skill: context, check, finalize, and the skill's hooks")
     bsub = p.add_subparsers(dest="step", required=True)
+    bp = bsub.add_parser("run", help="the whole brief: context, the skill's Claude Code session, finalize")
+    bp.add_argument("--date", help="run date (default: today)")
+    bp.add_argument("--model", help="run the skill on this model instead of brief.yml's")
     for step, text in (("context", "write brief_context.json, the skill's first read"),
                        ("check", "check the skill's draft (exit 3 if it fails)"),
                        ("finalize", "write brief.json, brief.md and reported.json (scan only if the draft fails)")):

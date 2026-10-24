@@ -70,7 +70,8 @@ def build(day, result):
                                      *(sid for s in sections for sid in [*s["stories"], *(q["story"] for q in s["quotes"])]),
                                      *(u["story"] for u in updates)]))
     notes_by_url = draft.get("fetch_notes") or {}
-    fetches = [{"url": f["url"], "allowed": f["allowed"], "why": notes_by_url.get(f["url"])} for f in day.fetches()]
+    fetches = [{"url": f["url"], "allowed": f["allowed"], "why": notes_by_url.get(f["url"])}
+               for f in day.fetches(_session_id(day))]
     covered = set(referenced)
     return {"date": day.date, "mode": "written", "headline": draft["headline"], "what_happened": what,
             "lead": draft["lead"], "sections": sections, "updates": updates, "notes": draft.get("notes", []),
@@ -83,8 +84,13 @@ def scan_only(day, why):
     return {"date": day.date, "mode": "scan_only", "headline": "", "what_happened": [], "lead": "", "sections": [],
             "updates": [], "notes": ["The brief couldn't be written today. Below is every story triage kept."],
             "scan": _scan(day, set()), "stories": {},
-            "fetches": [{"url": f["url"], "allowed": f["allowed"], "why": None} for f in day.fetches()],
+            "fetches": [{"url": f["url"], "allowed": f["allowed"], "why": None} for f in day.fetches(_session_id(day))],
             "meta": _meta(day, set(), 0, [f"scan only: {why}"])}
+
+
+def _session_id(day):
+    """The run's session (brief_session.json), so another session's fetches never show; else the latest."""
+    return (day.session() or {}).get("session_id")
 
 
 def _write(path, text):

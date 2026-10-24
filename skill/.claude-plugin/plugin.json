@@ -1,0 +1,5 @@
+{
+  "name": "debrief",
+  "version": "0.1.0",
+  "description": "Debrief's daily brief: turns a day's triage output (runs/<date>/) into an article-style brief. Run by `debrief brief run`; see src/debrief/brief/."
+}
