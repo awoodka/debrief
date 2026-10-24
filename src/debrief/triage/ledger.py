@@ -1,7 +1,8 @@
 """The reported ledger: which stories are already in a brief.
 
-The skill (or its publish step) writes runs/<date>/reported.json as {"date", "story_ids"}
-(schemas/reported.schema.json). Until any such file exists, a story counts as reported once an
+`debrief brief finalize` writes runs/<date>/reported.json as {"date", "story_ids"}
+(schemas/reported.schema.json) once a brief is written. Days before the first such file, from
+before there were briefs, count through their index instead: a story counts as reported once an
 earlier day's index carried it (runs/<date>/stories_index.jsonl). Only days before the run's date
 count, so re-running triage on the same day gives the same answer. The files are read on every
 run and nothing is copied into the state database, so a rebuild can't lose them.
@@ -16,28 +17,34 @@ from ..stories import signals
 
 
 def load(data_dir, run_date, validate=None):
-    """{"kind": "reported" | "index" | "none", "dates": {story_id: [dates]}, "errors": [...]}"""
+    """{"kind": "reported" | "index" | "none", "dates": {story_id: [dates]}, "errors": [...]}
+
+    Days from the first reported.json on count only through their reported.json, so a day whose
+    brief failed reports nothing. Days before it, from before there were briefs, count through
+    their index."""
     runs = data_dir / "runs"
     days = sorted(p.name for p in runs.iterdir() if p.is_dir() and p.name < run_date) if runs.is_dir() else []
     out = {"kind": "none", "dates": {}, "errors": []}
-    reported = [runs / d / "reported.json" for d in days if (runs / d / "reported.json").is_file()]
-    if reported:
-        out["kind"] = "reported"
-        for f in reported:
+    first = next((d for d in days if (runs / d / "reported.json").is_file()), None)
+    for d in days:
+        if first and d >= first:
+            f = runs / d / "reported.json"
+            if not f.is_file():
+                continue
+            out["kind"] = "reported"
             try:
                 doc = json.loads(f.read_text())
                 if validate:
                     validate("reported", doc)
             except Exception as e:  # noqa: BLE001 — a bad ledger file is reported, not fatal
-                out["errors"].append(f"{f.parent.name}/reported.json: {str(e).splitlines()[0][:200]}")
+                out["errors"].append(f"{d}/reported.json: {str(e).splitlines()[0][:200]}")
                 continue
             for sid in doc["story_ids"]:
                 out["dates"].setdefault(sid, []).append(doc["date"])
-        return out
-    for d in days:
+            continue
         f = runs / d / "stories_index.jsonl"
         if f.is_file():
-            out["kind"] = "index"
+            out["kind"] = "index" if out["kind"] == "none" else out["kind"]
             for line in f.read_text().splitlines():
                 if line.strip():
                     line = json.loads(line)

@@ -78,6 +78,7 @@ def make_cfg(tmp_path):
     cdir.mkdir()
     shutil.copy(Path(config.CONFIG_DIR) / "settings.yml", cdir / "settings.yml")
     shutil.copy(Path(config.CONFIG_DIR) / "triage.yml", cdir / "triage.yml")
+    shutil.copy(Path(config.CONFIG_DIR) / "brief.yml", cdir / "brief.yml")
     (cdir / "sources.yml").write_text(yaml.safe_dump(SOURCES))
     return config.load(cdir, env={"DEBRIEF_DATA_DIR": str(tmp_path / "data")})
 
@@ -205,6 +206,7 @@ def make_discussion_cfg(tmp_path):
     cdir.mkdir()
     shutil.copy(Path(config.CONFIG_DIR) / "settings.yml", cdir / "settings.yml")
     shutil.copy(Path(config.CONFIG_DIR) / "triage.yml", cdir / "triage.yml")
+    shutil.copy(Path(config.CONFIG_DIR) / "brief.yml", cdir / "brief.yml")
     (cdir / "sources.yml").write_text(yaml.safe_dump(DISCUSSION))
     return config.load(cdir, env={"DEBRIEF_DATA_DIR": str(tmp_path / "data")})
 

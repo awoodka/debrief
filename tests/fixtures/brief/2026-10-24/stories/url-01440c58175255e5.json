@@ -1,0 +1,290 @@
+{
+ "artifact_urls": [
+  "https://arstechnica.com/security/2026/10/hackers-got-a-four-day-head-start-on-epic-php2shell-vulnerability",
+  "https://wired.com/story/kernel-panic-the-php-meltdown-shows-how-ai-makes-bugs-more-exploitable"
+ ],
+ "authors": [
+  "Tom Wilson and Rafe Rosner-Uddin, Financial Times"
+ ],
+ "code_urls": [],
+ "covered_by": [],
+ "days_discussed": 4,
+ "discussion": {
+  "more_threads": 38,
+  "threads": [
+   {
+    "comments": 185,
+    "more_comments": 5,
+    "points": 452,
+    "posted_at": "2026-10-21T13:43:19Z",
+    "src": "hn",
+    "title": "PHP2Shell: AI uncovers critical RCE in PHP",
+    "top_comments": [
+     {
+      "author": "fwlr",
+      "picked": "top-ranked",
+      "rank": 1,
+      "replies": 8,
+      "text": "So from what I gather, it was found by OpenAI (via unspecified model?) and independently by Wiz (via Gemini Argon)… but before that it was found by Calif (via unspecified but consumer-available model)… but Calif credit LCFR_HAX before them with first discovery, disclosure, and remediation efforts. I guess either LCFR or Calif put it in the training data (by using a consumer-available frontier model in the process of discovery or remediation), and then OpenAI reproduced it from the training data, Navier-Stokes-scoop-style? Except I guess more plausibly unaware, and also late? They thought…"
+     },
+     {
+      "author": "Topfi",
+      "picked": "top-ranked",
+      "rank": 2,
+      "replies": 12,
+      "text": "Can anyone explain the two month window between reporting and disclosure? I do understand Responsible Disclosure as a concept, but looking at the timeline and severity, I struggle to understand the timing, especially the month that passed before an acknowledgment. Edit: Apparently this had been reported more than half a decade ago [0]. I am getting more confused the more I look into this, hopeful for a well written, factual post-mortem from someone who hasn't actively avoided PHP for the last decade. [0] https://news.ycombinator.com/item?id=50181395"
+     },
+     {
+      "author": "airtnp",
+      "picked": "top-ranked",
+      "rank": 3,
+      "replies": 33,
+      "text": "Ok, based on my reads on Wiz and Calif writeups, there are 5-6 issues mapped to 2 CVEs. Wiz (with GPT 5.6 Sol + Gemini 4 Argon) : Remote process-memory disclosure; OPcache type confusion; Fatal-error backtrace UAF. POC on Wordpress, Drupal and Joomla Calif (with LLM, no specific model, but model is accessible to all): Zend HashTable OOM. Targets PHP-FPM and mod_php. Both discovers the UAF on upload progress unserializer. Surprised to see the anime girl dancing with POC is really uploaded by Calif researchers."
+     },
+     {
+      "author": "edh649",
+      "picked": "top-ranked",
+      "rank": 4,
+      "replies": 6,
+      "text": "Seems to have been prompted from research by calif.io who started disclosure on August 11 vs Wiz on August 24th? A bit unclear on the participants and how they all interacted... https://calif.io/php2shell/"
+     },
+     {
+      "author": "asbv-1qq",
+      "picked": "most replies",
+      "rank": 8,
+      "replies": 15,
+      "text": "The flaw was in at least 20 year old code, which seems to be a common theme for AI discoveries. No compute costs for finding the issue or for writing the exploit are disclosed. But it is marketed as if it were the first RCE found in human history."
+     },
+     {
+      "author": "simonw",
+      "picked": "most replies",
+      "rank": 16,
+      "replies": 12,
+      "text": "Timeline from that article: August 19, 2026: Wiz Research discovers the first PHP vulnerability using Wiz Atlas, Gemini 4 Argon, and GPT-5.6 Sol. August 20, 2026: Unauthenticated RCE is confirmed against Drupal. August 21, 2026: Unauthenticated RCE is confirmed against WordPress. August 24, 2026: Wiz Research reports the vulnerabilities to the PHP security team. September 21, 2026: PHP acknowledges the reports and begins developing a coordinated fix. October 21, 2026: Patched PHP releases become available. October 21, 2026: Public disclosure. I want to understand how it leaked. I guess a…"
+     }
+    ],
+    "url": "https://news.ycombinator.com/item?id=50180836"
+   },
+   {
+    "comments": 98,
+    "more_comments": 4,
+    "points": 270,
+    "posted_at": "2026-10-22T11:50:36Z",
+    "src": "hn",
+    "title": "Amazon identifies Oct 17 PHP2Shell exploitation prior to public disclosure",
+    "top_comments": [
+     {
+      "author": "andyvanosdale",
+      "picked": "top-ranked",
+      "rank": 1,
+      "replies": 34,
+      "text": "If this was being probed and/or exploited on October 17th, this throws shade on the PHP team for throwing shade on Chainguard in their public announcement. Essentially, the PHP team is deflecting and abdicating their responsibilities in all this mess they created. \"Chainguard broke embargo\", \"support us with money\", \"we are just volunteers\", \"we had knowledge years ago but no POC because we wanted to ship features and not security fixes\". All just deflections. This fiasco shows me that I would never use PHP for any project I'm part of. The PHP team royally messed up, and they are deflecting…"
+     },
+     {
+      "author": "hyperpape",
+      "picked": "top-ranked",
+      "rank": 2,
+      "replies": 15,
+      "text": "There's also a tweet by Matthew Prince that says Cloudflare saw thousands of attempts pre-announcement, https://x.com/eastdakota/status/2113079352682570051 , then tens of thousands post announcement, and now millions. Unfortunately, if you read the announcement as referring to 14:00 UTC, that's several hours after Chainguard published their images. I don't know if it's plausible that people saw the Chainguard builds, understood the issue from those and built exploits, but a precise timeline would help understand better."
+     },
+     {
+      "author": "VladVladikoff",
+      "picked": "top-ranked",
+      "rank": 3,
+      "replies": 3,
+      "text": "I’ve seen probing for it in server logs but not actual exploiting of it. I think the botnets added it to their vulnerability scanners but I have yet to see any examples of an actual working exploit. There are hundreds of vibe coded attempts on github but none of them work to the best of my knowledge. Would love someone to prove me wrong here. Also this post from Amazon is embarrassing. They knew about it from the 17th yet failed to meet the embargo timeline and patch Amazon Linux (their patch is due to be released today the 22nd of Oct)."
+     },
+     {
+      "author": "menomatter",
+      "picked": "top-ranked",
+      "rank": 4,
+      "replies": 1,
+      "text": "Do they differentiate between attempts and successful infiltration? I’m trying to understand whether this exploit is easy to use or not. There was an article here from yesterday that argued the exploit was not easy to use and needed LFI"
+     },
+     {
+      "author": "bcvvvy",
+      "picked": "most replies",
+      "rank": 11,
+      "replies": 17,
+      "text": "Why haven’t they fixed Amazon Linux then? Same as none of their AMIs for bottlerocket have emSign revocations. Absolutely shit company who puts their customers at risk."
+     },
+     {
+      "author": "Tomdarkness",
+      "picked": "most replies",
+      "rank": 8,
+      "replies": 3,
+      "text": "So Amazon knew about this exploit and that it was actively being used several days before the release of any patches. Despite this they still took 18 hours AFTER the release of the patches to provide updated version of their Amazon Linux packages? https://github.com/amazonlinux/amazon-linux-2023/issues/1148 I don't think this blog post is sending the message AWS intended..."
+     }
+    ],
+    "url": "https://news.ycombinator.com/item?id=50194070"
+   },
+   {
+    "comments": 24,
+    "more_comments": 0,
+    "points": 132,
+    "posted_at": "2026-10-21T14:11:14Z",
+    "src": "hn",
+    "title": "Cloudflare deploys protections against php2shell vulnerability",
+    "top_comments": [
+     {
+      "author": "mentalgear",
+      "picked": "top-ranked",
+      "rank": 1,
+      "replies": 13,
+      "text": "As big a fan of open software as I am, the combinations of open-weight LLM models that are capable of e2e cyber-penetration (even by actors that might just put in the compute and prompt it: \"make me money\") and the current mitigations that let those entities, that already hold too much data and power (political, infrastructure, etc), expand to become the eventual gatekeepers of the \"open internet\", is highly worrisome. If you have ideas for how we can adjust to this safely and with an eventual more equal distribution of power, please do share."
+     },
+     {
+      "author": "Melatonic",
+      "picked": "top-ranked",
+      "rank": 2,
+      "replies": 0,
+      "text": "For anybody running Crowdtrike are there any downsides to enabling the Linux sensor settings for \"Enhanced PHP visibility\" ? Edit: may have gotten Cloudflare and Crowdstrike mixed up but might as well leave this up"
+     }
+    ],
+    "url": "https://news.ycombinator.com/item?id=50181326"
+   },
+   {
+    "comments": 2,
+    "more_comments": 0,
+    "points": 32,
+    "posted_at": "2026-10-21T13:57:19Z",
+    "src": "hn",
+    "title": "PHP2Shell",
+    "top_comments": [],
+    "url": "https://news.ycombinator.com/item?id=50181058"
+   },
+   {
+    "comments": 2,
+    "more_comments": 0,
+    "points": 25,
+    "posted_at": "2026-10-21T14:20:15Z",
+    "src": "hn",
+    "title": "What the PHP2Shell rumors got wrong, from inside the PHP security team",
+    "top_comments": [],
+    "url": "https://news.ycombinator.com/item?id=50181486"
+   },
+   {
+    "comments": 1,
+    "more_comments": 0,
+    "points": 15,
+    "posted_at": "2026-10-22T02:55:51Z",
+    "src": "hn",
+    "title": "A sourced timeline of the PHP2Shell leak and embargo break",
+    "top_comments": [],
+    "url": "https://news.ycombinator.com/item?id=50190603"
+   },
+   {
+    "comments": 0,
+    "more_comments": 0,
+    "points": 8,
+    "posted_at": "2026-10-21T14:22:56Z",
+    "src": "hn",
+    "title": "PHP2Shell Explained: PHP2Shell Was in the Training Data",
+    "top_comments": [],
+    "url": "https://news.ycombinator.com/item?id=50181529"
+   },
+   {
+    "comments": 0,
+    "more_comments": 0,
+    "points": 4,
+    "posted_at": "2026-10-21T16:23:52Z",
+    "src": "hn",
+    "title": "Your Sites Are Protected Against the PHP2Shell Vulnerabilities",
+    "top_comments": [],
+    "url": "https://news.ycombinator.com/item?id=50183570"
+   }
+  ]
+ },
+ "first_seen": "2026-10-22",
+ "full_text": [
+  {
+   "chars": 1434,
+   "fetched_at": "2026-10-23T20:11:34Z",
+   "kind": "page",
+   "story_id": "url:01440c58175255e5",
+   "text": "Amazon has warned that vulnerabilities in a programming language that underpins much of the Internet, discovered using AI tools, are being “broadly exploited” as governments and companies rush to secure their systems.\n\nThe world’s largest cloud computing provider on Wednesday said it had identified an attempt by hackers to exploit the bug four days before the weakness was disclosed to the public.\n\nAmazon added the flaws were “now being broadly exploited in the wild.”\n\nThe US National Security Agency and UK authorities earlier on Wednesday warned that the vulnerabilities had left websites around the world critically exposed to hacking, as some governments in Europe were reportedly taking sites offline while they patched the two security flaws.\n\nThe vast impact of the bugs, uncovered with the help of OpenAI and Google models after being undetected for more than a decade, highlights the ability of AI to upend cybersecurity.\n\nThe release of new models earlier this year from Anthropic and OpenAI with powerful cyber capabilities prompted warnings from politicians and financial regulators and led the US government to temporarily limit their rollout.\n\nThe NSA on Wednesday warned all organizations using the programming language known as PHP to immediately update their systems or take them offline.\n\nThe developers responsible for maintaining PHP released software updates to patch the vulnerabilities earlier on Wednesday.",
+   "url": "https://arstechnica.com/security/2026/10/hackers-got-a-four-day-head-start-on-epic-php2shell-vulnerability"
+  },
+  {
+   "chars": 4060,
+   "fetched_at": "2026-10-24T16:26:01Z",
+   "kind": "page",
+   "story_id": "url:128c778d038c2534",
+   "text": "*Welcome to Kernel Panic,* *a weekly newsletter by Lily Hay Newman and Matt Burgess from inside the new world of privacy and digital security. To receive this newsletter in your inbox each week, sign up here.*\n\nAs security teams and web admins scrambled this week to patch newly public PHP bugs, criminal hackers quickly attempted to exploit the flaws in the wild. Millions of exploitation attempts hit within hours of the vulnerabilities being published, according to analysis from Cloudflare—unsurprising given broad access to AI tools that can make it easier for attackers to quickly exploit flaws.\n\nSo far, the nightmare scenario of mass victim takeovers and breaches hasn’t come to pass. The PHP Foundation says it hasn’t seen any successful exploitation of the bugs, collectively dubbed PHP2Shell, and many publicly circulating potential exploits appear to be ineffective. However, perhaps the most interesting role of AI amid the chaos this week is how advanced models helped researchers uncover practical exploitations for the vulnerabilities, which were known about, at least in part, for years. In other words, AI helped turn historic vulnerability into a current crisis.\n\nSo are we all about to be walloped by a wave of critical vulnerabilities that have been kicking around for decades?\n\nResearchers at security company Calif were the first to identify the PHP2Shell vulnerabilities and create exploits in early August—partially using frontier AI tools as part of OpenAI’s Patch the Planet program, but also using expert human knowledge of PHP, its dynamics, and its weaknesses. Some of the underlying issues were identified in 2024 but were deemed too complex to exploit at the time. Following Calif’s discovery, researchers at OpenAI and the Google-owned security firm Wiz independently discovered PHP2Shell flaws using AI tools.\n\n“The vulnerability had been known to the PHP team for years, but because it could not be leveraged by an attacker—at least, not a human one—it was not addressed,” says Sagi Tzadik, a security researcher at Wiz.\n\nNo software is perfect. There are inevitably flaws in even the most critical, foundational digital tools, but the expanding capabilities of AI models have made it faster to analyze and potentially exploit vulnerabilities. This puts even more pressure on under-resourced IT teams, developers, and admins to keep up. Microsoft’s security updates included a record 1,453 security vulnerabilities this month alone. Meanwhile, Bank of America recently hired 1,000 consultants to fix flaws discovered by Anthropic’s Mythos. Security researchers emphasize, though, that AI is ultimately not doing anything new, but rather magnifying existing dynamics of vulnerability discovery and coordinated disclosure.\n\n“We'll definitely see more of these long-life bugs that are in every version of the software for the last decade or whatever,” says Jake Williams, vice president of research and development at Hunter Strategy and a former NSA hacker. “But I think there’s only so much of this low-hanging fruit. There isn’t much else that has the specific reach of PHP. It’s a pretty wild attack surface—most other tools aren’t exposed to the internet by design.”\n\nResearchers note, too, that even with frontier models, most examples of sophisticated AI-aided hacking also involve human expertise. As Ryan Austin, the Calif researcher who first discovered the PHP flaws, wrote this week, “No model is simply capable of unearthing ‘all bugs’ with simple prompts. At least for now.”\n\nIn short, security engineer and researcher Niels Provos says, everyone can dial back their freak-outs, at least a bit. “To be honest, I am not really worried,” he says, about AI finding an overwhelming number of historic bugs that are newly exploitable—or new vulnerabilities that couldn’t have been practically exploited without AI. “People have now been looking with AI for over a year, and it required a highly skilled team to find this one. I guess we will see whether I am completely wrong, but I doubt it.”\n\n## Comments\n\nBack to top",
+   "url": "https://wired.com/story/kernel-panic-the-php-meltdown-shows-how-ai-makes-bugs-more-exploitable"
+  }
+ ],
+ "kind": "press",
+ "mainstream_at": null,
+ "members": [
+  {
+   "published_at": "2026-10-22T15:25:02Z",
+   "section": "press_policy",
+   "sources": [
+    "ars-technica-ai"
+   ],
+   "story_id": "url:01440c58175255e5",
+   "title": "Hackers got a four-day head start on epic PHP2Shell vulnerability",
+   "url": "https://arstechnica.com/security/2026/10/hackers-got-a-four-day-head-start-on-epic-php2shell-vulnerability"
+  },
+  {
+   "published_at": "2026-10-24T12:00:00Z",
+   "section": "press_policy",
+   "sources": [
+    "wired-ai"
+   ],
+   "story_id": "url:128c778d038c2534",
+   "title": "The PHP Meltdown Shows How AI Makes Bugs More Exploitable",
+   "url": "https://wired.com/story/kernel-panic-the-php-meltdown-shows-how-ai-makes-bugs-more-exploitable"
+  }
+ ],
+ "org": null,
+ "prev_reported": "2026-10-23",
+ "published_at": "2026-10-22T15:25:02Z",
+ "raw_refs": [
+  "raw/2026-10-24/ars-technica-ai/20261024T161920Z.jsonl.gz#0",
+  "raw/2026-10-24/wired-ai/20261024T161920Z.jsonl.gz#0",
+  "raw/2026-10-23/article-pages/20261023T200350Z.jsonl.gz#31",
+  "raw/2026-10-24/article-pages/20261024T161920Z.jsonl.gz#4"
+ ],
+ "section": "press_policy",
+ "signals": {
+  "artifact": {},
+  "band": "notable",
+  "by_source": {
+   "hn": {
+    "comments": 319,
+    "comments_captured": 23,
+    "pctl": 93.4,
+    "points": 452,
+    "threads": 46
+   }
+  },
+  "outlets": [],
+  "spread": 1,
+  "techmeme": false,
+  "trend": "flat",
+  "where": [
+   "hn"
+  ]
+ },
+ "sources": [
+  "ars-technica-ai",
+  "wired-ai"
+ ],
+ "status": "update",
+ "story_id": "url:01440c58175255e5",
+ "summary": "Hackers were already probing the bug before defenders were told it existed.",
+ "tier": 2,
+ "title": "Hackers got a four-day head start on epic PHP2Shell vulnerability",
+ "triage": {
+  "mode": "scored",
+  "model": "claude-sonnet-5-5",
+  "prompt_version": "score_v1@8060d377",
+  "rank": 4,
+  "relevant": true,
+  "same_as": null,
+  "score": 4,
+  "why": "Follow-up on the reported PHP2Shell vulnerability, with AI-assisted attacks and millions of exploitation attempts."
+ }
+}

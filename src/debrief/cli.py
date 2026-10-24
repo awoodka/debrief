@@ -14,6 +14,10 @@
                                          the day's candidates, the scoring call, the index (runs/<date>/)
   debrief calibrate [--model M] [--fresh]
                                          score the labeled calibration set; report agreement
+  debrief brief context|check|finalize [--date YYYY-MM-DD]
+                                         around the brief skill: its context file, the draft's check,
+                                         and brief.json / brief.md / reported.json
+  debrief brief hook fetch|stop          the skill session's hooks (the fetch cap, the check on stop)
   debrief snapshot-fixtures              arrives in M6
 """
 import argparse
@@ -164,6 +168,36 @@ def _calibrate(args, cfg):
     return 0
 
 
+def _brief(args, cfg):
+    import json
+    from .brief import context, finalize, hooks
+    from .brief.check import check
+    from .brief.day import Day, DayError
+    if args.step == "hook":
+        return hooks.main(args.kind, cfg)
+    try:
+        day = Day(cfg, args.date or datetime.now().astimezone().date().isoformat())
+    except DayError as e:
+        print(f"brief: {e}", file=sys.stderr)
+        return 1
+    if args.step == "context":
+        ctx = context.write(day)
+        print(f"brief context {day.date}: {sum(ctx['kept_by_section'].values())} stories, "
+              f"{len(ctx['updates'])} updates, {len(ctx['failed_sources'])} failed sources, "
+              f"{len(ctx['recent_briefs'])} earlier briefs · {day.dir / 'brief_context.json'}")
+        return 0
+    if args.step == "check":
+        r = check(day)
+        print(json.dumps(r, ensure_ascii=False, indent=1))
+        return 0 if r["ok"] else 3
+    doc, r = finalize.finalize(day)
+    m = doc["meta"]
+    print(f"brief {day.date}: {doc['mode']} · {m['covered']} of {m['kept']} stories in the article, {m['words']} words, "
+          f"{sum(f['allowed'] for f in doc['fetches'])} fetches · {day.dir / 'brief.json'}"
+          + ("" if r["ok"] else f" · check failed: {r['errors'][0][:160]}"))
+    return 0 if doc["mode"] == "written" else 3
+
+
 def _not_yet(milestone):
     def run(args, cfg):
         print(f"{args.cmd}: not built yet (arrives in {milestone})", file=sys.stderr)
@@ -215,6 +249,17 @@ def main(argv=None):
     p.add_argument("--model", help="score with this model instead of triage.yml's")
     p.add_argument("--fresh", action="store_true", help="call the model even if the answer is cached")
     p.set_defaults(func=_calibrate)
+
+    p = sub.add_parser("brief", help="the brief around the skill: context, check, finalize, and the skill's hooks")
+    bsub = p.add_subparsers(dest="step", required=True)
+    for step, text in (("context", "write brief_context.json, the skill's first read"),
+                       ("check", "check the skill's draft (exit 3 if it fails)"),
+                       ("finalize", "write brief.json, brief.md and reported.json (scan only if the draft fails)")):
+        bp = bsub.add_parser(step, help=text)
+        bp.add_argument("--date", help="run date (default: today)")
+    bp = bsub.add_parser("hook", help="a Claude Code hook for the skill's session (JSON on stdin)")
+    bp.add_argument("kind", choices=("fetch", "stop"))
+    p.set_defaults(func=_brief)
 
     sub.add_parser("snapshot-fixtures").set_defaults(func=_not_yet("M6"))
 

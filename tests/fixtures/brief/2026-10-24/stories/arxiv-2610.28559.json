@@ -1,0 +1,118 @@
+{
+ "artifact_urls": [
+  "https://arxiv.org/abs/2610.28559",
+  "https://huggingface.co/papers/2610.28559"
+ ],
+ "authors": [
+  "Arnav Chavan",
+  "Chanhyuk Lee",
+  "Udbhav Bamba",
+  "Jaehoon Yoo",
+  "Seunghoon Hong",
+  "Aditi Raghunathan",
+  "Jinwoo Kim"
+ ],
+ "code_urls": [
+  "https://github.com/lafa-gh/large-flow-lms"
+ ],
+ "covered_by": [],
+ "discussion": {
+  "more_threads": 0,
+  "threads": [
+   {
+    "comments": 1,
+    "more_comments": 0,
+    "points": null,
+    "posted_at": null,
+    "src": "hf-paper-comments",
+    "title": null,
+    "top_comments": [
+     {
+      "author": "david3684",
+      "likes": 0,
+      "picked": "first",
+      "rank": 1,
+      "replies": null,
+      "text": "Continuous flow language models offer a path to parallel generation with tools for control and acceleration unavailable to discrete diffusion, yet effective techniques for building them at the billion-parameter scale remain less established. We present Lafa (Large flow language model), a fast, high-performing flow language model scaled to 8B parameters in a data-efficient manner. Lafa is a blockwise flow model with causal attention on the prefix and bidirectional, asynchronous flow within each block. This design enables efficient training by adapting pretrained autoregressive (AR) models and…"
+     }
+    ],
+    "url": "https://huggingface.co/papers/2610.28559"
+   }
+  ]
+ },
+ "first_seen": "2026-10-22",
+ "full_text": [
+  {
+   "chars": 1458,
+   "kind": "abstract",
+   "story_id": "arxiv:2610.28559",
+   "text": "Continuous flow language models offer a path to parallel generation with tools for control and acceleration unavailable to discrete diffusion, yet effective techniques for building them at the billion-parameter scale remain less established. We present Lafa (Large flow language model), a fast, high-performing flow language model scaled to 8B parameters in a data-efficient manner. Lafa is a blockwise flow model with causal attention on the prefix and bidirectional, asynchronous flow within each block. This design enables efficient training by adapting pretrained autoregressive (AR) models and fast inference via prefix caching and blockwise parallel decoding. We train Lafa at 0.5B, 7B, and 8B scales with fewer than 30B tokens, more efficient than previous diffusion models, and evaluate it on instruction following, reasoning, and coding, where the learned flow matches or surpasses the quality of AR and can be distilled into flow maps for one- and few-step generation. Notably, flow training preserves or even improves pretrained AR capabilities via a multi-token prediction effect, which we leverage in a self-speculative decoding scheme that verifies flow-based drafts autoregressively within a single model. This yields 2.54x the throughput of an AR model at comparable quality, outperforming multi-token prediction and discrete diffusion methods. Our findings show that continuous flows can serve as a scalable foundation for language modeling.",
+   "url": "https://arxiv.org/abs/2610.28559"
+  }
+ ],
+ "kind": "paper",
+ "mainstream_at": null,
+ "members": [
+  {
+   "published_at": "2026-10-20T00:00:00Z",
+   "section": "papers",
+   "sources": [
+    "hf-daily-papers"
+   ],
+   "story_id": "arxiv:2610.28559",
+   "title": "Large Flow Language Models",
+   "url": "https://arxiv.org/abs/2610.28559"
+  }
+ ],
+ "org": null,
+ "published_at": "2026-10-20T00:00:00Z",
+ "raw_refs": [
+  "raw/2026-10-24/hf-daily-papers/20261024T161920Z.jsonl.gz#0"
+ ],
+ "section": "papers",
+ "signals": {
+  "artifact": {
+   "github_stars": 27,
+   "hf_comments": 2,
+   "hf_datasets": 0,
+   "hf_models": 3,
+   "hf_spaces": 0,
+   "hf_trending_rank": 0,
+   "hf_upvotes": 23
+  },
+  "band": "some",
+  "by_source": {
+   "hf-paper-comments": {
+    "comments": 0,
+    "comments_captured": 1,
+    "pctl": null,
+    "points": 0,
+    "threads": 0
+   }
+  },
+  "spread": 1,
+  "trend": "unknown",
+  "where": [
+   "hf-paper-comments"
+  ]
+ },
+ "sources": [
+  "hf-daily-papers"
+ ],
+ "status": "new",
+ "story_id": "arxiv:2610.28559",
+ "summary": "Continuous flow language models offer a path to parallel generation with tools for control and acceleration unavailable to discrete diffusion, yet effective techniques for building them at the billion-parameter scale remain less established. We present Lafa (Large flow language model), a fast, high-performing flow language model scaled to 8B parameters in a data-efficient manner. Lafa is a blockwise flow model with causal attention on the prefix and bidirectional, asynchronous flow within each block. This design enables efficient training by adapting pretrained autoregressive (AR) models and fast inference via prefix caching and blockwise parallel decoding. We train Lafa at 0.5B, 7B, and 8B scales with fewer than 30B tokens, more efficient than previous diffusion models, and evaluate it on instruction following, reasoning, and coding, where the learned flow matches or surpasses the quality of AR and can be distilled into flow maps for one- and few-step generation. Notably, flow training preserves or even improves pretrained AR capabilities via a multi-token prediction effect, which we leverage in a self-speculative decoding scheme that verifies flow-based drafts autoregressively within a single model. This yields 2.54x the throughput of an AR model at comparable quality, outperforming multi-token prediction and discrete diffusion methods. Our findings show that continuous flows can serve as a scalable foundation for language modeling.",
+ "tier": 1,
+ "title": "Large Flow Language Models",
+ "triage": {
+  "fusion": 0.123543,
+  "mode": "scored",
+  "model": "claude-sonnet-5-5",
+  "prompt_version": "score_v1@8060d377",
+  "rank": 14,
+  "relevant": true,
+  "same_as": null,
+  "score": 3,
+  "why": "An 8B continuous flow language model trained cheaply from AR models, matching AR quality, adds to the non-autoregressive generation direction alongside diffusion LMs."
+ }
+}

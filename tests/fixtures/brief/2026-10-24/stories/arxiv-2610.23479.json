@@ -1,0 +1,117 @@
+{
+ "artifact_urls": [
+  "https://arxiv.org/abs/2610.23479",
+  "https://huggingface.co/papers/2610.23479"
+ ],
+ "authors": [
+  "Hongcheng Gao",
+  "Alex Zhou",
+  "Jay Zhu",
+  "Zelin Zheng",
+  "Shijia Ge",
+  "Xiping Li",
+  "Di Wu",
+  "Yazhe Wang",
+  "Jianshu Zeng",
+  "Xuan Shangguan",
+  "Yongli Wang",
+  "Yexing Wan",
+  "Lingyu He",
+  "Zhiqi Jia",
+  "Sihang Wu"
+ ],
+ "code_urls": [
+  "https://github.com/HexaFuture/HexaShell"
+ ],
+ "covered_by": [],
+ "discussion": {
+  "more_threads": 0,
+  "threads": [
+   {
+    "comments": 1,
+    "more_comments": 1,
+    "points": null,
+    "posted_at": null,
+    "src": "hf-paper-comments",
+    "title": null,
+    "top_comments": [],
+    "url": "https://huggingface.co/papers/2610.23479"
+   }
+  ]
+ },
+ "first_seen": "2026-10-22",
+ "full_text": [
+  {
+   "chars": 1739,
+   "kind": "abstract",
+   "story_id": "arxiv:2610.23479",
+   "text": "Agents built on vision language models (VLMs) now compete with learned policies on robot manipulation leaderboards. We ask how far a coding agent can go when it controls a robot instead of a computer, and where it stops. Our system, HexaShell, keeps the harness thin: it only turns the agent's commands into robot motion. The agent drives a robot with two arms through one command line. It sees three RGB cameras and knows their calibration. After each failed attempt, the agent reads the log, finds the cause, and writes or fixes small programs called tools. In this way it keeps what it learns as code, as a coding agent does when it fixes a failing test. The tools may use only what the robot observes. They use triangulation to find where objects are, relative to each other and to the gripper. If two cameras see the same point, the point lies where the two camera rays meet. If a point lies on a known plane, such as the table or the top of a block, it lies where its ray meets that plane. When the head camera is not enough, the robot moves a wrist camera to get a second view. We build the tools on only ten layouts of one seed per task, then freeze them and test them on ten new layouts of the same seed. We use Codex with GPT-6-Astra at medium reasoning effort. On all 42 RoboDojo tasks, HexaShell reaches a success rate of 39.7% and a progress score of 48.0, averaged in the same way as the leaderboard. This is a new state of the art on RoboDojo. The limit is contact, not reasoning: pushing reaches 92.5% and memory tasks 65.0%, but tight insertion only 8.3%. When the agent fails, it usually sees the failure but cannot make the motion work. We open source the tools evolved so far at https://github.com/HexaFuture/HexaShell.",
+   "url": "https://arxiv.org/abs/2610.23479"
+  }
+ ],
+ "kind": "paper",
+ "mainstream_at": null,
+ "members": [
+  {
+   "published_at": "2026-10-16T00:00:00Z",
+   "section": "papers",
+   "sources": [
+    "hf-daily-papers"
+   ],
+   "story_id": "arxiv:2610.23479",
+   "title": "HexaShell: A Thin Harness for Exploring the Limits of VLM Agents as Robot Coding Agents",
+   "url": "https://arxiv.org/abs/2610.23479"
+  }
+ ],
+ "org": "HexaFuture",
+ "published_at": "2026-10-16T00:00:00Z",
+ "raw_refs": [
+  "raw/2026-10-22/hf-daily-papers/20261022T231831Z.jsonl.gz#0"
+ ],
+ "section": "papers",
+ "signals": {
+  "artifact": {
+   "github_stars": 138,
+   "hf_comments": 3,
+   "hf_datasets": 0,
+   "hf_models": 0,
+   "hf_spaces": 0,
+   "hf_trending_rank": 77,
+   "hf_upvotes": 121
+  },
+  "band": "some",
+  "by_source": {
+   "hf-paper-comments": {
+    "comments": 0,
+    "comments_captured": 1,
+    "pctl": null,
+    "points": 0,
+    "threads": 0
+   }
+  },
+  "spread": 1,
+  "trend": "unknown",
+  "where": [
+   "hf-paper-comments"
+  ]
+ },
+ "sources": [
+  "hf-daily-papers"
+ ],
+ "status": "new",
+ "story_id": "arxiv:2610.23479",
+ "summary": "Agents built on vision language models (VLMs) now compete with learned policies on robot manipulation leaderboards. We ask how far a coding agent can go when it controls a robot instead of a computer, and where it stops. Our system, HexaShell, keeps the harness thin: it only turns the agent's commands into robot motion. The agent drives a robot with two arms through one command line. It sees three RGB cameras and knows their calibration. After each failed attempt, the agent reads the log, finds the cause, and writes or fixes small programs called tools. In this way it keeps what it learns as code, as a coding agent does when it fixes a failing test. The tools may use only what the robot observes. They use triangulation to find where objects are, relative to each other and to the gripper. If two cameras see the same point, the point lies where the two camera rays meet. If a point lies on a known plane, such as the table or the top of a block, it lies where its ray meets that plane. When the head camera is not enough, the robot moves a wrist camera to get a second view. We build the tools on only ten layouts of one seed per task, then freeze them and test them on ten new layouts of the same seed. We use Codex with GPT-6-Astra at medium reasoning effort. On all 42 RoboDojo tasks, HexaShell reaches a success rate of 39.7% and a progress score of 48.0, averaged in the same way as the leaderboard. This is a new state of the art on RoboDojo. The limit is contact, not reasoning: pushing reaches 92.5% and memory tasks 65.0%, but tight insertion only 8.3%. When the agent fails, it usually sees the failure but cannot make the motion work. We open source the tools evolved so far at https://github.com/HexaFuture/HexaShell.",
+ "tier": 1,
+ "title": "HexaShell: A Thin Harness for Exploring the Limits of VLM Agents as Robot Coding Agents",
+ "triage": {
+  "fusion": 0.119877,
+  "mode": "scored",
+  "model": "claude-sonnet-5-5",
+  "prompt_version": "score_v1@8060d377",
+  "rank": 15,
+  "relevant": true,
+  "same_as": null,
+  "score": 3,
+  "why": "Shows how far a thin-harness VLM coding agent can drive a real robot, with strong community attention."
+ }
+}

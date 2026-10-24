@@ -35,7 +35,7 @@ STAGES = ("rules", "merge", "ledger", "use_bar", "org_cap", "cap", "score", "kee
 class Validator:
     def __init__(self, directory=SCHEMAS):
         self.v = {}
-        for name in ("index_line", "story", "triage_log", "report_header", "reported"):
+        for name in ("index_line", "story", "triage_log", "report_header", "reported", "brief_draft", "brief"):
             schema = json.loads((directory / f"{name}.schema.json").read_text())
             self.v[name] = jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker())
 

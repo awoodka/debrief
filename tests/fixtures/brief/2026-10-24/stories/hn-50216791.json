@@ -1,0 +1,100 @@
+{
+ "artifact_urls": [
+  "https://nitter.click/AikidoSecurity/status/2113759110625906950?__galadriel=lPmlGl9id4oAd5UeBwMhlYKArHyr6lR2IDGujPwB5HV2kQ1aLoPWFd5A9sGuzNcmrp8fUso8qygmHcKTDZ8MNHWqQ3bDJcycV87xp_0VypzQLYj6O_RRHlZuQqj33oASGY2YLSoAiMjeOZN40h7Stf8AG7DPrGZbAPVKUXy36HoMudRbvwF3_r2uYNmfJMhpKzywQDM6Ab8",
+  "https://aikido.dev/blog/python-packages-vulnerable-node2shell-brotli-cve-2026-111497"
+ ],
+ "authors": [],
+ "code_urls": [],
+ "covered_by": [],
+ "discussion": {
+  "more_threads": 0,
+  "threads": [
+   {
+    "comments": 94,
+    "more_comments": 0,
+    "points": 177,
+    "posted_at": "2026-10-23T23:30:17Z",
+    "src": "hn",
+    "title": "Evolving Threat: http2shell is an RCE in Node, Python, and more",
+    "top_comments": [],
+    "url": "https://news.ycombinator.com/item?id=50216791"
+   },
+   {
+    "comments": 72,
+    "more_comments": 0,
+    "points": 154,
+    "posted_at": "2026-10-24T08:06:39Z",
+    "src": "hn",
+    "title": "Node2Shell evolves to HTTP2Shell, blast radius affects many HTTP libs and apps",
+    "top_comments": [],
+    "url": "https://news.ycombinator.com/item?id=50219177"
+   }
+  ]
+ },
+ "first_seen": "2026-10-24",
+ "full_text": [],
+ "kind": "discussion",
+ "mainstream_at": null,
+ "members": [
+  {
+   "published_at": "2026-10-23T23:30:17Z",
+   "section": "discussion",
+   "sources": [
+    "hn"
+   ],
+   "story_id": "hn:50216791",
+   "title": "Evolving Threat: http2shell is an RCE in Node, Python, and more",
+   "url": "https://nitter.click/AikidoSecurity/status/2113759110625906950?__galadriel=lPmlGl9id4oAd5UeBwMhlYKArHyr6lR2IDGujPwB5HV2kQ1aLoPWFd5A9sGuzNcmrp8fUso8qygmHcKTDZ8MNHWqQ3bDJcycV87xp_0VypzQLYj6O_RRHlZuQqj33oASGY2YLSoAiMjeOZN40h7Stf8AG7DPrGZbAPVKUXy36HoMudRbvwF3_r2uYNmfJMhpKzywQDM6Ab8"
+  },
+  {
+   "published_at": "2026-10-24T08:06:39Z",
+   "section": "discussion",
+   "sources": [
+    "hn"
+   ],
+   "story_id": "hn:50219177",
+   "title": "Node2Shell evolves to HTTP2Shell, blast radius affects many HTTP libs and apps",
+   "url": "https://aikido.dev/blog/python-packages-vulnerable-node2shell-brotli-cve-2026-111497"
+  }
+ ],
+ "org": null,
+ "published_at": "2026-10-23T23:30:17Z",
+ "raw_refs": [],
+ "section": "discussion",
+ "signals": {
+  "artifact": {},
+  "band": "notable",
+  "by_source": {
+   "hn": {
+    "comments": 166,
+    "comments_captured": 0,
+    "pctl": 79.9,
+    "points": 177,
+    "threads": 2
+   }
+  },
+  "spread": 1,
+  "trend": "unknown",
+  "where": [
+   "hn"
+  ]
+ },
+ "sources": [
+  "hn"
+ ],
+ "status": "new",
+ "story_id": "hn:50216791",
+ "summary": "",
+ "tier": 3,
+ "title": "Evolving Threat: http2shell is an RCE in Node, Python, and more",
+ "triage": {
+  "mode": "scored",
+  "model": "claude-sonnet-5-5",
+  "prompt_version": "score_v1@8060d377",
+  "rank": 20,
+  "relevant": true,
+  "same_as": null,
+  "score": 3,
+  "why": "Vulnerability family following Node2Shell and PHP2Shell, likely AI-found; the text is empty so this is a guess from the title."
+ }
+}

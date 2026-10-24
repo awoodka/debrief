@@ -1,0 +1,70 @@
+{
+ "artifact_urls": [
+  "https://openrouter.ai/elorian/glimpse"
+ ],
+ "authors": [],
+ "code_urls": [],
+ "covered_by": [],
+ "discussion": {
+  "more_threads": 0,
+  "threads": []
+ },
+ "first_seen": "2026-10-22",
+ "full_text": [
+  {
+   "chars": 1018,
+   "fetched_at": "2026-10-23T20:12:58Z",
+   "kind": "page",
+   "story_id": "url:d6c13c736299316c",
+   "text": "Glimpse is a multimodal visual reasoning model from Elorian, built for visual understanding and complex visual reasoning in the physical world. It reasons directly over images and video rather than converting them to text first, so it can find small details in dense scenes, track events across video frames, and ground its answers in what is actually on screen. It is suited for agentic visual workflows such as visual search, video captioning, and dense counting, and for physical-world use cases in robotics, construction, engineering, and manufacturing.\n\nNot currently available through EU in-region routing. In-region routing docs\n\n| | $0.60 | $3.00 | $0.06 | 2.05s | 162 tps | |\n\nP50, best across providers\n\nP50, best provider\n\nWhen an error occurs in an upstream provider, we can recover by routing to another healthy provider, if your request filters allow it. You can access per-provider uptime data programmatically through the Endpoints API. Learn more about our load balancing and provider routing options.",
+   "url": "https://openrouter.ai/elorian/glimpse"
+  }
+ ],
+ "kind": "release",
+ "mainstream_at": null,
+ "members": [
+  {
+   "published_at": "2026-10-17T03:10:29Z",
+   "section": "releases",
+   "sources": [
+    "openrouter-models"
+   ],
+   "story_id": "url:d6c13c736299316c",
+   "title": "Elorian: Glimpse",
+   "url": "https://openrouter.ai/elorian/glimpse"
+  }
+ ],
+ "org": "elorian",
+ "published_at": "2026-10-17T03:10:29Z",
+ "raw_refs": [
+  "raw/2026-10-24/openrouter-models/20261024T161920Z.jsonl.gz#0",
+  "raw/2026-10-23/article-pages/20261023T200350Z.jsonl.gz#88"
+ ],
+ "section": "releases",
+ "signals": {
+  "artifact": {},
+  "band": "none",
+  "by_source": {},
+  "spread": 0,
+  "trend": "unknown",
+  "where": []
+ },
+ "sources": [
+  "openrouter-models"
+ ],
+ "status": "new",
+ "story_id": "url:d6c13c736299316c",
+ "summary": "Glimpse is a multimodal visual reasoning model from Elorian, built for visual understanding and complex visual reasoning in the physical world. It reasons directly over images and video rather than...",
+ "tier": 2,
+ "title": "Elorian: Glimpse",
+ "triage": {
+  "mode": "scored",
+  "model": "claude-sonnet-5-5",
+  "prompt_version": "score_v1@8060d377",
+  "rank": 5,
+  "relevant": true,
+  "same_as": null,
+  "score": 3,
+  "why": "Elorian's Glimpse is a new multimodal visual reasoning model for physical-world use cases from a lab not seen before."
+ }
+}

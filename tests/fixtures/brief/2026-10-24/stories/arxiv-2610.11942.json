@@ -1,0 +1,108 @@
+{
+ "artifact_urls": [
+  "https://arxiv.org/abs/2610.11942",
+  "https://huggingface.co/papers/2610.11942"
+ ],
+ "authors": [
+  "Jiaming Zhang",
+  "Xuan Wang",
+  "Fuyao Zhang",
+  "Yang Cao",
+  "Lingjuan Lyu",
+  "Wei Yang Bryan Lim"
+ ],
+ "code_urls": [
+  "https://github.com/jiamingzhang94/lgwm"
+ ],
+ "covered_by": [],
+ "discussion": {
+  "more_threads": 0,
+  "threads": [
+   {
+    "comments": 1,
+    "more_comments": 1,
+    "points": null,
+    "posted_at": null,
+    "src": "hf-paper-comments",
+    "title": null,
+    "top_comments": [],
+    "url": "https://huggingface.co/papers/2610.11942"
+   }
+  ]
+ },
+ "first_seen": "2026-10-22",
+ "full_text": [
+  {
+   "chars": 1784,
+   "kind": "abstract",
+   "story_id": "arxiv:2610.11942",
+   "text": "A login screen that appears after a tap on Sign in is expected; the same screen after a tap on View order is an attack. For GUI agents, safety is therefore a property of the transition rather than of the screen, and a monitor that inspects only screens can be defeated by reusing a legitimate one. Judging a transition requires an expectation of what should have followed the action. Existing GUI world models provide one, but they output it as text, code, or images, so checking it against the observed screen requires a second model to judge the two. We argue that a world model meant for verification should instead predict in the space in which observations are encoded, and present LGWM, a decoder-free, action-conditioned world model that predicts the representation of the next screen directly, trained without semantic annotation on 1.85M real GUI transitions. Verification reduces to a vector comparison, and the same signal reveals whether a mismatch is harmful. We evaluate on RSWT-BENCH, a diagnostic where each credential screen appears under both a legitimate and a hijacked transition, so detectors that see only the screen are at chance by construction. The training-free score reaches 0.987 AUC at 17 ms per decision, on par with the strongest closed-source VLMs and about ten AUC points above generative GUI world models at over three orders of magnitude lower latency. The residual direction reaches 0.953 AUC at separating harmful from benign violations, where prompted VLMs are near chance. Further analyses show that the prediction is a usable future state rather than an anomaly score. World models have mostly served as simulators or planners; our results point to a third role, verification, for which predicting in representation space is the natural design.",
+   "url": "https://arxiv.org/abs/2610.11942"
+  }
+ ],
+ "kind": "paper",
+ "mainstream_at": null,
+ "members": [
+  {
+   "published_at": "2026-10-08T00:00:00Z",
+   "section": "papers",
+   "sources": [
+    "hf-daily-papers"
+   ],
+   "story_id": "arxiv:2610.11942",
+   "title": "Right Screen, Wrong Transition: World Models as Verifiers for GUI Agents",
+   "url": "https://arxiv.org/abs/2610.11942"
+  }
+ ],
+ "org": null,
+ "published_at": "2026-10-08T00:00:00Z",
+ "raw_refs": [
+  "raw/2026-10-24/hf-daily-papers/20261024T161920Z.jsonl.gz#1"
+ ],
+ "section": "papers",
+ "signals": {
+  "artifact": {
+   "github_stars": 2,
+   "hf_comments": 2,
+   "hf_datasets": 1,
+   "hf_models": 1,
+   "hf_spaces": 1,
+   "hf_trending_rank": 0,
+   "hf_upvotes": 171
+  },
+  "band": "some",
+  "by_source": {
+   "hf-paper-comments": {
+    "comments": 0,
+    "comments_captured": 1,
+    "pctl": null,
+    "points": 0,
+    "threads": 0
+   }
+  },
+  "spread": 1,
+  "trend": "unknown",
+  "where": [
+   "hf-paper-comments"
+  ]
+ },
+ "sources": [
+  "hf-daily-papers"
+ ],
+ "status": "new",
+ "story_id": "arxiv:2610.11942",
+ "summary": "A login screen that appears after a tap on Sign in is expected; the same screen after a tap on View order is an attack. For GUI agents, safety is therefore a property of the transition rather than of the screen, and a monitor that inspects only screens can be defeated by reusing a legitimate one. Judging a transition requires an expectation of what should have followed the action. Existing GUI world models provide one, but they output it as text, code, or images, so checking it against the observed screen requires a second model to judge the two. We argue that a world model meant for verification should instead predict in the space in which observations are encoded, and present LGWM, a decoder-free, action-conditioned world model that predicts the representation of the next screen directly, trained without semantic annotation on 1.85M real GUI transitions. Verification reduces to a vector comparison, and the same signal reveals whether a mismatch is harmful. We evaluate on RSWT-BENCH, a diagnostic where each credential screen appears under both a legitimate and a hijacked transition, so detectors that see only the screen are at chance by construction. The training-free score reaches 0.987 AUC at 17 ms per decision, on par with the strongest closed-source VLMs and about ten AUC points above generative GUI world models at over three orders of magnitude lower latency. The residual direction reaches 0.953 AUC at separating harmful from benign violations, where prompted VLMs are near chance. Further analyses show that the prediction is a usable future state rather than an anomaly score. World models have mostly served as simulators or planners; our results point to a third role, verification, for which predicting in representation space is the natural design.",
+ "tier": 1,
+ "title": "Right Screen, Wrong Transition: World Models as Verifiers for GUI Agents",
+ "triage": {
+  "fusion": 0.130038,
+  "mode": "scored",
+  "model": "claude-sonnet-5-5",
+  "prompt_version": "score_v1@8060d377",
+  "rank": 6,
+  "relevant": true,
+  "same_as": null,
+  "score": 3,
+  "why": "A world model used to verify GUI agent transitions is a fresh safety angle for computer-use agents, but still a niche technique."
+ }
+}

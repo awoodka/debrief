@@ -10,6 +10,7 @@ def write(tmp_path, sources, settings=None):
         "sections": {"announcement": "announcements"}}))
     (tmp_path / "sources.yml").write_text(yaml.safe_dump(sources))
     (tmp_path / "triage.yml").write_text("{}\n")
+    (tmp_path / "brief.yml").write_text("{}\n")
     return tmp_path
 
 

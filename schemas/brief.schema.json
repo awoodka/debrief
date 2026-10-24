@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/awoodka/debrief/schemas/brief.schema.json",
+  "title": "runs/<date>/brief.json",
+  "description": "The day's brief, self-contained: what a web page renders. Written by `debrief brief finalize` from the skill's draft (brief_draft.schema.json) and the triage data. Every link comes from the data, none from the model. mode scan_only: the skill's part failed, so only the scan (every story triage kept) is there.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["date", "mode", "headline", "what_happened", "lead", "sections", "updates", "notes", "scan",
+               "stories", "fetches", "meta"],
+  "properties": {
+    "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "mode": {"enum": ["written", "scan_only"]},
+    "headline": {"type": "string"},
+    "what_happened": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["text", "stories"],
+        "properties": {"text": {"type": "string"}, "stories": {"$ref": "#/$defs/ids"}}
+      }
+    },
+    "lead": {"type": "string"},
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["heading", "body", "stories", "quotes"],
+        "properties": {
+          "heading": {"type": "string"},
+          "body": {"type": "string"},
+          "stories": {"$ref": "#/$defs/ids"},
+          "split": {
+            "type": "object", "additionalProperties": false, "required": ["for", "against", "read"],
+            "properties": {"for": {"type": "string"}, "against": {"type": "string"}, "read": {"type": "string"}}
+          },
+          "quotes": {
+            "type": "array",
+            "items": {
+              "type": "object", "additionalProperties": false, "required": ["story", "text", "kind", "author", "source", "url"],
+              "properties": {
+                "story": {"type": "string"},
+                "text": {"type": "string"},
+                "kind": {"enum": ["comment", "text"], "description": "from a comment, or from the story's own text"},
+                "author": {"type": ["string", "null"]},
+                "source": {"type": ["string", "null"], "description": "the discussion source id (hn, lesswrong, hf-paper-comments)"},
+                "url": {"type": ["string", "null"], "description": "the thread or page it came from"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "updates": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["story", "text", "prev_reported"],
+        "properties": {"story": {"type": "string"}, "text": {"type": "string"},
+                       "prev_reported": {"type": ["string", "null"]}}
+      }
+    },
+    "notes": {"type": "array", "items": {"type": "string"}},
+    "scan": {
+      "type": "array",
+      "description": "Every story triage kept, in index order (section, then score, then newest): headline and gist, for scanning.",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "section", "title", "gist", "url", "org", "status", "covered"],
+        "properties": {
+          "id": {"type": "string"},
+          "section": {"type": "string"},
+          "title": {"type": "string"},
+          "gist": {"type": "string"},
+          "url": {"type": ["string", "null"]},
+          "org": {"type": ["string", "null"]},
+          "status": {"enum": ["new", "update"]},
+          "covered": {"type": "boolean", "description": "the article (what_happened, sections or updates) covers it"}
+        }
+      }
+    },
+    "stories": {
+      "type": "object",
+      "description": "Every story the brief references, by id.",
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "required": ["title", "section", "org", "url", "sources", "code_urls", "threads"],
+        "properties": {
+          "title": {"type": "string"},
+          "section": {"type": "string"},
+          "org": {"type": ["string", "null"]},
+          "url": {"type": ["string", "null"]},
+          "sources": {"type": "array", "items": {"type": "string"}},
+          "code_urls": {"type": "array", "items": {"type": "string"}},
+          "threads": {
+            "type": "array",
+            "items": {
+              "type": "object", "additionalProperties": false, "required": ["source", "url", "title", "points", "comments"],
+              "properties": {"source": {"type": "string"}, "url": {"type": ["string", "null"]},
+                             "title": {"type": ["string", "null"]}, "points": {"type": ["integer", "null"]},
+                             "comments": {"type": ["integer", "null"]}}
+            }
+          }
+        }
+      }
+    },
+    "fetches": {
+      "type": "array",
+      "description": "Every web fetch the skill tried, from the hook's log, with the skill's reason when it gave one.",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["url", "allowed", "why"],
+        "properties": {"url": {"type": "string"}, "allowed": {"type": "boolean"},
+                       "why": {"type": ["string", "null"]}}
+      }
+    },
+    "meta": {
+      "type": "object", "additionalProperties": false,
+      "required": ["triage_status", "failed_sources", "kept", "covered", "words", "warnings", "session"],
+      "properties": {
+        "triage_status": {"type": "string"},
+        "failed_sources": {"type": "array", "items": {"type": "string"}},
+        "kept": {"type": "integer"},
+        "covered": {"type": "integer"},
+        "words": {"type": "integer"},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "session": {"type": ["object", "null"], "description": "the skill's Claude Code session: model, turns, tokens, time"}
+      }
+    }
+  },
+  "$defs": {
+    "ids": {"type": "array", "items": {"type": "string"}}
+  }
+}

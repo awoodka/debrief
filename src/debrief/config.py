@@ -1,5 +1,5 @@
 """Load and validate Debrief v2 configuration: config/settings.yml, config/sources.yml,
-config/triage.yml (as settings["triage"]), and env.
+config/triage.yml (as settings["triage"]), config/brief.yml (as settings["brief"]), and env.
 
 Environment:
   DEBRIEF_DATA_DIR   raw data, state and runs (default: <repo>/data/v2). Never the v1 data dir.
@@ -97,6 +97,7 @@ def load(config_dir=CONFIG_DIR, env=os.environ):
     config_dir = Path(config_dir)
     settings = yaml.safe_load((config_dir / "settings.yml").read_text())
     settings["triage"] = yaml.safe_load((config_dir / "triage.yml").read_text())
+    settings["brief"] = yaml.safe_load((config_dir / "brief.yml").read_text())
     raw_sources = yaml.safe_load((config_dir / "sources.yml").read_text()) or []
     seen, sources = set(), []
     for raw in raw_sources:

@@ -1,0 +1,22 @@
+# Debrief v2: the brief (src/debrief/brief/; the skill is in skill/). Decided with Alex on 2026-10-24.
+
+# The skill's run, through Claude Code on the Max plan (step 2 of the build).
+model: claude-opus-5-5
+effort: null                    # Claude Code's --effort; null leaves the model's default
+timeout_s: 3000
+max_turns: 80                   # runaway guards; a normal run is far below both
+max_budget_usd: 25              # at list price; on the Max plan it's quota, not a bill
+
+# Web: WebFetch only, when one page adds real substance. The PreToolUse hook enforces both rules.
+fetch_cap: 5                    # per session; the 6th call is denied
+# Hosts that may always be fetched. Beyond these, only hosts of today's stories, their threads,
+# their full text and the links inside their pages.
+allow_hosts: [arxiv.org, github.com, huggingface.co]
+
+# What the check enforces on the draft (brief/check.py).
+words: {min: 1500, max: 2500, hard_max: 3750}   # the article (lead, sections, updates); under min only warns
+what_happened: {min: 3, max: 6}                 # min drops to the number of stories on a day with fewer
+heading_max_chars: 120
+
+# brief_context.json: how many earlier briefs to summarize, for continuity and follow-ups.
+recent_briefs: 3
