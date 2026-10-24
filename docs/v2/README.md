@@ -16,6 +16,10 @@ Status: **M0–M5 are done.**
 - **M4:** the scoring call: one Claude call (Sonnet 5.5, on the Max plan) that merges same-story candidates, drops what isn't relevant, and gives the rest a score and a one-line why; the most-discussed unattached HN threads join it; `calibrate` checks it against a labeled day.
 - **M5:** LessWrong and the Alignment Forum (posts and their best comments, through the GraphQL API): posts attach to stories like any discussion, and the most-discussed unattached ones join the scoring call with a quota per source; Hugging Face's trending papers as a signal (`hf_trending_rank`). The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
 
+## Scheduled runs
+
+The daily run is at 03:00 ET: collect every source, then triage with the scoring call. The 6-hour discussion polls run at 09:00, 15:00 and 21:00. Only the daily run uses the Claude plan. `deploy/README.md` has the details: the pinned checkout, `deploy/update.sh` to deploy, the shared lock, logs, and how a failure shows.
+
 ## Development setup
 
 Everything runs in a Docker image, because the server has no Python venv support:
@@ -31,6 +35,7 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 - **Data dir.** `DEBRIEF_DATA_DIR` sets it; the default is `/srv/data/debrief-v2`. The script refuses to use the v1 data dir.
 - **Source keys.** By default the container gets source keys from `./.env` (gitignored).
 - **Claude.** `scripts/dev --claude …` swaps that for the Claude token file instead. The two are never passed together.
+- **The lock.** It takes the data dir's `.run.lock`, the one the scheduled runs take, so a dev command waits for a running collect (up to 15 minutes), and a poll that fires during a dev command is skipped. The live data dir is the scheduled runs' data; to experiment, copy it and point `DEBRIEF_DATA_DIR` at the copy.
 
 ## Commands
 

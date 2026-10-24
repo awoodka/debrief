@@ -1,0 +1,14 @@
+[Unit]
+Description=Debrief v2 discussion poll: Hacker News, LessWrong, the Alignment Forum and their comments
+Documentation=file:///srv/apps/debrief-v2/repo/deploy/run.sh
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=alex
+Group=alex
+ExecStart=/srv/apps/debrief-v2/repo/deploy/run.sh poll
+TimeoutStartSec=1h
+Nice=10

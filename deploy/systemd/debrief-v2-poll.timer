@@ -1,0 +1,9 @@
+[Unit]
+Description=Debrief v2 discussion poll at 09:00, 15:00 and 21:00 ET (the 03:00 daily run covers the fourth slot)
+
+[Timer]
+OnCalendar=*-*-* 09,15,21:00:00 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target

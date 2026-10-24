@@ -1,0 +1,10 @@
+[Unit]
+Description=Debrief v2 daily run at 03:00 ET, when the Claude plan is least likely to be in use
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 America/New_York
+# A run missed while the server was down happens at the next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

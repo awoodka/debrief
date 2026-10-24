@@ -36,6 +36,11 @@ fi
 TTY=()
 [ -t 0 ] && [ -t 1 ] && TTY=(-t)
 
+# The scheduled runs (deploy/run.sh) take this lock too, so a dev command and a timer never write
+# the same state database at once. Held until the container exits.
+exec 9>"$DATA/.run.lock"
+flock -w 900 9 || { echo "dev: a scheduled run has held $DATA/.run.lock for 15 minutes" >&2; exit 1; }
+
 exec docker run --rm -i "${TTY[@]}" --user "$(id -u):$(id -g)" \
   --cap-drop ALL --security-opt no-new-privileges \
   --tmpfs /tmp --tmpfs /home/debrief:uid="$(id -u)",gid="$(id -g)",mode=0700 \
