@@ -123,6 +123,10 @@ def readme(md, url, max_chars, max_links=200):
     Relative links are left out (they point at files in the repo, not at other artifacts)."""
     if isinstance(md, bytes):
         md = md.decode("utf-8", "replace")
-    md = _FRONTMATTER.sub("", md.replace("\r\n", "\n"))
-    text, links = _markdown_text_and_links(md, "", max_chars, max_links)
-    return text, links
+    return markdown(_FRONTMATTER.sub("", md.replace("\r\n", "\n")), max_chars, max_links)
+
+
+def markdown(md, max_chars, max_links=200):
+    """(text, links) of a markdown document (a forum post or comment): links reduced to their text,
+    images dropped, relative links left out."""
+    return _markdown_text_and_links((md or "").replace("\r\n", "\n"), "", max_chars, max_links)

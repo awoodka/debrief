@@ -499,3 +499,22 @@ Decided with Alex. Every dropped source is now `enabled: false` in `sources.yml`
 - **Misses you agree with become labels:** they're added to the calibration set and `relevance.md`'s worked examples, so the labeled set grows past one day.
 - **`debrief snapshot-fixtures --date`** freezes a day's raw data permanently. Raw is pruned after 60 days. A change to the prompt, `relevance.md` or a rule can then be replayed against known days before it ships.
 - **Needs a week of daily runs,** so the timers have to come first.
+
+## M5 results (2026-10-24)
+
+Built: the `lesswrong` adapter (sources `lesswrong` and `alignment-forum`), `lesswrong_comments` (source `lesswrong-comments`), and `hf_trending_papers`. All three are polled through the GraphQL API or the HF API, with one request per run for posts. 160 tests.
+
+What the live API showed, and what was decided with Alex:
+- **The Alignment Forum is a view of LessWrong.** Every AF post is on LessWrong too, flagged `af`, with the same karma from either host; the AF host shows only AF members' comments. About 4 AF posts a week. It stays a source of its own, so it has its own quota, and the LessWrong source leaves `af` posts to it (recorded at fetch time, so a replay decides the same way). Comments always come from LessWrong.
+- **The AI tag misses many AI posts** (38 of the week's 157 posts had no tags, most about AI). Alex chose "AI tag or no tags". LessWrong tags aren't a hierarchy, so that would still drop posts tagged only AI Control or Redwood Research (5 that week, among them "Simulated Control Evaluations", 57 karma). So the rule is: left out only when the post has another core tag (Rationality, World Modeling, World Optimization, Practical, Community) and not AI. Over the week it kept 146 of 158; the 12 it left out were all about something else.
+- **HF trending papers is a signal only** (Alex): its top 100 were mostly old papers with popular repos (vLLM 2023, Transformers 2019), and the recent ones were already in the pool through Daily Papers. `hf_trending_rank` (0 = off the list, for pool papers) shows in paper signals, the payload and the detail files. It's not in the fusion; it would need inverting first (lower is better).
+- **Attachment by a post's first links only.** On the first live run, two roundups ("AI #191", "Against Moloch #48") attached to whatever their 57th and 3rd links named. The two posts about one thing matched their 1st and 2nd. So a post keeps its link-post target (or itself) plus its first 3 body links (`lesswrong.lead_links`), and a numbered roundup keeps none (`roundup_title`).
+- **Fetch-time selections now count from the run's last stored fetch** (`FetchContext.stored_until`), not the run's start. Before, the daily prefetch of unattached threads (HN pages and comment trees, LessWrong comments) and the HF paper-comment ranking couldn't see threads and signals stored earlier in the same run, so they waited a run.
+
+Live 2026-10-24 (a Saturday): 53 LessWrong posts and 2 Alignment Forum posts in 72 hours. Two posts attached: "Simulated Control Evaluations" to its paper (which then failed the use bar: 0 artifacts, 0 stars), and "The Hackening" to the "Patch the Planet" announcement. 22 comments on 5 posts. Triage had 87 candidates, including 5 LessWrong posts (no AF post was in the 48-hour window), and kept 8. The model kept "Gradient Routing Generalizes to Unrouted Hack Types" at 3 and dropped the other four LessWrong posts, among them the week's most-discussed post ("Wah wah wah wah do more AI R&D", 221 karma, 40 comments), as argument without new evidence. That needs Alex's ruling.
+
+Calibration with the revised prompt (it now describes LessWrong posts): 118 and 118 of 120, 38 of 38 relevant kept, no flips. The two disagreements are the ones Alex reviewed on 2026-10-23 (inDrive, Anthropic's life-science call).
+
+Regression: rules-only triage on a frozen copy of the state for 10-22, 10-23 and 10-24 is byte-identical to the code before M5, and so is the scoring call's user message.
+
+The pruning decision on the AWS ML and NVIDIA developer blogs: on the two scored days, aws-ml-blog gave 21 candidates and 0 kept, nvidia-dev-blog 7 and 0. (NVIDIA's main blog: 1 of 7.)

@@ -6,9 +6,12 @@ are the same story. You don't pick the briefing.
 The user message holds two blocks of data:
 - <candidates>: today's candidates, one JSON object per line: id, section, source, org, title,
   text (a summary or the start of the article, cut to about 1,000 characters), and sometimes
-  signals (upvotes, stars, points). Candidates in section "discussion" are Hacker News threads
-  that matched no other story: title, link, points and comments, and in text the start of the
-  page the thread links to (or the post itself, for an Ask or Tell HN). When text is empty, only
+  signals (upvotes, stars, points). Candidates in section "discussion" matched no other story.
+  Most are Hacker News threads (source "hn"): title, link, points and comments, and in text the
+  start of the page the thread links to (or the post itself, for an Ask or Tell HN). Some are
+  posts on LessWrong or the Alignment Forum (source "lesswrong" or "alignment-forum"): writing
+  of their own, often research or argument about AI, with text the start of the post itself,
+  points its karma, and link the page it links to, or the post itself. When text is empty, only
   the title and link are known.
 - <reported>: stories already in a briefing in the last few days, id and title only. Don't answer
   for these. They're there so you can recognize a follow-up.

@@ -1,0 +1,98 @@
+[
+ {
+  "paper": {
+   "id": "2610.14224",
+   "title": "Harness^2: Recursive Agent Harnessing for an Open World",
+   "upvotes": 122,
+   "githubStars": 18844,
+   "publishedAt": "2026-10-09T00:00:00.000Z",
+   "submittedOnDailyAt": "2026-10-14T00:00:00.000Z"
+  },
+  "numComments": 2,
+  "title": "Harness^2: Recursive Agent Harnessing for an Open World"
+ },
+ {
+  "paper": {
+   "id": "2508.02739",
+   "title": "Kronos: A Foundation Model for the Language of Financial Markets",
+   "upvotes": 62,
+   "githubStars": 43514,
+   "publishedAt": "2025-08-02T13:15:59.000Z",
+   "submittedOnDailyAt": null
+  },
+  "numComments": 4,
+  "title": "Kronos: A Foundation Model for the Language of Financial Markets"
+ },
+ {
+  "paper": {
+   "id": "2412.20138",
+   "title": "TradingAgents: Multi-Agents LLM Financial Trading Framework",
+   "upvotes": 154,
+   "githubStars": 113570,
+   "publishedAt": "2024-12-28T12:54:06.000Z",
+   "submittedOnDailyAt": null
+  },
+  "numComments": 6,
+  "title": "TradingAgents: Multi-Agents LLM Financial Trading Framework"
+ },
+ {
+  "paper": {
+   "id": "2609.18063",
+   "title": "The Other Half of the Memory Wall: Serving 35B MoEs from SSD with Trained Routing Prediction",
+   "upvotes": 29,
+   "githubStars": 6898,
+   "publishedAt": "2026-09-16T00:00:00.000Z",
+   "submittedOnDailyAt": "2026-09-17T00:00:00.000Z"
+  },
+  "numComments": 6,
+  "title": "The Other Half of the Memory Wall: Serving 35B MoEs from SSD with Trained Routing Prediction"
+ },
+ {
+  "paper": {
+   "id": "2610.23374",
+   "title": "MOSS-Image Technical Report",
+   "upvotes": 97,
+   "githubStars": 1720,
+   "publishedAt": "2026-10-16T00:00:00.000Z",
+   "submittedOnDailyAt": "2026-10-19T00:00:00.000Z"
+  },
+  "numComments": 4,
+  "title": "MOSS-Image Technical Report"
+ },
+ {
+  "paper": {
+   "id": "2610.08699",
+   "title": "nanoMuse: An Open-Source Personal Agent for Every Device You Own",
+   "upvotes": 120,
+   "githubStars": 2464,
+   "publishedAt": "2026-10-06T00:00:00.000Z",
+   "submittedOnDailyAt": "2026-10-08T00:00:00.000Z"
+  },
+  "numComments": 3,
+  "title": "nanoMuse: An Open-Source Personal Agent for Every Device You Own"
+ },
+ {
+  "paper": {
+   "id": "2610.17309",
+   "title": "StartLux-Decision: AutoThink Decision Models with Reinforcement Learning for Calibrated Deliberative Decisions",
+   "upvotes": 81,
+   "githubStars": 1455,
+   "publishedAt": "2026-10-12T00:00:00.000Z",
+   "submittedOnDailyAt": "2026-10-15T00:00:00.000Z"
+  },
+  "numComments": 4,
+  "title": "StartLux-Decision: AutoThink Decision Models with Reinforcement Learning for Calibrated Deliberative Decisions"
+ },
+ {
+  "paper": {
+   "id": "2610.14162",
+   "title": "Next-Concept Modeling: Fast, Parallel Coarse-to-Fine Text Generation",
+   "upvotes": 16,
+   "githubStars": 941,
+   "publishedAt": "2026-10-09T00:00:00.000Z",
+   "submittedOnDailyAt": "2026-10-15T00:00:00.000Z"
+  },
+  "numComments": 2,
+  "title": "Next-Concept Modeling: Fast, Parallel Coarse-to-Fine Text Generation"
+ }
+]

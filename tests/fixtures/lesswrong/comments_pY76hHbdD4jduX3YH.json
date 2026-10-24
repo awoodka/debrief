@@ -1,0 +1,662 @@
+{
+ "data": {
+  "comments": {
+   "results": [
+    {
+     "_id": "mA2XLhwj6WTJ59Hkx",
+     "postedAt": "2026-10-23T05:46:44.903Z",
+     "baseScore": 90,
+     "af": false,
+     "parentCommentId": "XWiCjeQGDk5tuXrtG",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=mA2XLhwj6WTJ59Hkx",
+     "user": {
+      "displayName": "TsviBT"
+     },
+     "contents": {
+      "markdown": "I'm not saying to ignore second-order effects. I'm saying that one's ability to even remember first-order effects is actually at risk in the presence of illegitimate optimization pressures such as human-level persuasion and human-group-level persuasion. And therefore, it's good to learn the skill of maintaining (for yourself, or for your group) one mental mode, inter alia, in which you're able to remember firmly the first-order effects. By \"firmly remember\" I mean things like:\n\n* Ask the person making the argument to step through the argument carefully and slowly while you slowly listen and slowly ask questions about the parts that you don't get, even if it feels like you're revealing that y"
+     }
+    },
+    {
+     "_id": "XWiCjeQGDk5tuXrtG",
+     "postedAt": "2026-10-23T05:32:12.426Z",
+     "baseScore": 52,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 2,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=XWiCjeQGDk5tuXrtG",
+     "user": {
+      "displayName": "Fabien Roger"
+     },
+     "contents": {
+      "markdown": "That feels like a fully general heuristic for ignoring second order effects? Second order effects matter more than first order effects all the time!\n\nMy steelman is that it's a good heuristic when there are intense illegitimate optimization pressures pushing towards making people believe the second order effects matter more than the first. But if that's actually your point then it feels unfair to apply it to AI2040 Plan A and Redwood's work on conceptual reasoning, where I expect these optimization pressures to be weak, and comparable in magnitude to illegitimate optimization pressures in the other direction."
+     }
+    },
+    {
+     "_id": "LQEdy2Q5AeiLnjuJY",
+     "postedAt": "2026-10-23T13:23:52.076Z",
+     "baseScore": 21,
+     "af": false,
+     "parentCommentId": "ECnZTASkD5traxrun",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=LQEdy2Q5AeiLnjuJY",
+     "user": {
+      "displayName": "testingthewaters"
+     },
+     "contents": {
+      "markdown": "If someone is going to be robbed \"no matter what you do\", that still doesn't mean you have to rob them."
+     }
+    },
+    {
+     "_id": "KKpXrewE7bmf7h3b4",
+     "postedAt": "2026-10-23T05:50:12.806Z",
+     "baseScore": 21,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 1,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=KKpXrewE7bmf7h3b4",
+     "user": {
+      "displayName": "Zephaniah Roe"
+     },
+     "contents": {
+      "markdown": "I think there is a key point that is missing here: if someone gets the feeling that you are not taking their arguments seriously because they are misguided in some deep way that can't be addressed at the object level, some bad things could happen:\n\n1.  They use this as evidence for why objections to their work are unserious: \"My critics literally have not taken time to understand my position\"\n2.  They double down because they are offended by your attitude.\n\nWith the exception of Plan A, which I don't think belongs on your list, I relate to a kind of frustration with highly-complex arguments that end in \"we should do capabilities research.\" Although I think listening like a child is the wrong"
+     }
+    },
+    {
+     "_id": "PcYYAX5jefDCrfTq3",
+     "postedAt": "2026-10-23T19:00:05.637Z",
+     "baseScore": 20,
+     "af": false,
+     "parentCommentId": "o9RhLLGxR9EFp3nyZ",
+     "descendentCount": 13,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=PcYYAX5jefDCrfTq3",
+     "user": {
+      "displayName": "TsviBT"
+     },
+     "contents": {
+      "markdown": "> In that case I would really rather that there were people worried about AI risk working in AI, both in capabilities and alignment!\n\nNope! I would rather there's less AI capabilities, and it's unethical to make AI capabilities. I do not believe \"I'm going to make AI capabilities, but it won't make there be more AI capabilities.\".\n\n\n> You seem to think that a total stop on AI development is extremely doable - hence you lampooning Anthropic's defeatism about coordination with China/OpenAI/governments. \n\nI don't know how doable it is. I'm lampooning \"let's make the super dangerous thing\". \n\n> Step 1: Pressure as many concerned individuals as you can into quitting their AI jobs.\n\nActually, I'm "
+     }
+    },
+    {
+     "_id": "PtiythsWvGWqNBSqQ",
+     "postedAt": "2026-10-23T15:49:38.092Z",
+     "baseScore": 20,
+     "af": false,
+     "parentCommentId": "o9RhLLGxR9EFp3nyZ",
+     "descendentCount": 4,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=PtiythsWvGWqNBSqQ",
+     "user": {
+      "displayName": "Vaughn Papenhausen"
+     },
+     "contents": {
+      "markdown": "I mean, Jacob Coxon quitting his job made meaningful progress towards Step 2. Step 1 is only irrelevant if the people quitting doesn't increase the probability of the international coordination, which at least in that one case it quite clearly did."
+     }
+    },
+    {
+     "_id": "o9RhLLGxR9EFp3nyZ",
+     "postedAt": "2026-10-23T15:34:56.782Z",
+     "baseScore": 20,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 19,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=o9RhLLGxR9EFp3nyZ",
+     "user": {
+      "displayName": "307th"
+     },
+     "contents": {
+      "markdown": "Here's what I don't understand. You seem to think that a total stop on AI development is extremely doable - hence you lampooning Anthropic's defeatism about coordination with China/OpenAI/governments.\n\nAnd yet, here you are trying to get individual people worried about AI risk to quit their jobs, which is totally meaningless if you get a total stop - they will be stopped anyway, by force of law!\n\nIt seems like you (here I'm broadly conflating you with other pause AI people) have a 3-step plan:\n\n**Step 1:** Pressure as many concerned individuals as you can into quitting their AI jobs.\n\n**Step 2:** Materialize international coordination to stop the everyone who we didn't get in step 1.\n\n**Step"
+     }
+    },
+    {
+     "_id": "ECnZTASkD5traxrun",
+     "postedAt": "2026-10-23T10:45:10.042Z",
+     "baseScore": 18,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 1,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=ECnZTASkD5traxrun",
+     "user": {
+      "displayName": "cousin_it"
+     },
+     "contents": {
+      "markdown": "I'm not religious, but went to a Bible study group as a child. I think it gave me some useful tools. In particular, my favorite reply to the galaxy-brained \"we must build AI first\" argument is actually a Jesus quote: there will be temptations in the world, but we shouldn't be the ones through whom temptations come."
+     }
+    },
+    {
+     "_id": "jzfjrg3Ktx5BPAJsQ",
+     "postedAt": "2026-10-23T21:42:48.514Z",
+     "baseScore": 16,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 2,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=jzfjrg3Ktx5BPAJsQ",
+     "user": {
+      "displayName": "Gabriel"
+     },
+     "contents": {
+      "markdown": "My family, friends, and colleagues have faithfully adhered to this strategy while I’ve tried explaining that AI poses a major existential threat. All they hear is \"wah wah wah wah AI might kill us all\", and they reply that we should focus on what we can control, or that it just sounds absurd.  \nIgnoring what other people have to say won't work simply because you believe you are right or because the opposing argument is too complex (e.g., 10 years ago, the argument that AI would become an existential threat was too weird and complex for most, but was right anyway). I agree there is a point where you should stop engaging with an argument, but that point shouldn't be the very second the opposin"
+     }
+    },
+    {
+     "_id": "JC3WzTaYFAfa8GcHJ",
+     "postedAt": "2026-10-23T06:17:47.090Z",
+     "baseScore": 14,
+     "af": false,
+     "parentCommentId": "KKpXrewE7bmf7h3b4",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=JC3WzTaYFAfa8GcHJ",
+     "user": {
+      "displayName": "TsviBT"
+     },
+     "contents": {
+      "markdown": "(It of course applies to Plan A.) \n\nI'm not saying that this is a good way to *communicate with* someone who is presenting one of these arguments. I'm saying that having a mental thread for reflecting on a big octopus ink cloud is important.  See here for a bit more explanation: https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=mA2XLhwj6WTJ59Hkx\n\n(I agree with your worries about how things could go wrong, and agree that we should debate it, and try to understand each other. Indeed, I accuse many of these people of not being appropriately open to public debate.)"
+     }
+    },
+    {
+     "_id": "AAJSRMq9z5Cc7cRpA",
+     "postedAt": "2026-10-24T04:59:20.376Z",
+     "baseScore": 13,
+     "af": false,
+     "parentCommentId": "jzfjrg3Ktx5BPAJsQ",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=AAJSRMq9z5Cc7cRpA",
+     "user": {
+      "displayName": "Vladimir_Nesov"
+     },
+     "contents": {
+      "markdown": "The recipe is a mixture of ignoring and not-ignoring, the pluralism of framings (trying out different emphases on different parts of what you understand, seeing where that leads). It addresses the danger of systematic not-ignoring warping your thinking, in a way that ignoring straightforwardly won't. Exclusively ignoring and never growing up to start hearing what the adults are actually saying is a failure mode of this recipe, not its prescription. Just as permanently forgetting your inner child is a failure mode."
+     }
+    },
+    {
+     "_id": "hZohSkakmEvw2prts",
+     "postedAt": "2026-10-23T02:36:21.629Z",
+     "baseScore": 13,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 2,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=hZohSkakmEvw2prts",
+     "user": {
+      "displayName": "Random Developer"
+     },
+     "contents": {
+      "markdown": "> \"AI 2040: Plan A\" proposes that we stop all capabilities research, and then we continue almost all of the capabilities research, but also publish all the algorithms we're using. \n\n_Let's imagine, for just one minute, that we genuinely believe the human race will be dead in 10 years. What would a sane AI policy look like? Let's imagine:_\n\nWhen non-technical members of the public ask me what we should do about AI, I just look them in the eye and say, \"Cruise missiles.\"\n\nI don't _actually_ think cruise missiles are the best AI policy. I think the military should actually park outside the data centers and start feeding GPUs into wood chippers. Obviously we'd want to get China on board, and hav"
+     }
+    },
+    {
+     "_id": "bHiqCWexeY2GoEpmr",
+     "postedAt": "2026-10-24T01:49:17.354Z",
+     "baseScore": 12,
+     "af": false,
+     "parentCommentId": "dnX7xHEJnkhYeXDHZ",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=bHiqCWexeY2GoEpmr",
+     "user": {
+      "displayName": "TsviBT"
+     },
+     "contents": {
+      "markdown": "A fundamental problem is that people working at labs do not have a way to solve alignment, and they do not claim to, and they do not have a good reason to think it's doable, and they either don't claim to or at least will not ever defend that in a public debate with an expert. No amount of blog posts can solve that. \n\nBut ok no problemo:\n\nMain (not me): https://www.lesswrong.com/posts/uMQ3cqWDPHhjtiesc/agi-ruin-a-list-of-lethalities\n\nOther (me):\n\n* \"[Abstract advice to researchers tackling the difficult core problems of AGI alignment](https://www.lesswrong.com/posts/rZQjk7T6dNqD5HKMg/abstract-advice-to-researchers-tackling-the-difficult-core)\"\n* \"[The fraught voyage of aligned novelty](https"
+     }
+    },
+    {
+     "_id": "6G2RdbgGtjatQCkfr",
+     "postedAt": "2026-10-24T04:43:06.074Z",
+     "baseScore": 9,
+     "af": false,
+     "parentCommentId": "bFKjLAxdu4chRb3cb",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=6G2RdbgGtjatQCkfr",
+     "user": {
+      "displayName": "Vladimir_Nesov"
+     },
+     "contents": {
+      "markdown": "> although your entire plan relies on an indefinite stop\n\nNot everything is a plan. It's good to develop considerations that don't aspire to become plans. Systematically discarding such considerations [creates blind spots](https://www.lesswrong.com/posts/vqbieD9PHG8RRJddu/you-re-entitled-to-arguments-but-not-that-particular-proof), at least until someone makes a more comprehensive case that frames things in a form that won't be ignored. It's worse when hobbling curiosity in this way [turns into a norm, fed by its enforcement](https://www.lesswrong.com/posts/gXWz2szs7jKSGLiRv/listening-disorders-as-eating-disorders?commentId=FBJAgwMoeAckHZHhE)."
+     }
+    },
+    {
+     "_id": "bFKjLAxdu4chRb3cb",
+     "postedAt": "2026-10-23T21:19:40.546Z",
+     "baseScore": 9,
+     "af": false,
+     "parentCommentId": "PcYYAX5jefDCrfTq3",
+     "descendentCount": 12,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=bFKjLAxdu4chRb3cb",
+     "user": {
+      "displayName": "307th"
+     },
+     "contents": {
+      "markdown": "> I don't know how doable it is. I'm lampooning \"let's make the super dangerous thing\".\n\nAh OK, so although your entire plan relies on an indefinite stop, you aren't in fact taking a concrete stance on whether such a stop is possible.\n\n> Actually, I'm relatively more interested in understanding how the whole collectives work (Anthropic as a whole, OpenAI as a whole) and getting those entities to decide to stop.\n\nWhy not start with getting Meta, DeepSeek, and NVIDIA to stop? I am guessing you will claim that you are focusing on Anthropic/OpenAI because they are at the frontier; IMO you would be wrong to say this, it seems to me that the reason is because they are closer to you socially.\n\n> (T"
+     }
+    },
+    {
+     "_id": "nGEdCC2futLkvBkwD",
+     "postedAt": "2026-10-23T05:45:39.424Z",
+     "baseScore": 9,
+     "af": false,
+     "parentCommentId": "XWiCjeQGDk5tuXrtG",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=nGEdCC2futLkvBkwD",
+     "user": {
+      "displayName": "StanislavKrym"
+     },
+     "contents": {
+      "markdown": "I expect it to be applicable to Redwood's work, but not to AI-2040's Plan A.\n\nMaybe I'll write a post on Redwood's conceptual work explaining my position in more detail. As of now, I expect that a more conceptually capable AI would take over OpenAI when the time comes instead of attacking HF."
+     }
+    },
+    {
+     "_id": "KcXcH8vEijMfRqnZv",
+     "postedAt": "2026-10-23T06:44:55.608Z",
+     "baseScore": 8,
+     "af": false,
+     "parentCommentId": "mkY6QvJGDGoqMRcb2",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=KcXcH8vEijMfRqnZv",
+     "user": {
+      "displayName": "TsviBT"
+     },
+     "contents": {
+      "markdown": "> What is the counterfactual MIRI's plan which would let it accomplish its goal of stopping AI capabilities R&D in the whole world? What's the counterfactual plan for nuking xAI/Meta and placing the Big Three on a tight leash?\n\nI can give a counterfactual plan, e.g. communicating more about the dangers, preparing to make the dangers clear when someone else starts doing AI, or accelerating human intelligence amplification. But leaving that aside, proactively making a bunch of AI capabilities makes things worse!"
+     }
+    },
+    {
+     "_id": "bXDSYZQHz856h9rjK",
+     "postedAt": "2026-10-24T01:51:11.137Z",
+     "baseScore": 7,
+     "af": false,
+     "parentCommentId": "dnX7xHEJnkhYeXDHZ",
+     "descendentCount": 2,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=bXDSYZQHz856h9rjK",
+     "user": {
+      "displayName": "Ben Pace"
+     },
+     "contents": {
+      "markdown": "Oh. My perspective is that there have been a lot of great posts over the last decade about how hard alignment is, and only just now are we getting \"jesus stop building the things\"."
+     }
+    },
+    {
+     "_id": "hKjhbMLMJEWgAmoy6",
+     "postedAt": "2026-10-24T01:04:31.457Z",
+     "baseScore": 7,
+     "af": false,
+     "parentCommentId": "iqTPq6gm2dcWXpkvr",
+     "descendentCount": 5,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=hKjhbMLMJEWgAmoy6",
+     "user": {
+      "displayName": "TsviBT"
+     },
+     "contents": {
+      "markdown": "You may be right that many people upvoted because they want to tune out those arguments, I don't know. A couple pieces of feedback on a draft didn't suggest that (though they pointed at other flaws). \n\nI would make this same argument in conversation (probably second hour or later) with someone at a frontier lab, though probably phrased differently to suit their state. \n\nWhat am I supposed to do if there's this huge disagreement? The other side doesn't want to talk at all, to a first approximation. I think they are making a cognitive error about not having their basic values having a say. This is symmetric by design, so that I can truthfully say that I think it would be better if everyone sid"
+     }
+    },
+    {
+     "_id": "8gutdkoY3vBnDsnPg",
+     "postedAt": "2026-10-24T00:26:48.434Z",
+     "baseScore": 7,
+     "af": false,
+     "parentCommentId": "Qcm7vhAuYceTuKiEH",
+     "descendentCount": 7,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=8gutdkoY3vBnDsnPg",
+     "user": {
+      "displayName": "TsviBT"
+     },
+     "contents": {
+      "markdown": "> when they were wrong they didn't write long posts about how they were going to tune out everyone they disagree with which inexplicably get hundreds of karma\n\nThat is not what the post is about. It's about how it's good to have a skill that you apply sometimes, *among others*, of evaluating the overall / zoomed-out nature of some memeplex without getting too sucked in to their frame. I'm sure you're familiar with the value of this. Cf. https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=mA2XLhwj6WTJ59Hkx\n\nFable informs me that you may be reacting to several points in my essay where I *perform* not listening / not responding to detailed arguments ab"
+     }
+    },
+    {
+     "_id": "gomwRC6cZxe8sZFHT",
+     "postedAt": "2026-10-23T16:44:59.495Z",
+     "baseScore": 7,
+     "af": false,
+     "parentCommentId": "fMd3WwezNCTAgPxBf",
+     "descendentCount": 1,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=gomwRC6cZxe8sZFHT",
+     "user": {
+      "displayName": "307th"
+     },
+     "contents": {
+      "markdown": "When your entire plan hinges on completely sabotaging chances of alignment in the near term, you had better be getting a **stop**, not a slowdown!"
+     }
+    },
+    {
+     "_id": "mkY6QvJGDGoqMRcb2",
+     "postedAt": "2026-10-23T00:51:40.184Z",
+     "baseScore": 7,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 1,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=mkY6QvJGDGoqMRcb2",
+     "user": {
+      "displayName": "StanislavKrym"
+     },
+     "contents": {
+      "markdown": "> In \"[What just happened? Pragmatism and Pessimization](/posts/yaz8nx4ogZmiqHzt7/what-just-happened-pragmatism-and-pessimization)\", Ngo details a history of clever reasons that producing more AI capabilities helps decrease existential risk from AI capabilities. We have had, and continue to have, a variety of such clever reasons, very often coming from people who also admit several percentage points of risk of the technology killing everyone:\n> \n> *   OpenAI, xAI. These are your classic disaster monkeys; chaotic, freaked out, but charmingly (in a way) obvious about intentionally mutating programs in order to create a world-eating machine. There's a thin veneer of justification for how this h"
+     }
+    },
+    {
+     "_id": "iqTPq6gm2dcWXpkvr",
+     "postedAt": "2026-10-24T00:54:23.457Z",
+     "baseScore": 6,
+     "af": false,
+     "parentCommentId": "8gutdkoY3vBnDsnPg",
+     "descendentCount": 6,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=iqTPq6gm2dcWXpkvr",
+     "user": {
+      "displayName": "307th"
+     },
+     "contents": {
+      "markdown": "It's true that in your post you were careful to point out the potential downsides and failure modes of this mode of communication, so I was being unfair to you in that characterization.\n\nHowever, I don't think that's really the impact this post has on the discourse. I think people upvoted it because they wanted to tune out arguments in favour of continuing to work in the field of AI and appreciated the justification for doing so.\n\nI am a bit frustrated because of the bias that I perceive in LW discourse; a post literally titled \"Wah wah wah wah do more AI research\" which emphasizes the potential value of ignoring arguments for doing more AI research getting mass upvoted seems pretty on the n"
+     }
+    },
+    {
+     "_id": "fQfJEddcaJkFxGtFd",
+     "postedAt": "2026-10-23T17:18:00.464Z",
+     "baseScore": 6,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=fQfJEddcaJkFxGtFd",
+     "user": {
+      "displayName": "i_am_nuts"
+     },
+     "contents": {
+      "markdown": "I tried reading this essay, but all I gleaned was \"wah wah wah wah don't forget the big picture\""
+     }
+    },
+    {
+     "_id": "huXtfrLdHnukmxcMz",
+     "postedAt": "2026-10-23T08:30:40.803Z",
+     "baseScore": 6,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=huXtfrLdHnukmxcMz",
+     "user": {
+      "displayName": "IanWS"
+     },
+     "contents": {
+      "markdown": "Yes! I have thought about this point before in terms of avoiding \"galaxy brained\" reasoning. Smart people, in the rationalist community or AI safety or in general, often seem to me to overrate their ability to anticipate n-th order effects. This reminds me a bit of [@Anthony DiGiovanni](https://www.lesswrong.com/users/anthony-digiovanni?mention=user)'s series on [cluelessness](https://forum.effectivealtruism.org/s/rHqdsrieinyhM5KDv), or [Jacob Coxon's critique that Anthropic is at fault for following a certain kind of consequentialist philosophy](https://x.com/hilbertspaess/status/2099954626040905834?s=20). I do wonder if this tracks with habits of consequentialist or Bayesianism thinking, t"
+     }
+    },
+    {
+     "_id": "Qcm7vhAuYceTuKiEH",
+     "postedAt": "2026-10-24T00:06:55.732Z",
+     "baseScore": 5,
+     "af": false,
+     "parentCommentId": "N2FFpEFMzriymD3Kz",
+     "descendentCount": 8,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=Qcm7vhAuYceTuKiEH",
+     "user": {
+      "displayName": "307th"
+     },
+     "contents": {
+      "markdown": "> Are you trying to imply that this is irrational, or something? It is entirely possible that the best possible strategy is also not a very good strategy, because every other strategy is even worse.\n\nOK, now take this view and apply it to the original post - if the actual view was \"I am asking for everyone to commit to a terrible strategy that may or may not be possible because all the other options are worse\" then how does that make sense with the rest of the post? Why did the post not say so? Seems like all the talk about galaxy brained strategies and wah wah wah would be terribly out of place if TsviBT's actual point was \"AGI alignment is impossible, we must hard commit to low odds maybe-"
+     }
+    },
+    {
+     "_id": "N2FFpEFMzriymD3Kz",
+     "postedAt": "2026-10-23T23:41:21.901Z",
+     "baseScore": 5,
+     "af": false,
+     "parentCommentId": "bFKjLAxdu4chRb3cb",
+     "descendentCount": 9,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=N2FFpEFMzriymD3Kz",
+     "user": {
+      "displayName": "MichaelDickens"
+     },
+     "contents": {
+      "markdown": "> Ah OK, so although your entire plan relies on an indefinite stop, you aren't in fact taking a concrete stance on whether such a stop is possible.\n\nAre you trying to imply that this is irrational, or something? It is entirely possible that the best possible strategy is also not a very good strategy, because every other strategy is even worse.\n\n> Unfortunately many people in the \"AGI alignment is doomed, we need to stop it from ever being built\" camp seem to put a decent amount of their focus on sabotaging practical AGI alignment plans, with the rationale being that if they can convince people working on capabilities / practical alignment / evals to quit, then this may slow things down or ra"
+     }
+    },
+    {
+     "_id": "dnX7xHEJnkhYeXDHZ",
+     "postedAt": "2026-10-24T01:18:02.463Z",
+     "baseScore": 4,
+     "af": false,
+     "parentCommentId": "hKjhbMLMJEWgAmoy6",
+     "descendentCount": 4,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=dnX7xHEJnkhYeXDHZ",
+     "user": {
+      "displayName": "307th"
+     },
+     "contents": {
+      "markdown": "IMO the biggest crux is on the plausibility of aligning AGI in the current paradigm, so if I were you I would write a post explaining why I think alignment is unlikely to succeed. I feel like this has surprisingly not been done nearly as often as posts explaining why you shouldn't work at a frontier lab etc., even though those posts typically rely implicitly on the view that aligning LLMs is near-impossible."
+     }
+    },
+    {
+     "_id": "CKhZcBtaDsvAxZNqo",
+     "postedAt": "2026-10-23T05:59:21.009Z",
+     "baseScore": 4,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=CKhZcBtaDsvAxZNqo",
+     "user": {
+      "displayName": "Vladimir_Nesov"
+     },
+     "contents": {
+      "markdown": "> the [POSIWID](https://en.wikipedia.org/wiki/The_purpose_of_a_system_is_what_it_does) perspective is both useful and fraught ... In your decision-making, your fundamental values should get a say, and your simpler, more childish understanding of what people are arguing about should also get a say.\n\nThe crux for relevance of the system's stated purpose (that it's failing to serve) is whether you expect the system to be reformable (through your own effort or not) to get closer to its stated purpose, possibly by changing the stated purpose so that the system can start following the new purpose. So it's useful for the people inside the system to think about its purpose, even (or especially) when"
+     }
+    },
+    {
+     "_id": "wt7Rpt6c4tt7qe339",
+     "postedAt": "2026-10-24T04:53:28.176Z",
+     "baseScore": 3,
+     "af": false,
+     "parentCommentId": "28W7w8oorTJvqHi4L",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=wt7Rpt6c4tt7qe339",
+     "user": {
+      "displayName": "Cole Wyeth"
+     },
+     "contents": {
+      "markdown": "Maybe it’s better to make that case in books and papers, now that the shallow or informal points have been pretty thoroughly explored. It does make sense to post/discuss “[X] seems like bad/good news for alignment.” when some important update comes in, but that happens already. When I see yet another post arguing that alignment is hard, it usually feels pretty stale.\n\npositive example: [https://rubijhudson.com/files/Superalignment%20Anti-Literature%20Review.pdf](https://rubijhudson.com/files/Superalignment%20Anti-Literature%20Review.pdf)"
+     }
+    },
+    {
+     "_id": "fMd3WwezNCTAgPxBf",
+     "postedAt": "2026-10-23T16:32:34.141Z",
+     "baseScore": 3,
+     "af": false,
+     "parentCommentId": "7mbgZBQfdrHFRyTG3",
+     "descendentCount": 2,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=fMd3WwezNCTAgPxBf",
+     "user": {
+      "displayName": "Vaughn Papenhausen"
+     },
+     "contents": {
+      "markdown": "I mean, suppose every employee who signed the Pacing the Frontier letter (for argument's sake excluding CEOs) quit simultaneously. Sure, that wouldn't stop the labs, but it would significantly slow them down, and it would send a massive signal to regulators that this is serious.\n\nBut the point is not just about Coxon, or about mass walkouts. Even if every employee who signed that letter quit gradually over the period of a year, this would still slow down the labs and send a signal to regulators, even if not as much as if they all quit at once.\n\nYes, if coordination never materializes, this could eventually have a negative effect (cf. \"[evaporative cooling](https://www.lesswrong.com/posts/ZQG"
+     }
+    },
+    {
+     "_id": "via6Dk6BgfGGpeGLu",
+     "postedAt": "2026-10-23T02:56:43.686Z",
+     "baseScore": 3,
+     "af": false,
+     "parentCommentId": "hZohSkakmEvw2prts",
+     "descendentCount": 1,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=via6Dk6BgfGGpeGLu",
+     "user": {
+      "displayName": "StanislavKrym"
+     },
+     "contents": {
+      "markdown": "It would be more coherent *if policymakers agreed to do it and had leverage against those who didn't.* How do we steer American policymakers towards such a plan?"
+     }
+    },
+    {
+     "_id": "GGtucbDLqviZba7gG",
+     "postedAt": "2026-10-24T10:49:21.455Z",
+     "baseScore": 2,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=GGtucbDLqviZba7gG",
+     "user": {
+      "displayName": "Ashe Vazquez Nuñez"
+     },
+     "contents": {
+      "markdown": "Thanks for writing this post. I have previously tried—and failed—to articulate why various memes in the \"AI safety/alignment community\"[^jdkwwdn0b7g] should be labeled as hostile. Your notion of \"skip connection for sanity\" captures beautifully the idea that kept lingering at the tip of my pen.\n\nA prominent norm in this forum and many related (physical) spaces is to engage with arguments in good faith. This means decoupling the argument from adjacent things that people usually focus on, such as who is making the argument or what political groups are associated with it. This norm represents the virtue of taking reason seriously, and making this a 'high status' thing to do in a community is of"
+     }
+    },
+    {
+     "_id": "hMJFxByz6aqpTsr7J",
+     "postedAt": "2026-10-24T00:30:18.878Z",
+     "baseScore": 2,
+     "af": false,
+     "parentCommentId": "bFKjLAxdu4chRb3cb",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=hMJFxByz6aqpTsr7J",
+     "user": {
+      "displayName": "Hastings"
+     },
+     "contents": {
+      "markdown": "your entire plan for winning checkers hinges on removing all the red pieces from the board, but you arent taking a concrete stance on whether such a removal is possible"
+     }
+    },
+    {
+     "_id": "pav4MNSfELkGyJGQr",
+     "postedAt": "2026-10-23T23:10:52.382Z",
+     "baseScore": 2,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=pav4MNSfELkGyJGQr",
+     "user": {
+      "displayName": "Taylor G. Lunt"
+     },
+     "contents": {
+      "markdown": "So much digital ink spilled on LessWrong trying to figure out how to\nbe rational, only to find out your mom was doing it right the whole\ntime."
+     }
+    },
+    {
+     "_id": "BDoQBwpHQg4RaLtGz",
+     "postedAt": "2026-10-23T22:14:22.531Z",
+     "baseScore": 2,
+     "af": false,
+     "parentCommentId": "jzfjrg3Ktx5BPAJsQ",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=BDoQBwpHQg4RaLtGz",
+     "user": {
+      "displayName": "TsviBT"
+     },
+     "contents": {
+      "markdown": "I'm not saying to ignore what people are saying all the time and not engage with it. I'm saying to devote special cognitive resources to also being able to hear things in that way, in addition to engaging in more detail. See here for a bit more: https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d#mA2XLhwj6WTJ59Hkx \n\nI think that the people you're talking to are doing a good thing by listening to you that way *sometimes*. For example, it's good for people to track whether something just sounds absurd, and to track the fact that they can't help the situation if it were true. On priors, I would guess that there's a fair amount you could do to listen to them and "
+     }
+    },
+    {
+     "_id": "rCB6xRQPkgHh9vMAw",
+     "postedAt": "2026-10-23T21:38:59.280Z",
+     "baseScore": 2,
+     "af": false,
+     "parentCommentId": "via6Dk6BgfGGpeGLu",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=rCB6xRQPkgHh9vMAw",
+     "user": {
+      "displayName": "Martin Randall"
+     },
+     "contents": {
+      "markdown": "Why don't the cruise missiles count as leverage?"
+     }
+    },
+    {
+     "_id": "2ZmbxXhwkGxCMjH6Z",
+     "postedAt": "2026-10-23T16:59:00.255Z",
+     "baseScore": 2,
+     "af": false,
+     "parentCommentId": "gomwRC6cZxe8sZFHT",
+     "descendentCount": 0,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=2ZmbxXhwkGxCMjH6Z",
+     "user": {
+      "displayName": "Vladimir_Nesov"
+     },
+     "contents": {
+      "markdown": "Like with [every other kind of intervention](https://www.lesswrong.com/posts/CseMTXtQHynGR8S5k/every-point-of-intervention), a society as a whole can (and should) consider doing all of them at once. The low-hanging fruit can be collected if merely a substantial number of people quit in protest, and a substantial number of people try to make prosaic alignment/control go OK. It's worse if either is neglected too much, and so there doesn't need to be a choice. Flip a coin if you must."
+     }
+    },
+    {
+     "_id": "28W7w8oorTJvqHi4L",
+     "postedAt": "2026-10-24T02:07:51.480Z",
+     "baseScore": 1,
+     "af": false,
+     "parentCommentId": "bXDSYZQHz856h9rjK",
+     "descendentCount": 1,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=28W7w8oorTJvqHi4L",
+     "user": {
+      "displayName": "307th"
+     },
+     "contents": {
+      "markdown": "Obviously posts on alignment difficulty exist, but I think it's quite rare that a post on the LW front page or a quick take is explicitly arguing for alignment difficulty (or for alignment optimism). The most recent one I can think of is EY's on catbelling."
+     }
+    },
+    {
+     "_id": "7mbgZBQfdrHFRyTG3",
+     "postedAt": "2026-10-23T16:02:02.723Z",
+     "baseScore": -4,
+     "af": false,
+     "parentCommentId": "PtiythsWvGWqNBSqQ",
+     "descendentCount": 3,
+     "deleted": false,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=7mbgZBQfdrHFRyTG3",
+     "user": {
+      "displayName": "307th"
+     },
+     "contents": {
+      "markdown": "Yes, step 1 is not actually irrelevant to step 2 - it is helpful in the short term while we get nice headlines and harmful in the long term when those headlines are forgotten and the remaining people working in AI are less supportive of coordination and less likely to be outspoken about risks.\n\nBut in the particular case where you know that your tweet about quitting due to the risks will get 100M views, yeah you should quit."
+     }
+    },
+    {
+     "_id": "iqM7hquh84wDaF7xa",
+     "postedAt": "2026-10-23T04:52:09.616Z",
+     "baseScore": 1,
+     "af": false,
+     "parentCommentId": null,
+     "descendentCount": 0,
+     "deleted": true,
+     "pageUrl": "https://www.lesswrong.com/posts/pY76hHbdD4jduX3YH/wah-wah-wah-wah-do-more-ai-r-and-d?commentId=iqM7hquh84wDaF7xa",
+     "user": {
+      "displayName": "HowManyAgents"
+     },
+     "contents": null
+    }
+   ]
+  }
+ }
+}

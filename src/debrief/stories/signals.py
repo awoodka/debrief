@@ -164,12 +164,12 @@ def trend(store, story_ids, at, o, mentions=()):
 
 
 def paper_usage(store, story_id, at=None):
-    """The paper's latest usage signals (as of `at`, if given): upvotes, stars, and artifacts built
-    on it."""
+    """The paper's latest usage signals (as of `at`, if given): upvotes, stars, artifacts built on
+    it, and its place on Hugging Face's trending list (0 = not on it)."""
     s = store.latest_signals(story_id, at)
     return {"upvotes": s.get("hf_upvotes", 0), "stars": s.get("github_stars", 0),
             "artifacts": s.get("hf_models", 0) + s.get("hf_datasets", 0) + s.get("hf_spaces", 0),
-            "comments": s.get("hf_comments", 0)}
+            "comments": s.get("hf_comments", 0), "trending_rank": s.get("hf_trending_rank", 0)}
 
 
 def passes_use_bar(usage, o):

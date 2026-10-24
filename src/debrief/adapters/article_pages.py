@@ -25,10 +25,11 @@ apart. Listing-page sources (Anthropic, Meta) fetch the post anyway, so their an
 page themselves and nothing is requested twice.
 
 ThreadPages (source hn-thread-pages, daily, after the discussion sources): the page linked by each of
-the most-discussed threads that attached to nothing (triage.yml discussion.prefetch), stored under
-the thread's id (hn:<item>), so triage and the skill can read what the thread is about. A GitHub repo
-gives its README. Skipped: Ask and Tell HN posts (their text is the thread's own), posts on X (they
-need JavaScript), PDFs and videos.
+the most-discussed threads that attached to nothing (triage.yml discussion.sources.<id>.prefetch, for
+the sources in article_pages.thread_sources), stored under the thread's id (hn:<item>), so triage and
+the skill can read what the thread is about. A GitHub repo gives its README. Skipped: Ask and Tell HN
+posts (their text is the thread's own), posts on X (they need JavaScript), PDFs and videos. LessWrong
+posts aren't fetched: their body is their text.
 """
 from urllib.parse import urlsplit
 
@@ -180,12 +181,15 @@ class ThreadPages(ArticlePages):
     phase = "threads"
 
     def fetch(self, ctx, source):
-        from ..triage.candidates import unattached_threads
+        from ..triage.candidates import thread_id, unattached_threads
         o = ctx.settings["collect"]["article_pages"]
+        quotas = ctx.settings["triage"]["discussion"]["sources"]
+        threads = [m for src in o["thread_sources"] if src in quotas
+                   for m, _, _ in unattached_threads(ctx.store, ctx.settings, ctx.stored_until, src,
+                                                     quotas[src]["prefetch"])]
         skipped, blocked = {}, 0
-        for m, _, _ in unattached_threads(ctx.store, ctx.settings, times.iso(ctx.now),
-                                          ctx.settings["triage"]["discussion"]["prefetch"]):
-            sid = "hn:" + m["item_key"]
+        for m in threads:
+            sid = thread_id(m)
             url, kind = thread_target(m)
             if not url:
                 skipped[kind] = skipped.get(kind, 0) + 1

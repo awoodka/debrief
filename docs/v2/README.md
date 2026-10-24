@@ -8,12 +8,13 @@ v2 replaces the v1 collector and its five-seat council with three layers:
 
 [PLAN.md](PLAN.md) is the approved design. [CRITERIA.md](CRITERIA.md) holds the rules for what makes it into the index. [BRIEF.md](BRIEF.md) is the original brief; where they disagree, the plan and the criteria win. [SOURCES.md](SOURCES.md) is the latest source probe.
 
-Status: **M0–M4 are done.**
+Status: **M0–M4 are done; M5 is built** (one decision left: whether to drop the AWS ML and NVIDIA developer blogs).
 - **M0:** the source probe.
 - **M1:** `collect` with the raw store, the seen-set and story building.
 - **M2:** discussion attached to stories (Hacker News threads and comment trees, Hugging Face paper comments, newsletter and Techmeme coverage); signal snapshots (paper upvotes, repo stars, models built on a paper); the model-release sources; discussion levels and trend.
 - **M3:** article pages (main text and in-article links) for new stories; `triage` with the deterministic candidate stage, merges and press events, the reported ledger, and the output contract (`schemas/`).
-- **M4:** the scoring call: one Claude call (Sonnet 5.5, on the Max plan) that merges same-story candidates, drops what isn't relevant, and gives the rest a score and a one-line why; the most-discussed unattached HN threads join it; `calibrate` checks it against a labeled day. The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
+- **M4:** the scoring call: one Claude call (Sonnet 5.5, on the Max plan) that merges same-story candidates, drops what isn't relevant, and gives the rest a score and a one-line why; the most-discussed unattached HN threads join it; `calibrate` checks it against a labeled day.
+- **M5:** LessWrong and the Alignment Forum (posts and their best comments, through the GraphQL API): posts attach to stories like any discussion, and the most-discussed unattached ones join the scoring call with a quota per source; Hugging Face's trending papers as a signal (`hf_trending_rank`). The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
 
 ## Development setup
 
@@ -42,7 +43,7 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 | `debrief collect --source ID [--source ID]` | Just those sources. |
 | `debrief collect --replay YYYY-MM-DD [--into PATH]` | Rebuilds that day from its raw files into a new database, with no network. Default target: `<data>/replay/`. |
 | `debrief collect --rebuild` | Rebuilds the whole state from all raw data after a parser change, keeping cursors, ETags and run history. The previous database is kept as a backup. Took 23 s for a day of 7 runs. |
-| `debrief collect --cadence 6h` | The discussion poll: only sources whose `options.cadence` includes `6h` (Hacker News and its comment trees). It's what gives trend more than one observation a day. |
+| `debrief collect --cadence 6h` | The discussion poll: only sources whose `options.cadence` includes `6h` (Hacker News, LessWrong and the Alignment Forum, and their comments). It's what gives trend more than one observation a day. |
 | `debrief bootstrap-bands [--days N]` | Reads back Hacker News history (default `bands.window_days`, 7), so discussion levels have a distribution to compare against from day one. 14 days was 14,346 stories in 56 requests on 2026-10-22. |
 | `debrief story ID_OR_TITLE` | One story: its sources, signals, the paper use bar, attached threads and comments, coverage, discussion level and trend. |
 | `debrief sections` | Which sources feed each section, straight from the config. |
@@ -69,9 +70,9 @@ Each source gets one status in the run report:
 
 Sources run in phases:
 1. anchors, which create stories
-2. lookups about them (per-paper Hugging Face signals; article pages)
-3. discussion sources (Hacker News, Simon Willison)
-4. comment trees (Hacker News comments, Hugging Face paper comments)
+2. lookups about them (per-paper Hugging Face signals and trending ranks; article pages)
+3. discussion sources (Hacker News, LessWrong, the Alignment Forum, Simon Willison)
+4. comment trees (Hacker News comments, LessWrong comments, Hugging Face paper comments)
 5. reference sources (the newsletters, Techmeme)
 
 At the end of the run, a retro pass re-tries recent unattached posts against the run's new stories.
@@ -87,7 +88,7 @@ At the end of the run, a retro pass re-tries recent unattached posts against the
 The method and score are stored. At the end of a run, posts attached by name or title move if a URL or id now points at a story. A reference post gets a coverage row for every story it links to instead. A source with both roles gets both.
 
 **Discussion level and trend (`stories/signals.py`, rules in its docstring).**
-- **Percentile:** within each source, a story's best thread's points are compared with that source's threads from the last 7 days (`bands.window_days`). Only threads with at least `bands.floor` points count (10 for HN), because most submissions are never discussed. Without the floor, the 75th percentile was 4 points.
+- **Percentile:** within each source, a story's best thread's points are compared with that source's threads from the last 7 days (`bands.window_days`). Only threads with at least `bands.floor` points count (10 for HN; 20 karma for LessWrong, 10 for the Alignment Forum), because most submissions are never discussed. Without the floor, HN's 75th percentile was 4 points. A source needs 200 threads in the window (`bands.min_observations`) before it has percentiles; LessWrong has about 100 AI posts a week and the Alignment Forum about 4, so they count through spread only.
 - **Spread:** a comment counts under its thread's source, so an HN comment tree is still HN.
 - **Level:**
   - none: nothing mentions it
@@ -107,6 +108,9 @@ Cursors, by adapter:
 | `github_releases` (disabled) | release id not in the seen-set | ETag per repo |
 | `hn` | story id not in the seen-set | the last time read, minus an hour of overlap; attached threads are refreshed for 3 days |
 | `hn_comments` | — | per thread: the comment count when its tree was read; re-read at 1.5× |
+| `lesswrong` (LessWrong, the Alignment Forum) | post id not in the seen-set | none: each run re-reads the last 72 hours (one request, about 60 posts) |
+| `lesswrong_comments` | — | per post: the comment count when its comments were read; re-read at 1.5× |
+| `hf_trending_papers` | — | none: one request for the top 100, daily |
 | `hf_paper_api`, `hf_paper_page` | — | the paper pool (the last 3 days of HF-listed papers); comments only for the 30 best-ranked papers of the pool (triage's ranking), when they have comments |
 | `article_pages` | — | none: a story gets its page once (a 4xx isn't retried; other failures are, while it's in the window) |
 | `thread_pages` | — | none: daily, the page linked by each of the 40 most-discussed unattached HN threads, once |
@@ -119,9 +123,11 @@ Cursors, by adapter:
 - For scraped pages, it applies only on the source's first run, because a scraped date can be wrong. After that, a link missing from the seen-set is itself the evidence that the post is new.
 - Listing pages also fetch only their 5 newest links on a first run.
 
-**Threads that attach to nothing.** Most of Hacker News's busiest threads link pages none of our sources collect: on 2026-10-23, 198 of 202 with 10 points or more. On daily runs, the 40 most-discussed of the last 48 hours (`triage.yml` `discussion.prefetch`) get the same treatment as stories: `hn-thread-pages` fetches the page each links to (a GitHub repo gives its README; posts on X, PDFs, videos and Ask/Tell HN posts are skipped), stored under the thread's id (`hn:<item>`), and `hn-items` reads their comment trees. Triage scores 30 of them, reading those pages.
+**Threads that attach to nothing.** Most of Hacker News's busiest threads link pages none of our sources collect: on 2026-10-23, 198 of 202 with 10 points or more. On daily runs, the 40 most-discussed of the last 48 hours (`triage.yml` `discussion.sources.hn.prefetch`) get the same treatment as stories: `hn-thread-pages` fetches the page each links to (a GitHub repo gives its README; posts on X, PDFs, videos and Ask/Tell HN posts are skipped), stored under the thread's id (`hn:<item>`), and `hn-items` reads their comment trees. Triage scores 30 of them, reading those pages. Most LessWrong posts are original writing that links to none of our stories, so the same goes for them, with their own quota: 5 from LessWrong and 5 from the Alignment Forum (by karma), with the post's body as its text, so there's no page to fetch; `lesswrong-comments` reads their comments.
 
-**Which comments are kept.** From each comment tree, comments that say too little are left out first: under 150 characters once links are taken out ("This.", a joke, a bare link). Of the rest, the database keeps HN's 8 top-ranked top-level comments and the 3 most-replied others. A story's detail file shows 4 top-ranked and 2 most-replied per thread, each labeled with why it was picked. Replies aren't kept, and the full tree stays in the raw store.
+**LessWrong and the Alignment Forum (`adapters/lesswrong.py`).** One site behind two hosts. Every Alignment Forum post is also on LessWrong with the same karma, so the LessWrong source leaves those to the Alignment Forum source and a cross-post counts once. LessWrong posts are left out only when their tags say they're about something else: another core tag (Rationality, World Modeling, Practical...) and not AI. Many AI posts carry no tags at all, or only a subtopic like AI Control. A post can attach to a story by its link-post target and its first 3 body links; a numbered roundup ("AI #191") attaches by none of its links, since they're the week's news, not its subject. Comments come from LessWrong (the Alignment Forum shows only its members'): the 8 best top-level comments by karma, plus the 3 most-replied others.
+
+**Which comments are kept.** From each comment tree, comments that say too little are left out first: under 150 characters once links are taken out ("This.", a joke, a bare link). Of the rest, the database keeps HN's 8 top-ranked top-level comments (LessWrong's 8 best by karma) and the 3 most-replied others. A story's detail file shows 4 top-ranked and 2 most-replied per thread, each labeled with why it was picked. Replies aren't kept, and the full tree stays in the raw store.
 
 **Article pages (`adapters/article_pages.py`).** Most lab and press feeds carry a title and a teaser only, so after the anchors, `collect` fetches the page of each new announcement and press story (published in the last 2 days), and the model card or README of each new release. It keeps the main text (trafilatura, up to 8,000 characters) and the links inside it, in `story_pages`. Triage groups and merges by those links, and the index's full text comes from there. Listing-page sources fetch their posts anyway, so those carry their page and aren't requested twice. robots.txt is checked first, and paywalled domains (`article_pages.skip_domains`) are never requested.
 
@@ -135,9 +141,9 @@ The rules are in [CRITERIA.md](CRITERIA.md) and every threshold is in `config/tr
    - An announcement that links exactly one artifact published within 7 days of it is one story with that artifact. A lab post about its model is filed as a release; a lab post about its paper stays an announcement and takes the paper out of the paper pool.
    - Announcements with the same title are one story (a cross-post).
    - Press articles with the same title, or where one links the other from another site, or that both link the same URL off their own sites, are one event. Profile, home and index pages don't count.
-4. **ledger** (`triage/ledger.py`). A story already in a brief stays out, unless it has a new thread at or above the HN floor since; then it's back as `update`. The ledger is the skill's `runs/<date>/reported.json` files, or, until the first one exists, earlier days' indexes.
+4. **ledger** (`triage/ledger.py`). A story already in a brief stays out, unless it has a new thread at or above its source's floor since; then it's back as `update`. The ledger is the skill's `runs/<date>/reported.json` files, or, until the first one exists, earlier days' indexes.
 5. **order and cap**, per section: papers by the use bar, then rank fusion (at most 2 per organization, 15 in all); releases by tier, then likes (10); announcements with sources taking turns, tier 1 first (35); press events by outlets, then Techmeme, then discussion level, then newest (30).
-6. **threads.** The 30 most-discussed Hacker News threads of the last 48 hours that attached to no story join the discussion section (at least 10 points, not already in a brief).
+6. **threads.** The most-discussed threads of the last 48 hours that attached to no story join the discussion section, with a quota per source (`discussion.sources`): 30 from Hacker News, 5 from LessWrong, 5 from the Alignment Forum, each at least its source's floor and not already in a brief. Their ids are `<source>:<item>` (`hn:50212065`, `lesswrong:ie7bSp5ZDwYkCQxuv`).
 7. **score** (`triage/score.py`, CRITERIA.md "The model call"). One call over every candidate, with `config/relevance.md` as the definition and the titles of recently reported stories as a reference list. For each candidate, the model answers `same_as`, `why`, `relevant` and `score`. Code then merges each `same_as` group (one that reaches a reported story brings it back as an `update`), drops every group the model found not relevant, and keeps the rest with their score and why. The call runs through Claude Code with no tools, an explicit system prompt, no settings, MCP servers or slash commands, in an empty directory; fetched text goes in as data. Triage refuses to run with `ANTHROPIC_API_KEY` set, so it never bills the API.
 8. **keep.** Only when the call fails (after one retry) or with `--no-model`: each section's first `fallback_keep` candidates (10, 10, 15, 15, none of the threads), and the run is `degraded`.
 
@@ -214,7 +220,8 @@ The rest of the field reference:
 src/debrief/     cli.py config.py http.py robots.py urls.py probe.py collect.py
                  canon.py (URLs, story ids) sanitize.py times.py extract.py (HTML helpers)
 src/debrief/adapters/   base.py + rss, listing_page, hf_papers, arxiv, github_releases (M1);
-                        hn, hf_paper_pages, hf_hub, model_sources (M2); article_pages, thread pages (M3, M4)
+                        hn, hf_paper_pages, hf_hub, model_sources (M2); article_pages, thread pages (M3, M4);
+                        lesswrong, hf trending papers (M5)
 src/debrief/store/      db.py (state DB), raw.py (raw store), migrations/*.sql
 src/debrief/stories/    build.py (items -> seen-set, stories, mentions, snapshots, pages), attach.py, signals.py
 src/debrief/triage/     candidates.py, merge.py, ledger.py, score.py, output.py, run.py, calibrate.py

@@ -16,7 +16,7 @@ The stages, in order. triage/run.py logs every drop with its stage.
   merge    stories that are one thing become one candidate (triage/merge.py)
   ledger   already in a brief, unless there's meaningful new discussion (triage/ledger.py)
   threads  the most-discussed threads of the last 48 hours that attached to no story join the
-           discussion section, for the scoring call (triage/score.py)
+           discussion section, for the scoring call (triage/score.py), up to a quota per source
   order and cap, per section:
              papers         the use bar, then rank fusion; at most max_per_org per organization
              releases       tier, then likes, then story_id
@@ -204,7 +204,8 @@ def hard_rules(ctx, groups):
 def paper_values(store, settings, at, story_ids, dists):
     """{story_id: the paper's signals as of `at`}: upvotes, stars, adoption (models, datasets and
     Spaces built on it), hn_points (its best HN thread, from bands.floor up: a 2-point submission
-    isn't traction), spread, comments."""
+    isn't traction), spread, comments, trending_rank (its place on Hugging Face's trending list, 0
+    when it isn't on it; lower is better, so it can't go into the fusion as it is)."""
     floor = (settings["bands"].get("floor") or {}).get("hn", 0)
     out = {}
     for sid in story_ids:
@@ -212,7 +213,8 @@ def paper_values(store, settings, at, story_ids, dists):
         d = signals.discussion(store, settings, sid, at, dists)
         hn = (d["by_source"].get("hn") or {}).get("points", 0)
         out[sid] = {"upvotes": u["upvotes"], "stars": u["stars"], "adoption": u["artifacts"],
-                    "hn_points": hn if hn >= floor else 0, "spread": d["spread"], "comments": u["comments"]}
+                    "hn_points": hn if hn >= floor else 0, "spread": d["spread"], "comments": u["comments"],
+                    "trending_rank": u["trending_rank"]}
     return out
 
 
@@ -329,38 +331,54 @@ def _cap(order, cap, what):
             g.drop("cap", f"{what} #{i}, over the cap of {cap}")
 
 
-def unattached_threads(store, settings, at, limit, exclude=()):
-    """The most-discussed threads posted in the last discussion.window_hours that attached to no
-    story: [(mention row, points, comments)], each at least its source's bands.floor in points,
-    ordered by points, then id; ids in `exclude` (as hn:<item>) are skipped. Triage takes
-    discussion.max_threads of them as candidates; collect reads the linked page and the comments of
-    discussion.prefetch, a margin above that, so a thread that moves up by triage time is covered."""
+def thread_id(m):
+    """A thread's id as a candidate: <source>:<item> (hn:50212065, lesswrong:sEfY7bRjQYsu2A8ux)."""
+    return f"{m['source_id']}:{m['item_key']}"
+
+
+def thread_mention(sid, settings):
+    """The mention id behind a thread candidate's id, or None when sid is a story's id."""
+    src, sep, key = sid.partition(":")
+    return f"{src}|{key}" if sep and src in settings["triage"]["discussion"]["sources"] else None
+
+
+def unattached_threads(store, settings, at, source_id, limit, exclude=()):
+    """One discussion source's most-discussed threads posted in the last discussion.window_hours that
+    attached to no story: [(mention row, points, comments)], each at least the source's bands.floor in
+    points, ordered by points, then id; ids in `exclude` (thread_id) are skipped. Triage takes the
+    source's discussion.sources.<id>.max of them as candidates; collect reads the comments (and for
+    HN, the linked page) of its prefetch, a margin above that, so a thread that moves up by triage
+    time is covered."""
     o = settings["triage"]["discussion"]
-    floors = settings["bands"].get("floor") or {}
-    marks = ",".join("?" * len(o["sources"]))
-    rows = store.q(f"""SELECT * FROM mentions WHERE source_id IN ({marks}) AND kind = 'thread' AND story_id IS NULL
-                       AND posted_at > ? AND posted_at <= ? AND first_seen_at <= ?""",
-                   (*o["sources"], since(at, o["window_hours"]), at, at))
+    floor = (settings["bands"].get("floor") or {}).get(source_id, 0)
+    rows = store.q("""SELECT * FROM mentions WHERE source_id = ? AND kind = 'thread' AND story_id IS NULL
+                      AND posted_at > ? AND posted_at <= ? AND first_seen_at <= ?""",
+                   (source_id, since(at, o["window_hours"]), at, at))
     found = []
     for m in rows:
         e = signals._latest(store, m["mention_id"], at)
         pts = e.get("points") or 0
-        if pts >= floors.get(m["source_id"], 0) and "hn:" + m["item_key"] not in exclude:
+        if pts >= floor and thread_id(m) not in exclude:
             found.append((-pts, m["mention_id"], dict(m), e.get("comments") or 0))
     return [(m, -neg, comments) for neg, _, m, comments in sorted(found)[:limit]]
 
 
 def threads(ctx, ledger_doc):
-    """[Group] for the discussion.max_threads most-discussed unattached threads that aren't already
-    in a brief (unattached_threads)."""
+    """[Group] for each enabled discussion source's most-discussed unattached threads that aren't
+    already in a brief (unattached_threads), up to its quota, in triage.yml order. Ranks run on across
+    sources."""
     from .score import thread_story
-    o = ctx.t["discussion"]
+    enabled = {s.id for s in ctx.cfg.sources if s.enabled}
     out = []
-    for i, (m, points, comments) in enumerate(unattached_threads(ctx.store, ctx.settings, ctx.at, o["max_threads"],
-                                                                 exclude=ledger_doc["dates"]), 1):
-        s = thread_story(ctx.store, ctx.settings, m, points, comments)
-        out.append(Group(id=s["story_id"], section="discussion", members=[s["story_id"]], stories={s["story_id"]: s},
-                         rank=i, info={"thread_mentions": [m["mention_id"]], "points": points, "candidate": True}))
+    for src, q in ctx.t["discussion"]["sources"].items():
+        if src not in enabled:
+            continue
+        for m, points, comments in unattached_threads(ctx.store, ctx.settings, ctx.at, src, q["max"],
+                                                      exclude=ledger_doc["dates"]):
+            s = thread_story(ctx.store, ctx.settings, m, points, comments)
+            out.append(Group(id=s["story_id"], section="discussion", members=[s["story_id"]],
+                             stories={s["story_id"]: s}, rank=len(out) + 1,
+                             info={"thread_mentions": [m["mention_id"]], "points": points, "candidate": True}))
     return out
 
 

@@ -130,11 +130,16 @@ def gist(ctx, g, cap):
         para = prose_paragraph(p["text"], s["title"])
         if para:
             return first_sentence(para, cap)
-    hn = s["extra"].get("hn")
-    if not text and hn:             # a thread whose page couldn't be read: say what it is
-        stats = f"{hn['points']} points, {hn['comments']} comments, " if hn.get("points") is not None else ""
-        return sanitize.text(f"A Hacker News discussion ({stats}linking {hn['link']}).", cap)
+    th = s["extra"].get("thread")
+    if not text and th:             # a thread whose page couldn't be read: say what it is
+        what, unit = _THREAD_WORDS.get(s["sources"][0], ("A discussion", "points"))
+        stats = f"{th['points']} {unit}, {th['comments']} comments, " if th.get("points") is not None else ""
+        return sanitize.text(f"{what} ({stats}linking {th['link']}).", cap)
     return first_sentence(text, cap) if text else ""
+
+
+_THREAD_WORDS = {"hn": ("A Hacker News discussion", "points"), "lesswrong": ("A LessWrong post", "karma"),
+                 "alignment-forum": ("An Alignment Forum post", "karma")}
 
 
 def _pages(ctx, g):
@@ -194,9 +199,10 @@ def _threads(ctx, ids, mentions=()):
         for c, picked in pick_comments(stored, o):
             entry = {"author": c["author"], "text": sanitize.text(c["text"], o["comment_max_chars"]), "rank": c["rank"],
                      "replies": c["replies"], "picked": picked if picked != "top-ranked" else first}
-            likes = signals._latest(store, c["mention_id"], at).get("likes")
-            if likes is not None:
-                entry["likes"] = likes
+            e = signals._latest(store, c["mention_id"], at)
+            for key in ("likes", "points"):          # HF reactions; LessWrong karma
+                if e.get(key) is not None:
+                    entry[key] = e[key]
             top.append(entry)
         out.append({**t, "top_comments": top, "more_comments": max(0, len(stored) - len(top))})
     return {"threads": out, "more_threads": max(0, len(threads) - len(out))}
@@ -230,7 +236,7 @@ def _artifact_signals(ctx, ids):
 def _compact_signals(g):
     if g.section == "papers":
         v = g.info.get("signals") or {}
-        out = {k: _num(v[k]) for k in ("upvotes", "stars", "adoption", "hn_points") if v.get(k)}
+        out = {k: _num(v[k]) for k in ("upvotes", "stars", "adoption", "hn_points", "trending_rank") if v.get(k)}
         if "fusion" in g.info:
             out["fusion"] = g.info["fusion"]
         return out
@@ -280,11 +286,12 @@ def detail(ctx, g):
         full = [{"story_id": g.id, "kind": "abstract", "url": s["artifact_urls"][0] if s["artifact_urls"] else None,
                  "text": sanitize.text(s["summary"], o["abstract_max_chars"]), "chars": len(s["summary"])}]
     else:
-        # A thread's own post (Ask HN, Tell HN) first, then each member's page, the representative's first.
-        full = [{"story_id": sid, "kind": "post", "url": g.stories[sid]["extra"]["hn"]["thread"],
+        # A thread's own post (Ask HN, Tell HN, a LessWrong post) first, then each member's page, the
+        # representative's first.
+        full = [{"story_id": sid, "kind": "post", "url": g.stories[sid]["extra"]["thread"]["thread"],
                  "text": sanitize.text(g.stories[sid]["summary"], o["full_text_max_chars"], keep_paragraphs=True),
                  "chars": len(g.stories[sid]["summary"])}
-                for sid in g.members if sid.startswith("hn:") and g.stories[sid]["summary"]]
+                for sid in g.members if "thread" in g.stories[sid]["extra"] and g.stories[sid]["summary"]]
         full += [{"story_id": p["story_id"], "kind": "page", "url": p["url"], "fetched_at": p["fetched_at"],
                   "text": sanitize.text(p["text"], o["full_text_max_chars"], keep_paragraphs=True), "chars": len(p["text"])}
                  for p in _pages(ctx, g)]

@@ -394,6 +394,12 @@
                         "null"
                       ]
                     },
+                    "points": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
                     "picked": {
                       "enum": [
                         "top-ranked",

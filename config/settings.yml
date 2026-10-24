@@ -48,6 +48,9 @@ http:
     venturebeat:
       hosts: [venturebeat.com]
       interval_s: 10
+    lesswrong:
+      hosts: [lesswrong.com, alignmentforum.org]   # one site behind two hosts; robots.txt asks for Crawl-Delay 3
+      interval_s: 3.5
 
 collect:
   # Anchors from windowed sources (feeds, release lists, listing pages) whose publish date is older
@@ -75,6 +78,7 @@ collect:
     max_chars: 8000             # main text kept per page (CRITERIA.md: about 8,000 for the index)
     max_links: 200
     skip_domains: [wsj.com, ft.com, bloomberg.com, nytimes.com, theinformation.com, economist.com]   # paywalls
+    thread_sources: [hn]        # hn-thread-pages: whose unattached threads get their linked page (LessWrong posts carry their body)
   hn:
     slice_hours: 6              # one request per slice (~400 stories per 6 h on 2026-10-22; the API returns up to 1000)
     overlap_minutes: 60         # re-read the last hour each run; Algolia indexes some stories late
@@ -84,7 +88,7 @@ collect:
     thread_source: hn
     days: 3                     # threads posted this recently
     min_comments: 5
-    max_threads: 80             # per run: attached threads, plus (daily) the top unattached ones (triage.yml discussion.prefetch)
+    max_threads: 80             # per run: attached threads, plus (daily) the top unattached ones (triage.yml discussion.sources.hn.prefetch)
     regrow: 1.5                 # re-read a tree once its comment count has grown this many times
     min_chars: 150              # a comment shorter than this, once its links are taken out, says too little to keep
     top_ranked: 8               # top-level comments kept, in HN's ranked order
@@ -97,6 +101,27 @@ collect:
     skip_author_pattern: '(^|[-_])bot$'
   hf_trending:
     max_age_days: 14            # a trending model counts as a release only if it's this new
+  hf_trending_papers:
+    limit: 100                  # the top of HF's trending papers (the API returns 50 unless asked)
+  lesswrong:                    # adapters/lesswrong.py: LessWrong and the Alignment Forum
+    lookback_hours: 72          # re-read posts this recent every run, so karma and comment counts stay current
+    page_size: 100              # about 21 posts a day on LessWrong (2026-10-17 to 10-24)
+    max_pages: 5
+    body_max_chars: 8000        # a post's body is its full text; no page fetch
+    max_links: 100
+    lead_links: 3               # body links that may attach the post: what it's about is linked early (adapters/lesswrong.py)
+    roundup_title: '#\d+\b'     # a numbered roundup ("AI #191", "Against Moloch #48"): none of its links attach it
+  lesswrong_comments:
+    thread_sources: [lesswrong, alignment-forum]
+    days: 3                     # posts on stories first seen this recently, plus (daily) the candidates (triage.yml discussion.sources)
+    min_comments: 3
+    max_posts: 30               # per run, at 3.5 s each
+    regrow: 1.5                 # re-read a post's comments once its count has grown this many times
+    limit: 100                  # comments asked for per post, best first, replies included; top-level ones are kept
+    min_chars: 150
+    top_ranked: 8               # top-level comments kept, best by karma
+    top_replied: 3              # plus this many of the most-replied others
+    comment_max_chars: 1200
 
 # Story kind -> index section.
 sections:
@@ -128,6 +153,10 @@ bands:
   # and the 95th is 525. Threads below the floor still count toward "some".
   floor:
     hn: 10
+    # Karma (LessWrong's, for both: an Alignment Forum post has the same score there). The median AI
+    # post of 2026-10-17..24 had 19; a new post starts at a few points from its author's own vote.
+    lesswrong: 20
+    alignment-forum: 10
   notable_pctl: 75
   heavy_pctl: 95
 trend:

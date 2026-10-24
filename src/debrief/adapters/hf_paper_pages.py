@@ -5,6 +5,13 @@ hf_paper_api (enrich): /api/papers/<id> for each paper in the pool, every daily 
 signals only: upvotes, the official repo's stars, and how many models, datasets and Spaces on the
 Hub link the paper. These feed the use bar and the ranking (CRITERIA.md).
 
+hf_trending_papers (enrich): the Daily Papers API sorted by trending, one request for the top
+hf_trending_papers.limit. A signal, not a source of stories (Alex, 2026-10-24): on 2026-10-24 its
+top 100 were mostly old papers with popular repos (vLLM's from 2023, Transformers' from 2019), and
+the recent ones were already in the pool through Daily Papers. Records hf_trending_rank (1 is the
+top) for every listed paper we have, and 0 for the pool's papers that aren't listed, so a paper's
+latest value is always as of the latest list. The pool is recorded in the raw record at fetch time.
+
 hf_paper_page (threads): there is no comments API, so the paper page's embedded PaperContent data
 is read, only for the hf_paper_comments.top_n best papers of the pool in triage's ranking (the use
 bar, then rank fusion) that have comments, and again when the comment count has grown. Comments
@@ -52,6 +59,30 @@ class HfPaperApi(Adapter):
             "hf_spaces": d.get("numTotalSpaces") or 0})]
 
 
+class HfTrendingPapers(Adapter):
+    name = "hf_trending_papers"
+    phase = "enrich"
+    windowed = False
+
+    def fetch(self, ctx, source):
+        o = {**ctx.opts["hf_trending_papers"], **source.options}
+        pool = paper_pool(ctx.store, ctx.run_date, ctx.opts["hf_papers"]["lookback_days"])
+        ctx.get(source, f"{source.url}&limit={o['limit']}", meta={"pool": pool}, conditional=False)
+
+    def parse(self, record, source, opts):
+        if not raw.ok(record):
+            return []
+        data = json.loads(raw.body(record)) or []
+        rank = {}
+        for d in data if isinstance(data, list) else []:
+            aid = ((d.get("paper") or {}).get("id") or "").strip()
+            if aid and aid not in rank:
+                rank[aid] = len(rank) + 1
+        unlisted = [sid.split(":", 1)[1] for sid in (record.get("meta") or {}).get("pool", [])]
+        return [Item(item_key=aid, role="signal", story_id=f"arxiv:{aid}", signals={"hf_trending_rank": rank.get(aid, 0)})
+                for aid in dict.fromkeys([*rank, *unlisted])]
+
+
 class HfPaperPage(Adapter):
     name = "hf_paper_page"
     phase = "threads"
@@ -61,7 +92,7 @@ class HfPaperPage(Adapter):
         o = ctx.opts
         done = dict(ctx.store.cursor(source.id).get("fetched", {}))
         pool = paper_pool(ctx.store, ctx.run_date, o["hf_papers"]["lookback_days"])
-        ranked, _ = rank_papers(ctx.store, ctx.settings, times.iso(ctx.now), pool)
+        ranked, _ = rank_papers(ctx.store, ctx.settings, ctx.stored_until, pool)
         for sid, _, v in ranked[: o["hf_paper_comments"]["top_n"]]:
             n = int(v["comments"])
             if n <= done.get(sid, 0):

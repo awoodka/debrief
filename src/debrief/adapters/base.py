@@ -96,6 +96,14 @@ class FetchContext:
     def fetched_at(self):
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    @property
+    def stored_until(self):
+        """The last fetch this run has stored so far, or the run's start: what a selection made at
+        fetch time (the unattached threads to prefetch) counts back from, so it sees the threads the
+        run's discussion sources stored just before."""
+        row = self.store.one("SELECT MAX(fetched_at) FROM fetches WHERE run_id=?", (self.run_id,))
+        return row[0] if row and row[0] else self.now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     def get(self, source, url, *, each=None, meta=None, conditional=True, headers=None):
         hdrs = {**source.auth_headers(self.env), **(headers or {})}
         etag, last_modified = self.store.validators(url) if conditional else (None, None)
@@ -105,6 +113,16 @@ class FetchContext:
         self.records.append(rec)
         if conditional and fetched.ok and (fetched.headers.get("etag") or fetched.headers.get("last-modified")):
             self.validators.append((url, fetched.headers.get("etag"), fetched.headers.get("last-modified")))
+        return rec
+
+    def post(self, source, url, json_body, *, each=None, meta=None, headers=None):
+        """A POST (GraphQL), recorded like get(). Never conditional; the request body isn't kept, so
+        put what parse() needs to know about the request in meta."""
+        hdrs = {**source.auth_headers(self.env), **(headers or {})}
+        fetched = self.client.post(url, json_body=json_body, headers=hdrs or None)
+        rec = raw.make_record(source.id, self.run_id, len(self.records), fetched, self.fetched_at,
+                              each=each, meta=meta)
+        self.records.append(rec)
         return rec
 
     def set_cursor(self, cursor):

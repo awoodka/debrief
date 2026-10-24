@@ -6,7 +6,7 @@ Decided with Alex on 2026-10-22, and revised on 2026-10-23 (the model call). Thi
 
 ```
 collect ──> candidates (deterministic, per section, capped; at most 100 in total)
-              + the 30 most-discussed Hacker News threads that attached to nothing
+              + the most-discussed threads that attached to nothing (30 HN, 5 LessWrong, 5 Alignment Forum)
         ──> one Haiku call: same_as, why, relevant, score for each
         ──> code merges same_as groups and drops what isn't relevant
         ──> the index: every relevant story, annotated, ordered by score
@@ -27,7 +27,7 @@ A story's section comes only from its source's `kind`, mapped through `settings.
 
 | Section | Sources |
 |---|---|
-| papers | arxiv-rss, hf-daily-papers, hf-trending-papers |
+| papers | arxiv-rss, hf-daily-papers. hf-trending-papers is a signal, not a source of stories (2026-10-24): its top 100 were mostly old papers with popular repos, and its recent ones were already in the pool |
 | releases | hf-org-watch (25 labs), hf-trending-models, openrouter-models, deepseek-github, lmarena |
 | announcements | 19 lab and company blogs (OpenAI, DeepMind, Google ×3, Anthropic ×2, Meta, Microsoft Research, Mistral, Cohere, Ai2, Apple, Thinking Machines, NVIDIA ×2, Hugging Face, AWS, Together) |
 | press_policy | TechCrunch, Ars Technica, MIT Technology Review, MIT News, The Verge, Wired, NIST, UK AISI. The Federal Register, SEC EDGAR and the OpenAI and Anthropic status pages were dropped on 2026-10-23: anything major they'd carry reaches the press and lab sources. |
@@ -84,15 +84,17 @@ The windows count back from the run. "Not yet in a brief" uses the reported ledg
   5. `story_id`
 - **Status pages:** dropped from the plan (2026-10-23).
 
-### Discussion: the 30 most-discussed unattached threads
+### Discussion: the most-discussed unattached threads, a quota per source
 
-Hacker News threads from the last 48 hours, with at least the band floor in points (10), that attached to no story, ordered by points, then id. On 2026-10-23, only 4 of 202 such threads attached. Among the rest were Kimi K3.1 Pro (451 points), Sweden banning ChatGPT and Claude in government offices (309), and follow-ups on PHP2Shell; most of the rest weren't about AI.
+Threads from the last 48 hours that attached to no story, with at least their source's band floor, ordered by points, then id, up to a quota per source (`discussion.sources`), since HN points and LessWrong karma aren't on one scale: 30 Hacker News threads (from 10 points), 5 LessWrong posts (from 20 karma), 5 Alignment Forum posts (from 10 karma). On 2026-10-23, only 4 of 202 such threads attached. Among the rest were Kimi K3.1 Pro (451 points), Sweden banning ChatGPT and Claude in government offices (309), and follow-ups on PHP2Shell; most of the rest weren't about AI.
 
 Each goes into the model call with its title, link, points and comments, and the start of the page it links to (or its own text, for an Ask or Tell HN): `collect` reads those pages and the threads' comment trees on daily runs, for the top 40. A thread about another candidate is folded into it by `same_as`, as discussion. A thread about nothing we collected is scored like any story, so it can enter the index on its own, with the linked page as its full text and its best comments as discussion.
 
-The rule from the brief, a topic with at least 3 independent sources, comes back once M5 adds more discussion sources. With Hacker News the only one built, no topic can reach 3.
+LessWrong and Alignment Forum posts (M5) are mostly original writing about AI that links to none of our stories. They go in the same way, with the start of the post itself as their text and karma as their points; the post's body is its full text. On 2026-10-24, the five LessWrong posts were "Wah wah wah wah do more AI R&D" (221 karma), "Gradient Routing Generalizes to Unrouted Hack Types", "Patching reward hacks won't fix reward hacking", "Instrumental convergence is incoherent" and a book review; the model kept the gradient-routing post at 3.
 
-The caps add up to 100, plus the 30 threads. A normal day runs about 80–90 candidates: about 30 announcements, 30 press, 15 papers, and a few releases.
+The rule from the brief, a topic with at least 3 independent sources, stays dormant: HN plus LessWrong and the Alignment Forum rarely make 3 independent sources for one topic, since a cross-post counts once. It comes back with Bluesky.
+
+The caps add up to 100, plus up to 40 threads. A normal day runs about 80–90 candidates: about 30 announcements, 30 press, 15 papers, and a few releases.
 
 ## The model call (Sonnet 5.5, one call per run)
 
@@ -100,7 +102,7 @@ The model is `scoring.model` in `triage.yml`. It was planned as Haiku 5.5; the c
 
 **Input**, delimited as data, in the deterministic order above:
 - every candidate: its id, section, source and organization; its title; its summary, plus the start of its page when the summary is short, about 1,000 characters in all; its signals
-- the 30 threads, title-only
+- the unattached threads and posts, with the start of the page they link to (or the post itself)
 - the titles of stories already in a brief in the last 7 days, as a reference list. A follow-up thread can then point at the story it continues, which comes back with status `update`, rather than standing alone.
 - `config/relevance.md` whole: the definition, the worked examples, the score
 
@@ -127,6 +129,7 @@ Writing `why` before deciding makes the decision a reasoned one. Code checks the
 |---|---|---|---|---|---|
 | Haiku 5.5 | 118, then 115 of 120 | 38, then 37 of 38 | 2, then 4 | 5 (Spotify's agents, Linux kernel leaks, WeVisOne, TB screening, the PHP embargo thread) | 134 s, 107 s |
 | Sonnet 5.5 | 119, then 119 | 38, 38 | 1, 1 (inDrive's robotaxi tests) | 0 | 44 s, 45 s |
+| Sonnet 5.5, prompt with LessWrong (2026-10-24) | 118, then 118 | 38, 38 | 2, 2 (inDrive's robotaxi tests, Anthropic's life-science call: the two disagreements Alex reviewed on 2026-10-23) | 0 | 54 s, 52 s |
 
 Haiku thinks before answering (15k tokens of it), which is why it was slower. So the default is Sonnet. The worked examples in `relevance.md` come from those same items, so these numbers are optimistic; the next days' runs are the real check.
 

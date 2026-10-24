@@ -8,10 +8,10 @@ in the last hn.refresh_days days, 50 per request. Every story is kept (lossless)
 which ones belong to a story.
 
 hn_comments (threads): for threads attached to stories first seen in the last `days` days, and on
-daily runs also the most-discussed threads that attached to nothing (triage.yml discussion.prefetch,
-the ones triage may score on their own), with at least min_comments comments: the comment tree
-from Algolia (text, authors, structure) and the ranked order from the official Firebase API (Algolia's
-order isn't the ranking). Comments that say too little are left out first: shorter than min_chars
+daily runs also the most-discussed threads that attached to nothing (triage.yml
+discussion.sources.hn.prefetch, the ones triage may score on their own), with at least min_comments
+comments: the comment tree from Algolia (text, authors, structure) and the ranked order from the
+official Firebase API (Algolia's order isn't the ranking). Comments that say too little are left out first: shorter than min_chars
 once their links are taken out ("This.", a joke, a bare link). Of the rest it keeps the top_ranked
 top-level comments plus the top_replied most-replied ones, so disagreement survives, not just the
 top of the page. A thread is re-read once its comment count has grown by `regrow` times. The full
@@ -117,11 +117,12 @@ class HnComments(Adapter):
                               WHERE m.source_id=? AND m.kind='thread' AND st.first_seen >= date(?, ?)""",
                            (threads_from, ctx.run_date, f"-{o['days'] - 1} days"))
         done = dict(ctx.store.cursor(source.id).get("fetched", {}))
-        if ctx.cadence == "daily":
+        quota = ctx.settings["triage"]["discussion"]["sources"].get(threads_from)
+        if ctx.cadence == "daily" and quota:
             from ..triage.candidates import unattached_threads
             have = {k for k, _ in rows}
-            for m, _, comments in unattached_threads(ctx.store, ctx.settings, times.iso(ctx.now),
-                                                     ctx.settings["triage"]["discussion"]["prefetch"]):
+            for m, _, comments in unattached_threads(ctx.store, ctx.settings, ctx.stored_until, threads_from,
+                                                     quota["prefetch"]):
                 if m["item_key"] not in have:
                     rows.append((m["item_key"], comments))
         due = [(n, k) for k, n in rows

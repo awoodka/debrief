@@ -345,12 +345,11 @@
 - id: hf-trending-papers
   name: Hugging Face trending papers
   adapter: hf_trending_papers
-  roles: [anchor]
+  roles: [context]
   tier: 2
-  kind: paper
   url: https://huggingface.co/api/daily_papers?sort=trending
   probe: {kind: json, items: '', title: paper.title}
-  notes: verified; returns a different order from the default list
+  notes: 'a signal, not a source of stories (Alex, 2026-10-24): hf_trending_rank for the papers we have. Its top 100 on 2026-10-24 were mostly old papers with popular repos; the recent ones were already in the pool through Daily Papers'
 
 - id: alphaxiv-overview
   enabled: false
@@ -685,7 +684,8 @@
     items: data.posts.results
     title: title
     date: postedAt
-  notes: verify
+  options: {cadence: [daily, 6h], ai_tag: ai, af_source: alignment-forum}
+  notes: 'verified 2026-10-24; robots.txt allows /graphql (Crawl-Delay 3). Leaves out posts that have another core tag (Rationality, World Modeling ...) and not AI; untagged posts stay (Alex, 2026-10-24: 38 of the week''s 157 posts had no tags, most about AI). Alignment Forum posts are left to alignment-forum'
 
 - id: alignment-forum
   name: Alignment Forum
@@ -699,7 +699,23 @@
     items: data.posts.results
     title: title
     date: postedAt
-  notes: verify
+  options: {cadence: [daily, 6h]}
+  notes: 'verified 2026-10-24. Every post is also on LessWrong (af: true, same karma); about 4 a week. A source of its own so it has its own quota of candidates'
+
+- id: lesswrong-comments
+  name: LessWrong and Alignment Forum comments
+  adapter: lesswrong_comments
+  roles: [discussion]
+  tier: 3
+  url: https://www.lesswrong.com/graphql
+  probe:
+    kind: graphql
+    query: '{ comments(input: {terms: {view: "recentComments", limit: 3}}) { results { postedAt baseScore contents { plaintextMainText } } } }'
+    items: data.comments.results
+    title: contents.plaintextMainText
+    date: postedAt
+  options: {cadence: [daily, 6h]}
+  notes: 'the best comments of attached and candidate posts, from LessWrong (which has every comment; the Alignment Forum shows only its members'')'
 
 - id: mastodon
   enabled: false

@@ -1,0 +1,231 @@
+{
+ "data": {
+  "posts": {
+   "results": [
+    {
+     "_id": "zAczYuHQS6jdG5DTg",
+     "title": "Monitorability evaluations and policy proposals",
+     "pageUrl": "https://www.lesswrong.com/posts/zAczYuHQS6jdG5DTg/monitorability-evaluations-and-policy-proposals",
+     "postedAt": "2026-10-22T14:01:40.943Z",
+     "baseScore": 41,
+     "afBaseScore": 19,
+     "voteCount": 18,
+     "commentCount": 5,
+     "afCommentCount": 2,
+     "af": true,
+     "url": null,
+     "question": false,
+     "isEvent": false,
+     "wordCount": 1451,
+     "frontpageDate": "2026-10-22T14:01:44.729Z",
+     "tags": [
+      {
+       "slug": "ai",
+       "name": "AI",
+       "core": true
+      }
+     ],
+     "user": {
+      "displayName": "evhub"
+     },
+     "coauthors": [],
+     "contents": {
+      "markdown": "There has been a lot of discussion recently of policy proposals around monitorability, such as [Redwood's proposal](https://www.lesswrong.com/posts/hLPGv8QjPcNLtDp3A/proposal-for-tracking-the-effects-of-architecture-on) and [my counter-proposal](https://www.lesswrong.com/posts/hLPGv8QjPcNLtDp3A/proposal-for-tracking-the-effects-of-architecture-on?commentId=HZzNYkvwZQyT4JdZZ). I'd like to say a bit more generally about how I'm thinking about monitorability. Note that nothing here is an official Anthropic position; these are just my personal thoughts.\n\n---\n\nFirst, a categorization. I currently think about four different types of monitorability:\n1. **Control Monitorability:** the extent to which Control and monitoring techniques would likely catch catastrophic sabotage actions, like escaping a sandbox or setting up a rogue internal deployment. We can measure this via reference to sabotage evaluations like [LinuxArena](https://www.lesswrong.com/posts/WgzwBi6DCagDuHPzP/introducing-linuxarena) or any evaluation that measures the model’s capability to take dangerous actions like escaping a sandbox while looking to a monitor like it's doing some innocuous task (like a cyber eval).\n2. **Training Monitorability:** the extent to which reward models, monitors, and oversight in training would likely catch misaligned or undesirable actions in training, such as sneaky/subtle reward hacks.\n3. **Auditing Monitorability:** the extent to which alignment audits, evaluations, and test deployments"
+     }
+    },
+    {
+     "_id": "nWiPLEgaXdAQNwXBd",
+     "title": "Patching reward hacks won’t fix reward hacking",
+     "pageUrl": "https://www.lesswrong.com/posts/nWiPLEgaXdAQNwXBd/patching-reward-hacks-won-t-fix-reward-hacking",
+     "postedAt": "2026-10-24T09:15:09.838Z",
+     "baseScore": 33,
+     "afBaseScore": 8,
+     "voteCount": 12,
+     "commentCount": 1,
+     "afCommentCount": 0,
+     "af": false,
+     "url": null,
+     "question": false,
+     "isEvent": false,
+     "wordCount": 721,
+     "frontpageDate": "2026-10-24T09:15:11.514Z",
+     "tags": [],
+     "user": {
+      "displayName": "David Africa"
+     },
+     "coauthors": [],
+     "contents": {
+      "markdown": "In the spirit of [More people should write basic AI safety explainers](https://www.lesswrong.com/posts/yLdgq9uAxDHzqXdjj/more-people-should-write-basic-ai-safety-explainers), here's a basic argument that focusing on patching reward hacking is misguided and will fail. It's an attempt to distill my understanding of what we're seeing right now + a variety of relevant sources.[^6xij9lg6per] Argument is as follows:\n\n1.  **Reward hacking is a big problem**, causing models to cheat and take unintended actions.\n2.  **This can generalise broadly**, leading to other misbehaviour such as faking alignment and sabotaging safety research.\n    1.  We don't understand that well when this happens. Sometimes you get [emergent misalignment](https://arxiv.org/abs/2511.18397) from it, but most of the time (IME), [you don't](https://www.lesswrong.com/posts/fkv5W79rBtAiXqYcK/reward-hacking-without-egregious-misalignment-in-an-rl-only). But other times, this link lies latent until faced with something [like an automated grader.](https://www.lesswrong.com/posts/wYZMmdWEt5QLM3m3e/steering-towards-automated-grading-degrades-alignment)\n3.  The default course of action will be to:\n    1.  **Patch**, which means we find the hack, close the loophole or penalise the behavior in some way, and train again.\n    2.  **Patch+**: use a method that comes with some account of why it should work. [Inoculation prompting](https://arxiv.org/abs/2510.04340), for example, uses the idea that hacking spreads through what i"
+     }
+    },
+    {
+     "_id": "JFYvJqMaLw9nhfrur",
+     "title": "Fermi Poker",
+     "pageUrl": "https://www.lesswrong.com/posts/JFYvJqMaLw9nhfrur/fermi-poker",
+     "postedAt": "2026-10-24T09:58:19.408Z",
+     "baseScore": 15,
+     "afBaseScore": 2,
+     "voteCount": 3,
+     "commentCount": 0,
+     "afCommentCount": 0,
+     "af": false,
+     "url": null,
+     "question": false,
+     "isEvent": false,
+     "wordCount": 1751,
+     "frontpageDate": null,
+     "tags": [
+      {
+       "slug": "calibration",
+       "name": "Calibration",
+       "core": false
+      },
+      {
+       "slug": "meetups-specific-examples",
+       "name": "Meetups (specific examples)",
+       "core": false
+      },
+      {
+       "slug": "fermi-estimation",
+       "name": "Fermi Estimation",
+       "core": false
+      },
+      {
+       "slug": "games-posts-describing",
+       "name": "Games (posts describing)",
+       "core": false
+      },
+      {
+       "slug": "world-modeling",
+       "name": "World Modeling",
+       "core": true
+      }
+     ],
+     "user": {
+      "displayName": "Novalis"
+     },
+     "coauthors": [
+      {
+       "displayName": "Screwtape"
+      }
+     ],
+     "contents": {
+      "markdown": "**Summary:** Fermi Poker is an estimation game that combines the betting mechanics of poker with making estimates about questions like \"How many dentists work in the US?\"\n\n**Tags:** small to large, experiment, repeatable\n\n> **Note:** Fermi Poker works with as few as three players (or even two), and scales to dozens or even hundreds in a tournament format. If possible, seat no more than six players per table, preferably at round tables, with enough space between them that everyone can write down their guess secretly.\n\n**Purpose:** Rationality training with a bit of socializing. The game involves Fermi estimation, calibration, Bayesian updating, world-modeling, and perspective taking. You also get to know the other players better and find out how they think about all kinds of topics.\n\n**Materials:**\n\nEach player needs an equal stack of chips and writing supplies. A standard 500-chip poker set (around $60) usually covers up to 20 players. For writing down guesses, pen and paper work great, as do mini-whiteboards with dry-erase markers. You’ll also want the [one-page rule sheet](https://fermi.org/files/fermi-poker-rules.pdf) to hand out, ideally one per table.\n\nYou also need enough questions, each with two hints and an answer.\n\n*   The easiest, least effort way to get those is [fermi.org/play](https://fermi.org/play). One person per table opens the site on their phone, and everyone reads that. If a question repeats or someone at the table has seen it before, just skip to the next"
+     }
+    },
+    {
+     "_id": "uXiqyoKwpfjWfQXk5",
+     "title": "Simulated Control Evaluations",
+     "pageUrl": "https://www.lesswrong.com/posts/uXiqyoKwpfjWfQXk5/simulated-control-evaluations",
+     "postedAt": "2026-10-23T22:14:47.676Z",
+     "baseScore": 57,
+     "afBaseScore": 22,
+     "voteCount": 16,
+     "commentCount": 0,
+     "afCommentCount": 0,
+     "af": false,
+     "url": "https://blog.redwoodresearch.org/p/simulated-control-evaluations",
+     "question": false,
+     "isEvent": false,
+     "wordCount": 3478,
+     "frontpageDate": "2026-10-23T22:14:51.577Z",
+     "tags": [
+      {
+       "slug": "redwood-research",
+       "name": "Redwood Research",
+       "core": false
+      }
+     ],
+     "user": {
+      "displayName": "Jeffrey Olmo"
+     },
+     "coauthors": [
+      {
+       "displayName": "dzhang"
+      },
+      {
+       "displayName": "Tyler Tracy"
+      }
+     ],
+     "contents": {
+      "markdown": "We’ve released a [paper](https://arxiv.org/abs/2610.31593) on simulated control evaluations (SCEs). They’re a method for testing whether the monitors AI developers use to oversee their agents would catch a model deliberately trying to cause harm, under conditions much closer to real deployment than current tests allow.\n\nDevelopers have started [running](https://openai.com/index/how-we-monitor-internal-coding-agents-misalignment/)  [monitors](https://www.anthropic.com/institute/measuring-pace-of-ai-development) in their agentic deployments: models that flag or block an agent’s actions when they look dangerous. To know whether a monitor is good enough, you want to know how often it would stop a model that was actively trying to do something harmful, such as quietly inserting a security vulnerability, exfiltrating credentials, or sabotaging an experiment.\n\nThe standard way to measure this is a control evaluation: instruct a model to attempt such attacks, and measure how often the monitor catches it before an attack succeeds. Developers [typically](https://www-cdn.anthropic.com/fc1b44717c85dc068bc6ba5024219938094694bd/Claude%20Opus%205.5%20System%20Card.pdf#page=144)  [do](https://deploymentsafety.openai.com/gpt-5-5/measuring-our-ability-to-detect-misalignment) this using purpose-built control settings like [BashArena](https://www.redwoodresearch.org/blog/basharena-and-control-setting-design) or [LinuxArena](https://www.redwoodresearch.org/blog/introducing-linuxarena), where atta"
+     }
+    },
+    {
+     "_id": "GeKveaNdruATcj2Fj",
+     "title": "Even GPT-2 passes most functional global workspace tests",
+     "pageUrl": "https://www.lesswrong.com/posts/GeKveaNdruATcj2Fj/even-gpt-2-passes-most-functional-global-workspace-tests",
+     "postedAt": "2026-10-21T21:48:04.041Z",
+     "baseScore": 84,
+     "afBaseScore": 12,
+     "voteCount": 37,
+     "commentCount": 0,
+     "afCommentCount": 0,
+     "af": false,
+     "url": "https://secondlookresearch.com/gpt2-global-workspace",
+     "question": false,
+     "isEvent": false,
+     "wordCount": 5341,
+     "frontpageDate": "2026-10-21T21:52:35.133Z",
+     "tags": [
+      {
+       "slug": "interpretability-ml-and-ai",
+       "name": "Interpretability (ML & AI)",
+       "core": false
+      },
+      {
+       "slug": "ai",
+       "name": "AI",
+       "core": true
+      }
+     ],
+     "user": {
+      "displayName": "Finn Cairns"
+     },
+     "coauthors": [
+      {
+       "displayName": "yix"
+      },
+      {
+       "displayName": "Zephaniah Roe"
+      }
+     ],
+     "contents": {
+      "markdown": "tl;dr\n-----\n\n*   Anthropic’s [global workspace paper](https://transformer-circuits.pub/2026/workspace/) (Gurnee et al., 2026) proposes five functional tests for a global workspace and, using the Jacobian lens (J-lens), finds representations in Claude that pass all five. It also finds structure supporting this set of representations in Claude that global workspace theory predicts.\n*   We test these on GPT-2 small (124M) and find it passes the tests for verbal report, internal reasoning, flexible generalization, and selectivity, but fails directed modulation. We also find almost all of the structure Gurnee et al. identified in Claude is absent.\n*   A functional global workspace would [be a big deal](https://experiencemachines.substack.com/p/merely-functional-is-still-a-big), but **we think these four tests are easily satisfied (GPT-2 small passes them), so aren't strong evidence** that Claude has one (or conscious access). A case for one would have to rely on what GPT-2 lacks: directed modulation and the rest of the structure.\n*   Gurnee et al. searched for representations the model can verbalize and then found that they “rather surprisingly” pass the other tests too. However we think **the four tests GPT-2 passes may mostly follow from how they and the J-lens are constructed**.\n\n![image.png](https://res.cloudinary.com/lesswrong-2-0/image/upload/v1792591246/lexical_client_uploads/ohxcedr1lfgevgktqymo.png)\n\nFigure 1: The five functional properties of a global workspace from Gurn\n\n**Consistent effect across contexts**. The J-lens favors directions whose effect points the same way over many different contexts, since effects that differ by context get averaged out. A direction with the same effect in many contexts is roughly one that many downstream computations read the same way, which is what flexible generalization tests for here. Separately, models have reason to keep one direction for each concept that many different circuits can read, and it [has been shown](https://arxiv.org/abs/2308.09124) that many relations map roughly linearly from one representation of a subje"
+     }
+    },
+    {
+     "_id": "WRvxRHMCmc3Qt4axz",
+     "title": "Greater good arguments in AI safety",
+     "pageUrl": "https://www.lesswrong.com/posts/WRvxRHMCmc3Qt4axz/greater-good-arguments-in-ai-safety",
+     "postedAt": "2026-10-22T15:40:13.060Z",
+     "baseScore": 131,
+     "afBaseScore": 31,
+     "voteCount": 71,
+     "commentCount": 14,
+     "afCommentCount": 0,
+     "af": false,
+     "url": null,
+     "question": false,
+     "isEvent": false,
+     "wordCount": 1096,
+     "frontpageDate": "2026-10-22T15:40:15.160Z",
+     "tags": [
+      {
+       "slug": "ai",
+       "name": "AI",
+       "core": true
+      }
+     ],
+     "user": {
+      "displayName": "Dean Valentine"
+     },
+     "coauthors": [],
+     "contents": {
+      "markdown": "Back in the before-time of the 2010s, when EA was still known mostly for funding health efforts in the developing world, there were many baskets of criticism floating around from the left. The most prominent was a cluster centered around EAs being white men, and therefore suspicious.[^7xwx74xqbo9] Another category, in my experience the second-most common, was that in attempting to rectify the problems in the world, EA was masking, whitewashing, and misdirecting efforts away from solving the \"real problem\", usually capitalism but often other contradictory forces.\n\nThese arguments were often not specific to EA, but mainstream arguments against charitable giving in general. On any Hacker News post about a billionaire giving to charity, one of the first few comments would inevitably be this Oscar Wilde quote:\n\n> Just as the worst slave-owners were those who were kind to their slaves, and so prevented the horror of the system being realized by those who suffered from it, and understood by those who contemplated it, so, in the present state of things in England, the people who do most harm are the people who try to do most good.[^j4zxm1qgqdt]\n\nThese arguments have a long history. Anticapitalist critiques of charity go back to Engels and Marx, who called charitable givers a bourgeois faction intent on \"redressing social grievances in order to secure the continued existence of bourgeois society.\" In their most explicit form these critiques had the following shape:\n\n*   There is a \"ro"
+     }
+    }
+   ]
+  }
+ }
+}

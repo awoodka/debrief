@@ -36,12 +36,16 @@ press_policy:
 discussion:
   # The most-discussed threads that attached to no story join the scoring call (CRITERIA.md): a
   # thread about a candidate merges into it by same_as; any other is scored like a story.
-  sources: [hn]
   window_hours: 48
-  max_threads: 30
-  # collect reads the linked page and the comments of this many (daily runs only), a margin above
-  # max_threads so a thread that climbs before triage is still covered
-  prefetch: 40
+  # Per source, in this order: `max` of its threads join the call, ordered by points (karma, for
+  # LessWrong and the Alignment Forum), each at least its bands.floor. Each source has its own quota,
+  # since HN points and LessWrong karma aren't on one scale. collect reads the comments (and for HN,
+  # the linked page) of `prefetch` (daily runs only), a margin above max so a thread that climbs
+  # before triage is still covered.
+  sources:
+    hn: {max: 30, prefetch: 40}
+    lesswrong: {max: 5, prefetch: 8}
+    alignment-forum: {max: 5, prefetch: 8}
 
 # The scoring call (triage/score.py; CRITERIA.md "The model call").
 scoring:
