@@ -9,17 +9,19 @@
 
 | Timer | When (ET) | What | Uses Claude |
 |---|---|---|---|
-| `debrief-v2-daily` | 03:00 | `run.sh daily`: collect every source, then `triage` with the scoring call | yes: one Sonnet call (about 40k tokens in), plus a one-word auth check |
+| `debrief-v2-daily` | 03:00 | `run.sh daily`: collect every source, `triage` with the scoring call, the brief, then publish the site | yes: one Sonnet call (about 40k tokens in), the brief's Opus session (1–3 min), and a one-word auth check |
 | `debrief-v2-poll` | 09:00, 15:00, 21:00 | `run.sh poll`: `collect --cadence 6h` (Hacker News, LessWrong, the Alignment Forum, their comments) | no |
 
-The daily run is at 03:00 because the scoring call is the only step that draws on the Claude plan, and that's when the plan is least likely to be in use. The polls fill in the other three 6-hour slots; the daily run collects the discussion sources too. None of the polls touches arXiv, so the 09:00 poll can overlap the v1 run, which shares arXiv's budget.
+The daily run is at 03:00 because the scoring call and the brief are the steps that draw on the Claude plan, and that's when the plan is least likely to be in use. The polls fill in the other three 6-hour slots; the daily run collects the discussion sources too. None of the polls touches arXiv.
+
+Other modes, for reruns by hand: `run.sh triage` (triage again, without collecting), `run.sh brief` (the brief again, then the site), `run.sh site` (rebuild and publish the site), and `run.sh import-v1` (once, at the takeover; below).
 
 - **What runs:** the checkout at `/srv/apps/debrief-v2/repo`, a git worktree of the dev repo, detached at a pushed commit of `v2`. The dev working copy never runs on a timer. `deploy/update.sh` moves the checkout to the latest `origin/v2` (or a given commit), rebuilds `debrief-v2:run`, runs the tests there, and rolls back if they fail.
-- **Secrets:** `/srv/apps/debrief-v2/.env` (mode 600) has the collector's `GITHUB_PAT` and `DEBRIEF_CONTACT`. Triage gets only the Claude token (`/srv/apps/debrief/claude.env`, shared with v1).
-- **Containers:** read-only root and code, with only the data dir writable, no capabilities, and memory and pid limits.
+- **Secrets:** `/srv/apps/debrief-v2/.env` (mode 600) has the collector's `GITHUB_PAT` and `DEBRIEF_CONTACT`. Triage and the brief get only the Claude token (`/srv/apps/debrief/claude.env`, shared with v1; move it before deleting `/srv/apps/debrief`).
+- **Containers:** read-only root and code, with only the data dir writable, no capabilities, and memory and pid limits. The site build also has no network and reads the data read-only.
 - **One lock:** `/srv/data/debrief-v2/.run.lock`. It's taken by the runs, `update.sh` and `scripts/dev`, so nothing else writes the state database during a run. A poll that finds it taken is skipped; the daily run waits up to an hour.
 - **Logs:** `/srv/apps/debrief-v2/logs/<date>/<mode>-<HHMM>.log`, and the journal (`journalctl -u debrief-v2-daily`).
-- **Failure:** a unit fails (`systemctl --failed`) when a step fails or the scoring call fell back to the rules-only keep. A degraded collect (a feed down) is only a warning. After a failed scoring call, `run.sh triage` re-runs triage without collecting again.
+- **Failure:** a unit fails (`systemctl --failed`) when a step fails, the scoring call fell back to the rules-only keep, or the brief has no article. A degraded collect (a feed down) is only a warning. A brief without its article still publishes: the day's page is the scan, with a note, and no `reported.json` is written, so those stories come back tomorrow. After a failed scoring call, `run.sh triage` then `run.sh brief`.
 
 Installing the units needs root; run this once on the server:
 
@@ -28,6 +30,29 @@ sudo cp /srv/apps/debrief-v2/repo/deploy/systemd/debrief-v2-* /etc/systemd/syste
 sudo systemctl daemon-reload
 sudo systemctl enable --now debrief-v2-daily.timer debrief-v2-poll.timer
 systemctl list-timers 'debrief*'
+```
+
+## The site
+
+debrief.alexwoodka.com is static files in `/srv/www/debrief`, served by the edge stack's Caddy (`/srv/edge`, which mounts that folder read-only) through the Cloudflare Tunnel. Each publish writes `releases/<stamp>/`, swaps the `current` symlink to it atomically (Caddy follows it per request), and keeps the newest 5 releases. The page itself is `debrief site build` (docs/v2/README.md, "How the page works").
+
+The old pipeline (`/srv/apps/debrief`, `debrief.timer`, 08:30) published to the same folder, so `run.sh` won't publish while `debrief.timer` is enabled.
+
+**The takeover,** once:
+
+```sh
+sudo systemctl disable --now debrief.timer       # the old pipeline stops
+/srv/apps/debrief-v2/repo/deploy/run.sh import-v1  # keeps its last release as v1-final, copies its day pages
+/srv/apps/debrief-v2/repo/deploy/run.sh site       # the first v2 publish
+```
+
+`import-v1` copies each built v1 day page, byte for byte, into `/srv/data/debrief-v2/site/v1/`. Every v2 build lists them in the archive, and a v2 brief wins a date that both have.
+
+**Rolling back** to the old site:
+
+```sh
+ln -sfn v1-final /srv/www/debrief/.current.tmp && mv -T /srv/www/debrief/.current.tmp /srv/www/debrief/current
+sudo systemctl enable --now debrief.timer        # v2 stops publishing while this is enabled
 ```
 
 ## Regenerating the locks

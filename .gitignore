@@ -19,7 +19,7 @@ node_modules/
 dist/
 
 # Generated static archive (rebuilt by `make site`)
-site/
+/site/
 
 # OS / editor
 .DS_Store

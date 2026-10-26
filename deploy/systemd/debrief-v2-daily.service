@@ -1,5 +1,5 @@
 [Unit]
-Description=Debrief v2 daily run: collect every source, then triage with the scoring call
+Description=Debrief v2 daily run: collect, triage, the brief, and the site
 Documentation=file:///srv/apps/debrief-v2/repo/deploy/run.sh
 After=network-online.target docker.service
 Wants=network-online.target
@@ -10,5 +10,5 @@ Type=oneshot
 User=alex
 Group=alex
 ExecStart=/srv/apps/debrief-v2/repo/deploy/run.sh daily
-TimeoutStartSec=3h
+TimeoutStartSec=4h
 Nice=10

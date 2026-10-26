@@ -20,6 +20,8 @@
                                          the steps around the skill: its context file, the draft's
                                          check, and brief.json / brief.md / reported.json
   debrief brief hook fetch|stop          the skill session's hooks (the fetch cap, the check on stop)
+  debrief site build --out DIR           the site as static files: every day's page and the archive
+  debrief site import-v1 --from DIR      copy the old pipeline's built pages in (once, at the takeover)
   debrief snapshot-fixtures              arrives in M6
 """
 import argparse
@@ -209,6 +211,22 @@ def _brief(args, cfg):
     return 0 if doc["mode"] == "written" else 3
 
 
+def _site(args, cfg):
+    from .site import build
+    try:
+        if args.step == "import-v1":
+            dates = build.import_v1(cfg, args.src)
+            print(f"site import-v1: {len(dates)} pages ({dates[0] if dates else '-'} to {dates[-1] if dates else '-'}) "
+                  f"-> {build.v1_dir(cfg)}")
+            return 0
+        r = build.build(cfg, args.out)
+    except build.SiteError as e:
+        print(f"site: {e}", file=sys.stderr)
+        return 1
+    print(f"site build: {len(r['v2'])} v2 days, {len(r['v1'])} v1 pages -> {args.out}")
+    return 0
+
+
 def _not_yet(milestone):
     def run(args, cfg):
         print(f"{args.cmd}: not built yet (arrives in {milestone})", file=sys.stderr)
@@ -274,6 +292,14 @@ def main(argv=None):
     bp = bsub.add_parser("hook", help="a Claude Code hook for the skill's session (JSON on stdin)")
     bp.add_argument("kind", choices=("fetch", "stop"))
     p.set_defaults(func=_brief)
+
+    p = sub.add_parser("site", help="the static site: every day's page from its brief.json, and the archive")
+    ssub = p.add_subparsers(dest="step", required=True)
+    sp = ssub.add_parser("build", help="write the whole site into an empty folder")
+    sp.add_argument("--out", required=True, help="the folder to write (new, or empty)")
+    sp = ssub.add_parser("import-v1", help="copy the old pipeline's built day pages into <data>/site/v1/")
+    sp.add_argument("--from", dest="src", required=True, help="a served v1 site folder (e.g. /srv/www/debrief/current)")
+    p.set_defaults(func=_site)
 
     sub.add_parser("snapshot-fixtures").set_defaults(func=_not_yet("M6"))
 

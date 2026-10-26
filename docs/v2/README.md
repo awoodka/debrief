@@ -4,7 +4,9 @@ v2 replaces the v1 collector and its five-seat council with three layers:
 
 1. **Collector.** Deterministic Python that fetches, stores the raw responses, builds stories, and attaches discussion.
 2. **Triage.** Filters, classifies, and caps, then writes the index. Rules first; Claude through Claude Code headless for the judgment calls.
-3. **The skill.** One Claude Code skill reads the index and writes the brief. It's built separately.
+3. **The skill.** One Claude Code skill reads the index and writes the brief.
+
+Then a small deterministic builder turns each day's brief into the page at debrief.alexwoodka.com.
 
 [PLAN.md](PLAN.md) is the approved design. [CRITERIA.md](CRITERIA.md) holds the rules for what makes it into the index. [BRIEF.md](BRIEF.md) is the original brief; where they disagree, the plan and the criteria win. [SOURCES.md](SOURCES.md) is the latest source probe.
 
@@ -14,11 +16,13 @@ Status: **M0–M5 are done.**
 - **M2:** discussion attached to stories (Hacker News threads and comment trees, Hugging Face paper comments, newsletter and Techmeme coverage); signal snapshots (paper upvotes, repo stars, models built on a paper); the model-release sources; discussion levels and trend.
 - **M3:** article pages (main text and in-article links) for new stories; `triage` with the deterministic candidate stage, merges and press events, the reported ledger, and the output contract (`schemas/`).
 - **M4:** the scoring call: one Claude call (Sonnet 5.5, on the Max plan) that merges same-story candidates, drops what isn't relevant, and gives the rest a score and a one-line why; the most-discussed unattached HN threads join it; `calibrate` checks it against a labeled day.
-- **M5:** LessWrong and the Alignment Forum (posts and their best comments, through the GraphQL API): posts attach to stories like any discussion, and the most-discussed unattached ones join the scoring call with a quota per source; Hugging Face's trending papers as a signal (`hf_trending_rank`). The v1 pipeline (`collector/`, `.claude/`, `dashboard/`) still runs the live site from `main` and isn't touched here.
+- **M5:** LessWrong and the Alignment Forum (posts and their best comments, through the GraphQL API): posts attach to stories like any discussion, and the most-discussed unattached ones join the scoring call with a quota per source; Hugging Face's trending papers as a signal (`hf_trending_rank`).
+
+Then the brief (the skill, `skill/`) and the site (`src/debrief/site/`), which took over debrief.alexwoodka.com from the v1 pipeline. v1's code (`collector/`, `.claude/`, `dashboard/`) is still on `main`, untouched; its built pages are kept in the archive.
 
 ## Scheduled runs
 
-The daily run is at 03:00 ET: collect every source, then triage with the scoring call. The 6-hour discussion polls run at 09:00, 15:00 and 21:00. Only the daily run uses the Claude plan. `deploy/README.md` has the details: the pinned checkout, `deploy/update.sh` to deploy, the shared lock, logs, and how a failure shows.
+The daily run is at 03:00 ET: collect every source, triage with the scoring call, write the brief, and publish the site. The 6-hour discussion polls run at 09:00, 15:00 and 21:00. Only the daily run uses the Claude plan. `deploy/README.md` has the details: the pinned checkout, `deploy/update.sh` to deploy, the shared lock, logs, and how a failure shows.
 
 ## Development setup
 
@@ -55,6 +59,9 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 | `scripts/dev --claude python -m debrief triage [--date YYYY-MM-DD]` | The day's candidates, the scoring call and the index, written to `runs/<date>/` (below). The data's time is the last fetch of that day's collect runs and the answer is cached, so re-running gives byte-identical files; `--at` sets the time instead. `--claude` gives the container the Claude token and no source keys. Exit code 3 when the run is degraded. |
 | `debrief triage --no-model` | Rules only: each section's first `fallback_keep` candidates, marked degraded. `--model M` scores with another model; `--fresh` ignores the cache. |
 | `scripts/dev --claude python -m debrief calibrate [--model M] [--fresh]` | Scores the labeled calibration set (`tests/fixtures/relevance/2026-10-23.jsonl`) and writes the agreement, every disagreement and the model's reasons to `calibration/<set>-<model>.md`. |
+| `scripts/dev --claude python -m debrief brief run [--date D]` | The day's brief (below): `brief.json`, `brief.md` and `reported.json` in `runs/<date>/`. Exit code 3 when it's scan only. `debrief brief context\|check\|finalize` run its steps one at a time. |
+| `debrief site build --out DIR` | The whole site as static files, into an empty folder (below). `deploy/run.sh site` builds and publishes it. |
+| `debrief site import-v1 --from DIR` | Copies the v1 pipeline's built day pages into `<data>/site/v1/`. Run once, at the takeover (`deploy/run.sh import-v1`). |
 | `debrief snapshot-fixtures` | Not built yet (M6). |
 
 ## How `collect` works
@@ -183,6 +190,26 @@ The brief is layer 3: the day's triage output becomes an article-style brief, wr
 
 The session's stream is kept in `brief_session.jsonl` and summarized in `brief_session.json`. `debrief brief context|check|finalize` run the steps one at a time.
 
+## How the page works
+
+`debrief site build --out DIR` (`src/debrief/site/`) is deterministic and stdlib only. It needs no network and no Claude, and the same briefs always give the same bytes:
+
+- **`<date>/index.html`:** each day's page. `page.py` fills `templates/day.html`, which carries v1's look (its CSS, light and dark), with the brief:
+  - the headline, then `what_happened` as the arrow list;
+  - the lead with its drop cap;
+  - the sections, each with its for/against/my-read panes, its quotes (attributed and linked to the thread), and a Sources line of links with discussion chips;
+  - Updates and Notes;
+  - the scan of every story kept, grouped by section. A covered story links to where the brief covers it.
+
+  A scan-only brief gets a note in place of the article.
+- **Safety:** every string is escaped. Prose gets only `**bold**` and `*italic*`. Links come only from the data's url fields, and only http(s). The page has no script, and a Content-Security-Policy says so.
+- **For later features:** each section has `id="s-N"` and `data-stories` (its story ids), and each story row has `data-story`.
+- **`<date>/brief.json`:** the day as data, the brief minus what's only for us (the session, the check's warnings, refused fetches).
+- **`index.html`:** the archive list, newest first, from `templates/index.html`.
+- **The old briefs:** v1's built pages, copied once into `<data>/site/v1/` by `import-v1`, are listed alongside unchanged. A v2 brief wins a date that both have.
+
+`deploy/run.sh` publishes the site as a new release in `/srv/www/debrief`, which Caddy serves (deploy/README.md, "The site").
+
 ## Data layout
 
 ```
@@ -197,6 +224,7 @@ $DEBRIEF_DATA_DIR/
   runs/<date>/brief.json               the brief: what a page renders (schemas/brief.schema.json); also brief.md
   runs/<date>/brief.draft.json         the skill's draft; brief_context.json, brief_fetches.jsonl, brief_session.*
   runs/<date>/reported.json            written by brief finalize: every story the brief showed (the ledger)
+  site/v1/<date>/index.html            the v1 pipeline's built pages, copied once (site import-v1)
   cache/score/<key>.json               the scoring call's answers, keyed by a hash of everything the call saw
   calibration/                         calibrate reports
   probe/                               probe-sources results
@@ -262,11 +290,14 @@ src/debrief/store/      db.py (state DB), raw.py (raw store), migrations/*.sql
 src/debrief/stories/    build.py (items -> seen-set, stories, mentions, snapshots, pages), attach.py, signals.py
 src/debrief/triage/     candidates.py, merge.py, ledger.py, score.py, output.py, run.py, calibrate.py
 src/debrief/brief/      day.py, context.py, check.py, hooks.py, finalize.py, render.py, run.py
+src/debrief/site/       page.py (a day's page, the archive list), build.py (the site, import-v1)
 skill/           the brief skill, a Claude Code plugin: skills/brief/SKILL.md and references/
+templates/       the site's pages: day.html and index.html (v1's look)
 config/          settings.yml (UA, timeouts, rate buckets, collect), sources.yml (every source),
                  triage.yml (windows, caps, merge and blocklist rules, scoring), relevance.md (what's relevant)
 prompts/         score_v1.md: the scoring call's instructions (relevance.md is appended)
-schemas/         the output contract: index line, story detail, triage log line, report header, reported.json
+schemas/         the output contract: index line, story detail, triage log line, report header, reported.json,
+                 the brief's draft and brief.json
 tests/           unit and end-to-end tests (fixtures/ are real responses, trimmed); scripts/dev pytest -q
 deploy/          Dockerfile, requirements*.in/.lock (see deploy/README.md)
 scripts/dev      the dev container wrapper
