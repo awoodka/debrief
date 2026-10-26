@@ -1,7 +1,7 @@
 [project]
 name = "debrief"
 version = "2.0.0.dev0"
-description = "Debrief v2: collector and triage for a daily AI/ML briefing"
+description = "Debrief: a daily AI/ML briefing (collector, triage, the brief and its page)"
 requires-python = ">=3.13"
 # Exact pins for the image live in deploy/requirements.lock; these are the direct dependencies.
 dependencies = ["requests", "feedparser", "PyYAML", "beautifulsoup4", "trafilatura", "jsonschema", "python-dotenv"]

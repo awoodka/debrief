@@ -1,5 +1,5 @@
 # Debrief v2 triage: which stories become candidates, and what the index keeps.
-# The rules are in docs/v2/CRITERIA.md; the code is src/debrief/triage/. Every window counts back
+# The rules are in docs/CRITERIA.md; the code is src/debrief/triage/. Every window counts back
 # from the run's time `at` (the last fetch of that day's collect runs), never from the clock.
 
 # Index order of the sections.

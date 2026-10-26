@@ -1,6 +1,6 @@
-# Debrief v2: collector and triage
+# Debrief: how it works
 
-v2 replaces the v1 collector and its five-seat council with three layers:
+Debrief v2, this code, replaced the v1 collector and its five-seat council on 2026-10-25. It has three layers:
 
 1. **Collector.** Deterministic Python that fetches, stores the raw responses, builds stories, and attaches discussion.
 2. **Triage.** Filters, classifies, and caps, then writes the index. Rules first; Claude through Claude Code headless for the judgment calls.
@@ -18,7 +18,7 @@ Status: **M0–M5 are done.**
 - **M4:** the scoring call: one Claude call (Sonnet 5.5, on the Max plan) that merges same-story candidates, drops what isn't relevant, and gives the rest a score and a one-line why; the most-discussed unattached HN threads join it; `calibrate` checks it against a labeled day.
 - **M5:** LessWrong and the Alignment Forum (posts and their best comments, through the GraphQL API): posts attach to stories like any discussion, and the most-discussed unattached ones join the scoring call with a quota per source; Hugging Face's trending papers as a signal (`hf_trending_rank`).
 
-Then the brief (the skill, `skill/`) and the site (`src/debrief/site/`), which took over debrief.alexwoodka.com from the v1 pipeline. v1's code (`collector/`, `.claude/`, `dashboard/`) is still on `main`, untouched; its built pages are kept in the archive.
+Then the brief (the skill, `skill/`) and the site (`src/debrief/site/`), which took over debrief.alexwoodka.com from the v1 pipeline on 2026-10-25. v1's code was removed when v2 merged into `main` (it's in the history before that merge); its built pages are kept in the archive.
 
 ## Scheduled runs
 
@@ -36,7 +36,7 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 
 `scripts/dev` mounts the repo at `/app` and the data dir at `/data`.
 
-- **Data dir.** `DEBRIEF_DATA_DIR` sets it; the default is `/srv/data/debrief-v2`. The script refuses to use the v1 data dir.
+- **Data dir.** `DEBRIEF_DATA_DIR` sets it; the default is `/srv/data/debrief-v2`.
 - **Source keys.** By default the container gets source keys from `./.env` (gitignored).
 - **Claude.** `scripts/dev --claude …` swaps that for the Claude token file instead. The two are never passed together.
 - **The lock.** It takes the data dir's `.run.lock`, the one the scheduled runs take, so a dev command waits for a running collect (up to 15 minutes), and a poll that fires during a dev command is skipped. The live data dir is the scheduled runs' data; to experiment, copy it and point `DEBRIEF_DATA_DIR` at the copy.
@@ -45,7 +45,7 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 
 | Command | What it does |
 |---|---|
-| `debrief probe-sources` | Requests every enabled source once, through the same rate limits the collector uses. Writes `docs/v2/SOURCES.md` and `$DEBRIEF_DATA_DIR/probe/probe-<time>.json`. |
+| `debrief probe-sources` | Requests every enabled source once, through the same rate limits the collector uses. Writes `docs/SOURCES.md` and `$DEBRIEF_DATA_DIR/probe/probe-<time>.json`. |
 | `debrief probe-sources --source ID [--source ID]` | Re-probes just those sources (disabled ones included) and merges them into the latest full probe. |
 | `debrief probe-sources --include-disabled` | Also requests disabled sources. |
 | `debrief collect` | Fetches every collectable source, keeps the raw responses, and builds stories. Writes `runs/<date>/collect-<run>.md` and `.json`. Exit code 3 if any source failed. |
@@ -61,7 +61,6 @@ scripts/dev python -m debrief probe-sources        # probe every enabled source 
 | `scripts/dev --claude python -m debrief calibrate [--model M] [--fresh]` | Scores the labeled calibration set (`tests/fixtures/relevance/2026-10-23.jsonl`) and writes the agreement, every disagreement and the model's reasons to `calibration/<set>-<model>.md`. |
 | `scripts/dev --claude python -m debrief brief run [--date D]` | The day's brief (below): `brief.json`, `brief.md` and `reported.json` in `runs/<date>/`. Exit code 3 when it's scan only. `debrief brief context\|check\|finalize` run its steps one at a time. |
 | `debrief site build --out DIR` | The whole site as static files, into an empty folder (below). `deploy/run.sh site` builds and publishes it. |
-| `debrief site import-v1 --from DIR` | Copies the v1 pipeline's built day pages into `<data>/site/v1/`. Run once, at the takeover (`deploy/run.sh import-v1`). |
 | `debrief snapshot-fixtures` | Not built yet (M6). |
 
 ## How `collect` works
@@ -168,7 +167,7 @@ The brief is layer 3: the day's triage output becomes an article-style brief, wr
 `debrief brief run --date D` (`src/debrief/brief/run.py`) runs four steps:
 
 1. **context.** Writes `brief_context.json`, the skill's first read. It holds triage's status for the day, failed sources, the follow-ups (`status: update`), what the last 3 briefs covered, and the limits.
-2. **The skill.** It runs as a Claude Code session in the run folder: `claude -p "/debrief:brief D"`, on Opus 5.5, on the Max plan. The skill is a plugin folder, `skill/` (`SKILL.md`, plus `references/voice.md` and `references/format.md`), loaded with `--plugin-dir` and `--setting-sources ""`, so v1's `.claude/` commands and agents never load. The session's limits:
+2. **The skill.** It runs as a Claude Code session in the run folder: `claude -p "/debrief:brief D"`, on Opus 5.5, on the Max plan. The skill is a plugin folder, `skill/` (`SKILL.md`, plus `references/voice.md` and `references/format.md`), loaded with `--plugin-dir` and `--setting-sources ""`, so no user or project settings, commands or agents load. The session's limits:
    - **Tools:** Read, Write, Edit and WebFetch, with no shell.
    - **Allowed:** reading the skill folder, writing `brief.draft.json`, and WebFetch.
    - **Denied:** reading `triage_log.jsonl` (triage's drops are never shown to the skill), the collect reports, the session's own logs and old drafts.
@@ -206,7 +205,7 @@ The session's stream is kept in `brief_session.jsonl` and summarized in `brief_s
 - **For later features:** each section has `id="s-N"` and `data-stories` (its story ids), and each story row has `data-story`.
 - **`<date>/brief.json`:** the day as data, the brief minus what's only for us (the session, the check's warnings, refused fetches).
 - **`index.html`:** the archive list, newest first, from `templates/index.html`.
-- **The old briefs:** v1's built pages, copied once into `<data>/site/v1/` by `import-v1`, are listed alongside unchanged. A v2 brief wins a date that both have.
+- **The old briefs:** v1's built pages (2026-09-14 to 2026-10-25), copied once into `<data>/site/v1/` when v2 took over the site, are listed alongside unchanged. A v2 brief wins a date that both have.
 
 `deploy/run.sh` publishes the site as a new release in `/srv/www/debrief`, which Caddy serves (deploy/README.md, "The site").
 
@@ -224,7 +223,7 @@ $DEBRIEF_DATA_DIR/
   runs/<date>/brief.json               the brief: what a page renders (schemas/brief.schema.json); also brief.md
   runs/<date>/brief.draft.json         the skill's draft; brief_context.json, brief_fetches.jsonl, brief_session.*
   runs/<date>/reported.json            written by brief finalize: every story the brief showed (the ledger)
-  site/v1/<date>/index.html            the v1 pipeline's built pages, copied once (site import-v1)
+  site/v1/<date>/index.html            the v1 pipeline's built pages, copied once at the takeover
   cache/score/<key>.json               the scoring call's answers, keyed by a hash of everything the call saw
   calibration/                         calibrate reports
   probe/                               probe-sources results
@@ -236,7 +235,7 @@ $DEBRIEF_DATA_DIR/
 Every request goes through `src/debrief/http.py`:
 
 - **Rate buckets.** Requests go out one at a time. Requests in the same bucket are spaced by its `interval_s` (`config/settings.yml`). A bucket entry is a host, which covers its subdomains, optionally with a path prefix.
-- **arXiv shares one budget.** The terms allow one request every 3 s across all our machines, and the v1 collector on the same server shares that budget. So don't run v2 against arXiv during the v1 window (08:30–09:10 ET).
+- **arXiv has one budget.** The terms allow one request every 3 s across all our machines, so nothing else on this server should call arXiv while a collect runs.
 - **User-Agent.** `debrief/2.0 (personal AI/ML news digest; <contact>)`. Set `DEBRIEF_CONTACT` to an email; some APIs require one (SEC EDGAR).
 - **Conditional requests.** Callers pass the stored ETag and Last-Modified, and a 304 comes back as `not_modified`.
 - **429 and 5xx.** The client honours `Retry-After` up to 120 s, otherwise backs off exponentially. Each request is tried at most 3 times.
@@ -290,7 +289,7 @@ src/debrief/store/      db.py (state DB), raw.py (raw store), migrations/*.sql
 src/debrief/stories/    build.py (items -> seen-set, stories, mentions, snapshots, pages), attach.py, signals.py
 src/debrief/triage/     candidates.py, merge.py, ledger.py, score.py, output.py, run.py, calibrate.py
 src/debrief/brief/      day.py, context.py, check.py, hooks.py, finalize.py, render.py, run.py
-src/debrief/site/       page.py (a day's page, the archive list), build.py (the site, import-v1)
+src/debrief/site/       page.py (a day's page, the archive list), build.py (the site)
 skill/           the brief skill, a Claude Code plugin: skills/brief/SKILL.md and references/
 templates/       the site's pages: day.html and index.html (v1's look)
 config/          settings.yml (UA, timeouts, rate buckets, collect), sources.yml (every source),
@@ -301,5 +300,5 @@ schemas/         the output contract: index line, story detail, triage log line,
 tests/           unit and end-to-end tests (fixtures/ are real responses, trimmed); scripts/dev pytest -q
 deploy/          Dockerfile, requirements*.in/.lock (see deploy/README.md)
 scripts/dev      the dev container wrapper
-docs/v2/         BRIEF.md, PLAN.md, SOURCES.md, this README
+docs/           BRIEF.md, PLAN.md, CRITERIA.md, SOURCES.md, this README
 ```

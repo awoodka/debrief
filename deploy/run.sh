@@ -6,22 +6,17 @@
 #                              call and the brief are the steps that use the Claude plan, so they run
 #                              when the plan is least likely to be in use.
 #   run.sh poll     09:00, 15:00, 21:00 ET   collect --cadence 6h: Hacker News, LessWrong, the
-#                              Alignment Forum and their comments. No Claude, no arXiv (the 09:00
-#                              poll overlaps the v1 run, which shares arXiv's budget).
+#                              Alignment Forum and their comments. No Claude, no arXiv.
 #   run.sh triage   triage today again (after a failed scoring call), without collecting
 #   run.sh brief    write today's brief again (after `run.sh triage`, say), then publish the site
 #   run.sh site     rebuild the site from every brief.json and publish it
-#   run.sh import-v1   once, at the takeover: keep the old pipeline's last release as
-#                   $WWW/v1-final (for a rollback) and copy its day pages into the data dir
 #
 # The site is static files in $WWW (/srv/www/debrief), which Caddy serves as debrief.alexwoodka.com:
 # each publish is a new releases/<stamp>/, `current` is swapped to it atomically, and the newest 5
-# releases are kept. The old pipeline published to the same folder, so this never publishes there
-# while its debrief.timer is enabled. To roll back to it: point `current` at v1-final and re-enable
-# that timer (deploy/README.md).
+# releases are kept.
 #
 # It runs the code in the checkout it lives in: /srv/apps/debrief-v2/repo, pinned to a commit of
-# origin/v2 by deploy/update.sh, never the dev working copy. One lock in the data dir serializes
+# origin/main by deploy/update.sh, never the dev working copy. One lock in the data dir serializes
 # runs, updates and scripts/dev, so two writers never share the state database. A poll that finds
 # the lock taken is skipped; the daily run waits for it.
 #
@@ -31,16 +26,14 @@
 set -Eeuo pipefail
 
 MODE=${1:-}
-case "$MODE" in daily|poll|triage|brief|site|import-v1) ;;
-  *) echo "usage: run.sh daily|poll|triage|brief|site|import-v1" >&2; exit 2 ;; esac
+case "$MODE" in daily|poll|triage|brief|site) ;; *) echo "usage: run.sh daily|poll|triage|brief|site" >&2; exit 2 ;; esac
 
 APP=${DEBRIEF_APP:-/srv/apps/debrief-v2}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DATA=${DEBRIEF_DATA_DIR:-/srv/data/debrief-v2}
 IMAGE=${DEBRIEF_IMAGE:-debrief-v2:run}
-CLAUDE_ENV=${DEBRIEF_CLAUDE_ENV:-/srv/apps/debrief/claude.env}
+CLAUDE_ENV=${DEBRIEF_CLAUDE_ENV:-$APP/claude.env}
 WWW=${DEBRIEF_WWW:-/srv/www/debrief}
-LIVE_WWW=/srv/www/debrief
 TODAY=$(TZ=America/New_York date +%F)
 LOGDIR=$APP/logs/$TODAY
 FAILED=0
@@ -51,7 +44,6 @@ exec > >(tee -a "$LOGDIR/$MODE-$(date +%H%M).log") 2>&1
 log() { printf '%s %s\n' "$(date +%T)" "$*"; }
 die() { log "FAIL: $*"; exit 1; }
 
-[ ! -d "$DATA/debriefs" ] || die "$DATA holds the v1 pipeline's data; refusing"
 exec 9>"$DATA/.run.lock"
 if [ "$MODE" = poll ]; then
   flock -n 9 || { log "another run holds $DATA/.run.lock; skipping this poll"; exit 0; }
@@ -137,11 +129,6 @@ brief() {
 # The site: built in a container with no network and the data read-only, into a new release, then
 # swapped in.
 site() {
-  if [ "$WWW" = "$LIVE_WWW" ] && systemctl is-enabled --quiet debrief.timer 2>/dev/null; then
-    log "WARN: the old pipeline's debrief.timer is enabled, so the site isn't published" \
-        "(sudo systemctl disable --now debrief.timer, then run.sh site)"
-    return
-  fi
   local stamp rel
   stamp=$(date +%Y%m%d-%H%M%S)
   rel=$WWW/releases/$stamp
@@ -160,25 +147,12 @@ site() {
   log "site: published, current -> releases/$stamp"
 }
 
-# Once, at the takeover. v1-final is outside releases/, so pruning never removes it. A later run
-# imports from v1-final again, never from a release v2 published.
-import_v1() {
-  if [ ! -e "$WWW/v1-final" ]; then
-    [ -d "$WWW/current" ] || die "no site at $WWW/current"
-    cp -a "$(readlink -f "$WWW/current")" "$WWW/v1-final"
-    log "import-v1: kept $(readlink "$WWW/current") as $WWW/v1-final"
-  fi
-  step import-v1 timeout 10m docker run "${BASE[@]}" -v "$WWW/v1-final:/v1site:ro" --network none "$IMAGE" \
-    python -m debrief site import-v1 --from /v1site
-}
-
 case "$MODE" in
-  daily)     collect; triage; brief; site ;;
-  poll)      collect 6h ;;
-  triage)    triage ;;
-  brief)     brief; site ;;
-  site)      site ;;
-  import-v1) import_v1 ;;
+  daily)  collect; triage; brief; site ;;
+  poll)   collect 6h ;;
+  triage) triage ;;
+  brief)  brief; site ;;
+  site)   site ;;
 esac
 
 log "=== done$([ "$FAILED" = 0 ] || echo ', with failures') ==="

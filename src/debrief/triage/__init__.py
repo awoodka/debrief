@@ -1,4 +1,4 @@
-"""Triage: from the state database to the day's index (docs/v2/CRITERIA.md).
+"""Triage: from the state database to the day's index (docs/CRITERIA.md).
 
   candidates.py   the deterministic stages: pools, hard rules, per-section order and caps
   merge.py        stories that are one thing: announcements with their artifacts, press events

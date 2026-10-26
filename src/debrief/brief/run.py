@@ -4,7 +4,7 @@ then finalize.
 The session is `claude -p "/debrief:brief <date>"` (config/brief.yml model, effort and limits), run
 as a subprocess in the run folder, with ANTHROPIC_API_KEY removed so it uses the Max plan's token:
   - The skill loads from skill/ as a plugin (--plugin-dir). --setting-sources "" keeps everything
-    else out: no user or project settings, so v1's .claude/ commands and agents don't load. Never
+    else out: no user or project settings, commands or agents load. Never
     --bare (it forces API-key auth) and never --disable-slash-commands (it disables skills too).
   - Tools are Read, Write, Edit and WebFetch, with no Bash: read-only shell commands get past
     permission rules. Settings (--settings, generated here) allow Read of the skill folder, Write

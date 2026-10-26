@@ -1,95 +1,99 @@
-# Debrief — Source Catalog
+# Debrief v2 source probe (Milestone 0)
 
-The information diet of an advisor briefing an **AI/ML startup founder** — organized by what a founder
-needs to know. This is a **living doc**: when you learn of a new source, drop it under the right heading.
-If it has a feed it's usually a one-line add to `collector/config.py`; I'll wire anything you flag.
+Generated 2026-10-22T18:45:47-04:00 by `debrief probe-sources`, with User-Agent `debrief/2.0 (personal AI/ML news digest; awoodka@startupshell.org)`. Each endpoint was requested once, through the same rate buckets the collector uses. Full record: `$DEBRIEF_DATA_DIR/probe/probe-20261022-184547.json`.
 
-## Status legend
-- ✅ **wired** — active in `collector/config.py` now
-- ⏸ **idle** — the code is there, but it produces nothing right now (switched off or not configured)
-- 🟢 **ready** — feed verified working (URL given), easy to add
-- ➕ **candidate** — likely has a feed; URL still needs confirming
-- 🔧 **scrape/watch** — no feed; needs a small scraper / change-detector (verified reachable)
-- 💲 **paid** — violates the free-sources rule; listed for awareness only
-- 🐦 **manual** — no free programmatic access; check by hand
+Status counts: disabled 26, failed 1, ok 63
 
-## How to add one
-Most sources are RSS → append `(label, url)` to the matching list in `config.py`
-(`LAB_FEEDS` / `NEWSLETTER_FEEDS` / `NEWS_FEEDS` / `STARTUP_FEEDS` / `REDDIT_RSS` / `LOBSTERS_RSS`).
-It then flows through dedupe + scoring automatically. Scrape/watch sources need a small fetcher in
-`collector/sources/`. Verify a feed first with the pattern in `collector/check_keys.py` or a quick
-`feedparser.parse`.
-
----
-
-## 1 · Research & papers (substance)
-- ✅ arXiv — cs.AI, cs.LG, cs.CL, cs.CV, cs.NE, stat.ML
-- ✅ Hugging Face Daily Papers (upvotes, linked artifacts)
-- ✅ Semantic Scholar (citations, tldr)
-- 🔧 Papers with Code — `paperswithcode.com` (trending; reachable)
-- ➕ alphaXiv — `alphaxiv.org` (community paper discussion)
-- ➕ HF trending models / datasets / spaces — `huggingface.co/api/models` (confirm sort param)
-
-## 2 · Model & lab releases (don't-miss announcements)
-- ✅ OpenAI · Anthropic (news + engineering) · Google Gemini · DeepMind · Google Research · Meta AI ·
-  Mistral · xAI · **NVIDIA** · Hugging Face blog
-- ➕ Most have blogs (confirm feeds): Cohere, AI21, Stability, Together, Groq, Perplexity,
-  Microsoft Research, Apple ML, AI2/OLMo, Qwen (Alibaba), DeepSeek, Reka, EleutherAI
-- ➕ Ollama new models · Replicate trending (builder-facing model drops)
-
-## 3 · Startup ecosystem — incubators, accelerators, "what to build"  ← your focus
-- ✅ YC blog · Launch HN · Show HN · r/ycombinator · r/startups
-- 🔧 **YC Requests for Startups** — `ycombinator.com/rfs`  *(the ideas YC wants funded — verified
-  reachable; worth a dedicated watcher)*
-- 🔧 **YC Launches** — `ycombinator.com/launches`
-- 🔧 **AI Grant** (Nat Friedman + Daniel Gross) — `aigrant.com`  *(AI-specific accelerator + RFS — verified reachable)*
-- ➕ a16z — `a16z.com` ("Big Ideas" / RFS lists; confirm feed)
-- ➕ First Round Review — `review.firstround.com` (founder playbooks; confirm feed)
-- ➕ NFX — `nfx.com` (essays + "RFS"; confirm feed)
-- ➕ Bessemer "Roadmaps" / State-of reports · Sequoia · Greylock · Lightspeed (firm blogs)
-- ➕ Techstars · Antler · Entrepreneur First · South Park Commons (accelerator blogs)
-- ➕ Indie Hackers — `indiehackers.com`
-
-## 4 · VC & funding intelligence (where the money flows)
-- ✅ Crunchbase News · TechCrunch Fundraising · TechCrunch Startups
-- ➕ Strictly VC · Axios Pro Rata · Fortune Term Sheet (newsletters)
-- 💲 The Information · PitchBook · CB Insights (paid — awareness only)
-
-## 5 · Analysis & newsletters (the digesters — also the mainstream-axis signal)
-- ✅ Import AI · Interconnects · Ahead of AI · Latent Space · Last Week in AI · **Simon Willison**
-- ✅ **MIT Tech Review · AI** · **Stratechery** (free posts)
-- ➕ The Batch (DeepLearning.AI / Andrew Ng) · The Rundown AI · Ben's Bites · The Neuron ·
-  Exponential View (confirm feeds)
-- ➕ Practitioner blogs: Chip Huyen · Lilian Weng · Eugene Yan · Hamel Husain · Jason Liu
-- 💲 SemiAnalysis (chips/infra; mostly paid)
-- 📧 Email-only (TLDR AI · AlphaSignal): web-archive scrape (planned, not built)
-
-## 6 · Practitioner discourse & community
-- ✅ Hacker News (keyword + front page + Show HN + Launch HN)
-- ✅ Reddit — LocalLLaMA, MachineLearning, artificial, startups, ycombinator
-- ✅ Lobsters (ai)
-- ⏸ Bluesky — the source reads the public API, but `BLUESKY_HANDLES` is empty, so it returns nothing
-- ➕ More subreddits: r/OpenAI · r/SaaS · r/Entrepreneur · r/StableDiffusion · r/aivideo
-- 🐦 X/Twitter — no free read API; manual only
-
-## 7 · Dev-tool & OSS momentum (what builders adopt)
-- ✅ GitHub Trending
-- ⏸ GitHub Search (impl counts) — off (`ENRICH_GITHUB_SEARCH = False`): slow, rate-limited, ~0 on fresh papers
-- ⏸ Product Hunt — wired, but skipped unless `PRODUCTHUNT_TOKEN` is set (it isn't on the server)
-- ➕ HF trending models/datasets/spaces · Replicate · Ollama · PyPI / npm trending
-- ➕ GitHub Releases for key repos (vllm, transformers, langchain, llama.cpp, ollama…) via per-repo `.atom` feeds
-
-## 8 · Compute / infra / chips
-- ✅ NVIDIA blog (see §2)
-- ➕ The Next Platform · Google Cloud / AWS / Azure AI blogs
-- 💲 SemiAnalysis
-
-## 9 · Policy & regulation (lighter touch)
-- ➕ Stanford HAI · GovAI · EU AI Act trackers · MIT Tech Review (policy)
-
----
-
-## Backlog — sources you're learning about
-_Jot new sources here; I'll verify + wire them._
--
--
+| Source | Roles · tier | Status | Endpoint | Items | Sample | Limits / caching / robots | Notes |
+|---|---|---|---|---|---|---|---|
+| OpenAI News (`openai-news`) | anchor · 1 | ok | https://openai.com/news/rss.xml | 1315 | Build more responsive apps with the Decisions API · Thu, 22 Oct 2026 19:00:00 |  |  |
+| Google DeepMind blog (`deepmind-blog`) | anchor · 1 | ok | https://deepmind.google/blog/rss.xml | 100 | Beyond tree cover: mapping the world’s forest types · Thu, 22 Oct 2026 14:30:24 | Last-Modified | reportedly rate-limits; 10 s bucket |
+| Hugging Face blog (`hf-blog`) | anchor · 1 | ok | https://huggingface.co/blog/feed.xml | 888 | OlmoEarth v1.3: State-of-the-art embeddings for the whole planet · Thu, 22 Oct 2026 16:11:31 | ETag, ratelimit-policy: "fixed window";"pages";q=100;w=300 |  |
+| Anthropic news (`anthropic-news`) | anchor · 1 | ok | https://www.anthropic.com/news | 26 | https://www.anthropic.com/news/announcements |  | no RSS; listing-page scrape. The pattern also matches category pages such as /news/announcements, which the adapter must skip |
+| Anthropic research (`anthropic-research`) | anchor · 1 | ok | https://www.anthropic.com/research | 22 | https://www.anthropic.com/research/the-missing-map-of-the-sky |  |  |
+| Anthropic engineering (`anthropic-engineering`) | anchor · 1 | disabled |  |  |  |  | no post links in the page HTML (built by JavaScript) and none in anthropic.com/sitemap.xml; engineering posts now appear under /research/, which anthropic-research covers |
+| Meta AI blog (`meta-ai-blog`) | anchor · 1 | ok | https://ai.meta.com/blog/ | 10 | https://ai.meta.com/blog/introducing-muse-spark-meta-model-api/ |  | no RSS; listing-page scrape |
+| DeepSeek GitHub org (new repos) (`deepseek-github`) | anchor · 1 | ok | https://api.github.com/orgs/deepseek-ai/repos?sort=created&direction=desc&per_page=5 | 5 | deepseek-ai/DeepInfer · 2026-10-16T07:47:23Z | ETag, x-ratelimit-limit: 60, x-ratelimit-remaining: 58, x-ratelimit-reset: 1792701880 | DeepSeek has no feed; its HF org is in hf-org-watch |
+| Microsoft Research blog (`microsoft-research`) | anchor · 1 | ok | https://www.microsoft.com/en-us/research/feed/ | 10 | Flint-interactive: A language for creating interactive data visualizations · Thu, 22 Oct 2026 16:00:00 | ETag, Last-Modified | verified 2026-10-22 |
+| Google Research blog (`google-research`) | anchor · 1 | ok | https://research.google/blog/rss/ | 100 | Empowering frontline maternal care with AI-assisted ultrasound · Wed, 21 Oct 2026 16:23:53 | Last-Modified | verify (worked in v1) |
+| Google AI blog (blog.google) (`google-ai-blog`) | anchor · 1 | ok | https://blog.google/technology/ai/rss/ | 20 | Southeast Asia’s digital economy to hit $368 billion · Wed, 21 Oct 2026 04:00:00 |  | verified 2026-10-22; includes some non-AI business posts |
+| Google Gemini product blog (`google-gemini-blog`) | anchor · 1 | ok | https://blog.google/products/gemini/rss/ | 20 | New Gemini tools for small business owners · Tue, 20 Oct 2026 16:00:00 |  | worked in v1 |
+| Mistral AI news (`mistral-news`) | anchor · 1 | ok | https://mistral.ai/news/rss | 92 | Mistral Advances AI for Engineering with NVIDIA · Wed, 21 Oct 2026 12:00:20 | ETag | feed advertised by mistral.ai/news (found 2026-10-22) |
+| Cohere blog (`cohere-blog`) | anchor · 1 | ok | https://cohere.com/blog | 28 | https://cohere.com/blog/rerank-5 |  | verify |
+| Ai2 blog (`ai2-blog`) | anchor · 1 | ok | https://allenai.org/rss.xml | 25 | OlmoEarth v1.3: State-of-the-art embeddings for the whole planet · 2026-10-22T00:00:00-08:00 |  | feed advertised by allenai.org/blog |
+| Qwen blog (`qwen-blog`) | anchor · 1 | disabled |  |  |  |  | feed works but its newest post is 2025-09-22; Qwen now ships through its HF org (hf-org-watch) |
+| NVIDIA blog (`nvidia-blog`) | anchor · 1 | ok | https://blogs.nvidia.com/feed/ | 18 | NVIDIA Unveils Minerva to Bring End-to-End Observability for AI Factories · Thu, 22 Oct 2026 15:00:02 | ETag, Last-Modified | worked in v1 |
+| NVIDIA developer blog (`nvidia-dev-blog`) | anchor · 2 | ok | https://developer.nvidia.com/blog/feed | 100 | How to Read Data into GPU Memory in Python with NVIDIA GPUDirect Storage · 2026-10-22T16:39:09Z | ETag, Last-Modified | verify |
+| Apple Machine Learning Research (`apple-ml`) | anchor · 1 | ok | https://machinelearning.apple.com/rss.xml | 10 | Local and Distributed Large LLM Inference with MLX and RDMA on Mac Studio · Thu, 15 Oct 2026 00:00:00 | ETag, Last-Modified | verify |
+| Thinking Machines Lab blog (`thinking-machines`) | anchor · 1 | ok | https://thinkingmachines.ai/blog/index.xml | 7 | A Safe Path to Open Weights · Fri, 31 Jul 2026 00:00:00 | ETag | feed advertised by the blog; posts are infrequent |
+| AWS Machine Learning blog (`aws-ml-blog`) | anchor · 2 | ok | https://aws.amazon.com/blogs/machine-learning/feed/ | 20 | Amazon Polly delivers a major upgrade to its Generative engine · Thu, 22 Oct 2026 18:06:35 | Last-Modified | verify |
+| Together AI blog (`together-ai-blog`) | anchor · 2 | ok | https://www.together.ai/blog/rss.xml | 100 | Together Post-Training: frontier-grade model shaping, the way that fits you · Mon, 19 Oct 2026 00:00:00 | Last-Modified | feed advertised by together.ai/blog |
+| arXiv category RSS (`arxiv-rss`) | anchor · 2 | ok 5/5 ok | https://rss.arxiv.org/rss/{each} | 379 | To Keep or Not to Keep: Learning KV Cache Retention in Disaggregated LLM Serving Systems · Thu, 22 Oct 2026 00:00:00 | ETag | holds only the latest announcement; gaps are backfilled from arxiv-oai |
+| arXiv query API (lookups by id) (`arxiv-api`) | context · 2 | disabled | https://export.arxiv.org/api/query?id_list=1706.03762 | 1 | Attention Is All You Need · 2017-06-12T17:57:34Z | robots: disallowed | not needed: export.arxiv.org robots.txt is Disallow / for all agents, and arxiv-oai GetRecord does the same lookups (verified 2026-10-22) |
+| arXiv OAI-PMH (gap backfill and lookups by id) (`arxiv-oai`) | context · 2 | ok | https://oaipmh.arxiv.org/oai?verb=Identify | 1 | HTTP 200 |  | verified 2026-10-22. Backfill: ListRecords set=cs / set=stat from=<cursor>. Lookup: GetRecord identifier=oai:arXiv.org:<id> metadataPrefix=arXiv. Same 3 s budget as all arXiv |
+| Hugging Face Daily Papers (`hf-daily-papers`) | anchor+discussion · 1 | ok | https://huggingface.co/api/daily_papers | 50 | StyleStream 2.0: Fast and Controllable Streaming Voice Style Conversion · 2026-10-19T20:00:00.000Z | ETag, ratelimit-policy: "fixed window";"api";q=500;w=300 |  |
+| Hugging Face paper page API (per paper) (`hf-paper-detail`) | context · 2 | ok | https://huggingface.co/api/papers/2501.12948 | 1 | DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning | ETag, ratelimit-policy: "fixed window";"api";q=500;w=300 | sample paper 2501.12948; checks which fields carry comments and upvotes |
+| Hugging Face paper comments (`hf-paper-comments`) | discussion · 3 | ok | https://huggingface.co/papers/2501.12948 | 1 | HTTP 200 | ETag, ratelimit-policy: "fixed window";"pages";q=100;w=300 | no comments API (/api/papers/{id}/comments is 404). Comments are in the page's embedded JSON; daily_papers gives numComments, so only pages with comments get fetched |
+| Hugging Face trending papers (`hf-trending-papers`) | context · 2 | ok | https://huggingface.co/api/daily_papers?sort=trending | 50 | Harness^2: Recursive Agent Harnessing for an Open World | ETag, ratelimit-policy: "fixed window";"api";q=500;w=300 | 2026-10-24: a signal, not a source of stories (hf_trending_rank); re-probed ok |
+| alphaXiv overviews (`alphaxiv-overview`) | discussion+context · 3 | ok | https://alphaxiv.org/abs/2501.12948.md | 1 | HTTP 200 |  | verify; 404 means no overview yet. Comments are not probed (no documented endpoint) |
+| Semantic Scholar API (`semantic-scholar`) | context · 2 | failed | https://api.semanticscholar.org/graph/v1/paper/ARXIV:1706.03762?fields=title,citationCount,influentialCitationCount | 0 |  |  | keyless shared pool answered 429; needs a free API key (SEMANTIC_SCHOLAR_API_KEY) · not ok: https://api.semanticscholar.org/graph/v1/paper/ARXIV:1706.03762?fields=title,citationCount,influentialCitationCount: HTTP 429 |
+| OpenAlex API (`openalex`) | context · 2 | ok | https://api.openalex.org/works/doi:10.48550/arXiv.1706.03762 | 1 | Attention Is All You Need | x-ratelimit-limit: 1000, x-ratelimit-remaining: 1000, x-ratelimit-reset: 15216 | fallback citations |
+| OpenReview API (`openreview`) | context · 2 | ok | https://api2.openreview.net/groups?id=ICLR.cc/2026/Conference | 1 | ICLR.cc/2026/Conference | ETag, ratelimit-limit: 20, ratelimit-policy: 20;w=60, ratelimit-remaining: 19, ratelimit-reset: 60, x-ratelimit-limit: 20, x-ratelimit-remaining: 19, x-ratelimit-reset: 1792698447 | verify |
+| Conference proceedings sites (`proceedings`) | anchor · 2 | disabled |  |  |  |  | seasonal, low priority; not probed |
+| bioRxiv API (`biorxiv`) | anchor · 2 | disabled |  |  |  |  | disabled by default (AI-for-science later) |
+| Hugging Face Hub org watch (`hf-org-watch`) | anchor · 1 | ok 25/25 ok | https://huggingface.co/api/models?author={each}&sort=createdAt&direction=-1&limit=3 | 3 | deepseek-ai/DeepSeek-V4.1-Flash-1017 · 2026-10-17T02:40:38.000Z | ETag, ratelimit-policy: "fixed window";"api";q=500;w=300 | significant open-weight labs; list widened 2026-10-22 (meta-models, black-forest-labs and tencent were trending but unwatched) |
+| Hugging Face trending models (`hf-trending-models`) | anchor · 2 | ok | https://huggingface.co/api/models?sort=trendingScore&limit=5 | 5 | deepseek-ai/DeepSeek-V4.1-Flash-1017 · 2026-10-17T02:40:38.000Z | ETag, ratelimit-policy: "fixed window";"api";q=500;w=300 | verify param |
+| Hugging Face trending Spaces (`hf-trending-spaces`) | anchor · 2 | disabled | https://huggingface.co/api/spaces?sort=trendingScore&limit=5 | 5 | kulkas2pintu/wan777 · 2026-07-15T11:49:16.000Z | ETag, ratelimit-policy: "fixed window";"api";q=500;w=300 | off since 2026-10-22: trending Spaces are mostly demos and spam, not model releases |
+| Hugging Face trending datasets (`hf-trending-datasets`) | anchor · 2 | disabled | https://huggingface.co/api/datasets?sort=trendingScore&limit=5 | 5 | nvidia/Nemotron-Personas-Vietnam · 2026-06-04T16:43:52.000Z | ETag, ratelimit-policy: "fixed window";"api";q=500;w=300 | off since 2026-10-22: not model releases |
+| GitHub releases (tracked repos) (`github-releases`) | anchor · 1 | disabled | https://api.github.com/repos/{each}/releases?per_page=5 | 5 | v0.32.0 · 2026-10-18T06:50:48Z | ETag, x-ratelimit-limit: 60, x-ratelimit-remaining: 46, x-ratelimit-remaining: 47, x-ratelimit-remaining: 48, x-ratelimit-remaining: 49, x-ratelimit-remaining: 50, x-ratelimit-remaining: 51, x-ratelimit-remaining: 52, x-ratelimit-remaining: 53, x-ratelimit-remaining: 54, x-ratelimit-remaining: 55, x-ratelimit-remaining: 56, x-ratelimit-reset: 1792701027 | off since 2026-10-22: tooling versions are not news for Debrief (releases means significant model releases) |
+| GitHub trending (`github-trending`) | anchor · 2 | disabled | https://github.com/trending | 9 | https://github.com/php/php-src | ETag | off since 2026-10-22: repos are not model releases |
+| New AI repos gaining stars (GitHub search) (`github-new-ai-repos`) | anchor · 2 | disabled | https://api.github.com/search/repositories?q=created:>2026-10-15+stars:>50+topic:llm&sort=stars&order=desc&per_page=10 | 10 | MemTensor/MemT-1.0 · 2026-10-19T03:29:30Z | x-ratelimit-limit: 10, x-ratelimit-remaining: 9, x-ratelimit-reset: 1792698474 | off since 2026-10-22: repos are not model releases |
+| GitHub REST API (stars, issues) (`github-api`) | context+discussion · 3 | ok | https://api.github.com/repos/vllm-project/vllm | 1 | vllm-project/vllm | ETag, Last-Modified, x-ratelimit-limit: 60, x-ratelimit-remaining: 45, x-ratelimit-reset: 1792701027 |  |
+| PyPI releases (tracked SDKs) (`pypi`) | anchor · 2 | disabled | https://pypi.org/rss/project/{each}/releases.xml | 40 | 2.1.0 · Wed, 21 Oct 2026 22:00:54 | ETag | off since 2026-10-22: tooling versions are not news for Debrief (releases means significant model releases) |
+| npm releases (tracked SDKs) (`npm`) | anchor · 2 | disabled | https://registry.npmjs.org/{each}/latest | 1 | 1.1.0 | Last-Modified | off since 2026-10-22: tooling versions are not news for Debrief (releases means significant model releases) |
+| LMArena leaderboard (`lmarena`) | anchor · 2 | ok | https://datasets-server.huggingface.co/rows?dataset=lmarena-ai/leaderboard-dataset&config=text&split=latest&offset=0&length=20 | 20 | Gemini 4 Argon (High) |  | lmarena.ai returns 403; the official lmarena-ai/leaderboard-dataset on HF (updated 2026-10-21) is read through the datasets-server rows API |
+| OpenRouter models (`openrouter-models`) | anchor · 2 | ok | https://openrouter.ai/api/v1/models | 468 | recursive/flint-v1.0:free · 1792622765 |  | verify |
+| OpenRouter rankings (`openrouter-rankings`) | anchor · 2 | disabled |  |  |  |  | page loads (2.5 MB) with the data embedded in its script payload; fragile to parse, so off until needed |
+| Artificial Analysis (`artificial-analysis`) | context · 2 | disabled |  |  |  |  | 401 without a key; free key needed (ARTIFICIAL_ANALYSIS_API_KEY) |
+| Epoch AI data (`epoch-ai`) | context · 2 | ok | https://epoch.ai/data | 12 | https://epoch.ai/data/ai_chip_components.zip |  | low priority; looks for downloadable datasets |
+| OpenAI status (`status-openai`) | anchor · 2 | ok | https://status.openai.com/history.rss | 106 | New Ad Accounts failing to provision admins · Thu, 22 Oct 2026 19:36:53 |  | verified; emit stories only for major incidents |
+| Anthropic status (`status-anthropic`) | anchor · 2 | ok | https://status.anthropic.com/history.rss | 25 | Elevated errors affecting Connectors · Thu, 22 Oct 2026 08:07:03 | ETag | verified; emit stories only for major incidents |
+| Hacker News (Algolia) (`hn`) | discussion · 3 | ok | https://hn.algolia.com/api/v1/search_by_date?tags=story&numericFilters=created_at_i>1792612058&hitsPerPage=3 | 3 (total 1189) | A new way to fingerprint CPU architecture using Canvas and Skia · 2026-10-22T19:45:42Z |  | most important discussion source; count = stories in the last 24 h |
+| Hacker News comment trees (Algolia items) (`hn-items`) | discussion · 3 | ok | https://hn.algolia.com/api/v1/items/8863 | 1 | My YC app: Dropbox - Throw away your USB drive |  |  |
+| Bluesky (curated accounts) (`bluesky`) | discussion · 3 | ok | https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=bsky.app&limit=2 | 2 | you can add multiple links to your profile. they render on your profile on desktop in the… · 2026-10-22T17:34:02.566Z |  | account list to be curated; bsky.app is a probe stand-in |
+| Bluesky search (keyless) (`bluesky-search`) | discussion · 3 | disabled |  |  |  |  | searchPosts on the public AppView returns 403 without a login |
+| Bluesky Jetstream (firehose filter) (`bluesky-jetstream`) | discussion · 3 | disabled |  |  |  |  | optional later mode (websocket); not probed |
+| Lobsters (`lobsters`) | discussion · 3 | disabled |  |  |  |  | robots.txt: Disallow / for all generic agents (JSON and RSS alike) |
+| LessWrong (`lesswrong`) | discussion · 3 | ok | https://www.lesswrong.com/graphql | 3 | Opening up Attention: A QK Transcoder Dashboard for Feature Pairs · 2026-10-22T17:58:35.534Z | robots.txt allows /graphql; Crawl-Delay 3 | verified 2026-10-24 (re-probed ok) |
+| Alignment Forum (`alignment-forum`) | discussion · 3 | ok | https://www.alignmentforum.org/graphql | 3 | Monitorability evaluations and policy proposals · 2026-10-22T14:01:40.943Z | robots.txt allows /graphql; Crawl-Delay 3 | verified 2026-10-24 (re-probed ok); every post is also on LessWrong |
+| LessWrong and Alignment Forum comments (`lesswrong-comments`) | discussion · 3 | ok | https://www.lesswrong.com/graphql | 3 | (probed 2026-10-24) | robots.txt allows /graphql; Crawl-Delay 3 | added 2026-10-24 (M5); not in the 2026-10-22 probe |
+| Mastodon (sigmoid.social) (`mastodon`) | discussion · 3 | ok | https://sigmoid.social/api/v1/timelines/tag/machinelearning?limit=2 | 2 | 🧠 Chinese hackers breached ConnectWise and accessed thousands of its customers through th… · 2026-10-22T17:03:55.000Z | ETag, x-ratelimit-limit: 300, x-ratelimit-remaining: 299, x-ratelimit-reset: 2026-10-22T19:50:00.072543Z | verify; account/hashtag list to be curated |
+| YouTube channels (`youtube`) | discussion · 3 | disabled |  |  |  |  | robots.txt disallows /feeds/videos.xml. Alternative: YouTube Data API v3 with a free key (YOUTUBE_API_KEY) |
+| Podcasts (`podcasts`) | discussion · 3 | ok 4/4 ok | https://api.substack.com/feed/podcast/1084089.rss; https://apple.dwarkesh-podcast.workers.dev/feed.rss; https://feeds.megaphone.fm/RINTP3108857801; https://feeds.megaphone.fm/nopriors | 239 | Why AI Compute Comes in Rectangles — Erik Bernhardsson, Modal CEO · Thu, 22 Oct 2026 17:40:57 | ETag, Last-Modified | feed URLs found through the iTunes search API, then probed |
+| Discord (invited bot only) (`discord`) | discussion · 3 | disabled |  |  |  |  | optional; only servers where an admin invited the bot; not probed |
+| AINews (smol.ai) (`ainews`) | reference · 3 | disabled |  |  |  |  | feed and site work, but the newest issue is 2026-09-10: AINews looks inactive |
+| Simon Willison's Weblog (`simon-willison`) | reference+discussion · 3 | ok | https://simonwillison.net/atom/everything/ | 30 | Donating Agent Skills to the Agentic AI Foundation · 2026-10-22T18:09:56+00:00 | Last-Modified | also discussion (first-hand reactions) |
+| Import AI (`import-ai`) | reference · 3 | ok | https://importai.substack.com/feed | 20 | Import AI 477: In which I tell the IMF the Singularity has begun · Mon, 19 Oct 2026 12:31:37 | ETag |  |
+| Interconnects (`interconnects`) | reference · 3 | ok | https://www.interconnects.ai/feed | 20 | Latest open artifacts (#25): DeepSeek V4.1 Flash 1017, American-made models, and new regu… · Tue, 20 Oct 2026 17:04:21 | ETag |  |
+| Ahead of AI (`ahead-of-ai`) | reference · 3 | ok | https://magazine.sebastianraschka.com/feed | 20 | Language Models for Text Classification: From Bag-of-Words to Jev · Tue, 29 Sep 2026 10:50:25 | ETag |  |
+| Latent Space (newsletter) (`latent-space`) | reference · 3 | ok | https://www.latent.space/feed | 20 | Why AI Compute Comes in Rectangles — Erik Bernhardsson, Modal CEO · Thu, 22 Oct 2026 17:40:57 | ETag |  |
+| Don't Worry About the Vase (`dwatv`) | reference · 3 | ok | https://thezvi.substack.com/feed | 20 | AI #191: The Hackening Begins · Thu, 22 Oct 2026 15:13:06 | ETag |  |
+| Last Week in AI (`last-week-in-ai`) | reference · 3 | ok | https://lastweekin.ai/feed | 20 | Last Week in AI #346 - 719 math manuscripts, 2 Western open models, 1 more safety resigna… · Fri, 09 Oct 2026 05:06:58 | ETag |  |
+| The Batch (DeepLearning.AI) (`the-batch`) | reference · 3 | ok | https://www.deeplearning.ai/the-batch/ | 17 | https://www.deeplearning.ai/the-batch/issue-375 |  | no RSS advertised; weekly issues are /the-batch/issue-NNN |
+| Techmeme (`techmeme`) | reference · 3 | ok | https://www.techmeme.com/feed.xml | 15 | Microsoft and Alphabet join 14 other companies objecting to a plan by OKXICE, a venture o… · Thu, 22 Oct 2026 15:05:22 | ETag, Last-Modified | verify; also marks mainstream_at |
+| Email newsletters (TLDR AI, Ben's Bites, The Rundown) (`imap-newsletters`) | reference · 3 | disabled |  |  |  |  | optional IMAP inbox, set up later; not probed |
+| TechCrunch AI (`techcrunch-ai`) | anchor+reference · 2 | ok | https://techcrunch.com/category/artificial-intelligence/feed/ | 20 | 1Password launches a way for AI agents to log in on your behalf without seeing your passw… · Thu, 22 Oct 2026 19:07:09 | ETag, Last-Modified |  |
+| Ars Technica AI (`ars-technica-ai`) | anchor+reference · 2 | ok | https://arstechnica.com/ai/feed/ | 20 | Hackers got a four-day head start on epic PHP2Shell vulnerability · Thu, 22 Oct 2026 15:25:02 | ETag, Last-Modified |  |
+| MIT Technology Review AI (`mit-tech-review-ai`) | anchor+reference · 2 | ok | https://www.technologyreview.com/topic/artificial-intelligence/feed | 10 | The Foundations of Scalable AI · Thu, 22 Oct 2026 18:48:04 | ETag, Last-Modified |  |
+| MIT News AI (`mit-news-ai`) | anchor · 2 | ok | https://news.mit.edu/rss/topic/artificial-intelligence2 | 50 | Why teaching AI about symmetry could make prenatal diagnosis more reliable · Mon, 19 Oct 2026 14:20:00 | ETag, Last-Modified |  |
+| The Verge AI (`the-verge-ai`) | anchor+reference · 2 | ok | https://www.theverge.com/rss/ai-artificial-intelligence/index.xml | 10 | Discord now formats Markdown previews right · 2026-10-22T14:58:19-04:00 | ETag | verify |
+| Wired AI (`wired-ai`) | anchor+reference · 2 | ok | https://www.wired.com/feed/tag/ai/latest/rss | 10 | Meet Mori, a Cute Robot Mushroom That Doesn’t Really Say (or Do) Anything · Thu, 22 Oct 2026 13:00:00 |  | verify |
+| VentureBeat AI (`venturebeat-ai`) | anchor+reference · 2 | disabled |  |  |  |  | HTTP 429 on every request from this server (v1: 39 of 39 runs; probe: 1 of 1) |
+| PR Newswire (`prnewswire`) | anchor · 2 | disabled | https://www.prnewswire.com/rss/news-releases-list.rss | 20 | UBCF Extends Free Pink Bag Shopping Event in Jonesboro Through October 30th · Thu, 22 Oct 2026 19:45:00 | ETag, Last-Modified | off since 2026-10-22: general wire feed, almost all off-topic (23 of 58 press items on 2026-10-22) |
+| Business Wire (`businesswire`) | anchor · 2 | disabled |  |  |  |  | newsroom page timed out after 30 s; no feed found |
+| GlobeNewswire (`globenewswire`) | anchor · 2 | disabled |  |  |  |  | Akamai 'Access Denied' (403) to non-browser clients |
+| SEC EDGAR filings (AI-company allowlist) (`sec-edgar`) | anchor · 2 | ok 8/8 ok | https://data.sec.gov/submissions/CIK{each}.json | 1 | NVIDIA CORP |  | the official EDGAR API (data.sec.gov). sec.gov/cgi-bin/browse-edgar is disallowed by robots.txt. Needs DEBRIEF_CONTACT to be an email (SEC fair-access policy). Each response lists ~1000 recent filings; the adapter keeps forms like 8-K, 10-K, 10-Q, S-1 and skips insider-trade Form 4s |
+| Federal Register (`federal-register`) | anchor · 2 | ok | https://www.federalregister.gov/api/v1/documents.json?conditions[term]=%22artificial+intelligence%22&order=newest&per_page=3 | 3 | Agency Information Collection Activities; Proposed Collection; Comment Request; Fraud.gov… · 2026-10-22 |  |  |
+| NIST news (`nist`) | anchor · 2 | ok | https://www.nist.gov/news-events/news/rss.xml | 40 | New Chip-Based ‘Tape Measure’ for Light Could Revolutionize Mobile Timekeeping and Enhanc… · Fri, 16 Oct 2026 12:00:00 | ETag, Last-Modified | verify; needs AI keyword filtering |
+| EU AI Office (`eu-ai-office`) | anchor · 2 | disabled |  |  |  |  | CloudFront 403 to non-browser clients |
+| UK AI Security Institute (`uk-aisi`) | anchor · 2 | ok | https://www.gov.uk/government/organisations/ai-security-institute.atom | 16 | Britain steps up national defences against growing AI risks · 2026-10-12T10:14:00Z | ETag | verified (GOV.UK organisation feed) |

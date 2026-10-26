@@ -21,7 +21,6 @@
                                          check, and brief.json / brief.md / reported.json
   debrief brief hook fetch|stop          the skill session's hooks (the fetch cap, the check on stop)
   debrief site build --out DIR           the site as static files: every day's page and the archive
-  debrief site import-v1 --from DIR      copy the old pipeline's built pages in (once, at the takeover)
   debrief snapshot-fixtures              arrives in M6
 """
 import argparse
@@ -214,11 +213,6 @@ def _brief(args, cfg):
 def _site(args, cfg):
     from .site import build
     try:
-        if args.step == "import-v1":
-            dates = build.import_v1(cfg, args.src)
-            print(f"site import-v1: {len(dates)} pages ({dates[0] if dates else '-'} to {dates[-1] if dates else '-'}) "
-                  f"-> {build.v1_dir(cfg)}")
-            return 0
         r = build.build(cfg, args.out)
     except build.SiteError as e:
         print(f"site: {e}", file=sys.stderr)
@@ -240,7 +234,7 @@ def main(argv=None):
 
     p = sub.add_parser("probe-sources", help="hit every source once and report what works")
     p.add_argument("--source", action="append", help="probe only this source id (repeatable)")
-    p.add_argument("--md", help="where to write the markdown table (default docs/v2/SOURCES.md)")
+    p.add_argument("--md", help="where to write the markdown table (default docs/SOURCES.md)")
     p.add_argument("--include-disabled", action="store_true", help="also request disabled sources")
     p.set_defaults(func=_probe)
 
@@ -297,8 +291,6 @@ def main(argv=None):
     ssub = p.add_subparsers(dest="step", required=True)
     sp = ssub.add_parser("build", help="write the whole site into an empty folder")
     sp.add_argument("--out", required=True, help="the folder to write (new, or empty)")
-    sp = ssub.add_parser("import-v1", help="copy the old pipeline's built day pages into <data>/site/v1/")
-    sp.add_argument("--from", dest="src", required=True, help="a served v1 site folder (e.g. /srv/www/debrief/current)")
     p.set_defaults(func=_site)
 
     sub.add_parser("snapshot-fixtures").set_defaults(func=_not_yet("M6"))

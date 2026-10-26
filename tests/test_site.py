@@ -81,7 +81,7 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
 
 def test_v1_pages_are_copied_unchanged_and_a_v2_brief_wins_its_date(tmp_path):
     cfg, doc = written(tmp_path)
-    src = tmp_path / "v1site"
+    src = build.v1_dir(cfg)
     pages = {"2026-09-14": v1_page({"dek": "The dek line"}),
              "2026-09-15": v1_page({"bottom_line": {"read": "The old through-line"}}),
              "2026-09-16": v1_page({"what_happened": ["First event </script> and more"]}),
@@ -89,9 +89,6 @@ def test_v1_pages_are_copied_unchanged_and_a_v2_brief_wins_its_date(tmp_path):
     for d, body in pages.items():
         (src / d).mkdir(parents=True)
         (src / d / "index.html").write_text(body)
-    (src / "2026-09-17").mkdir()
-    (src / "2026-09-17" / "index.html").write_text("<html>a v2 page, no embedded data</html>")
-    assert build.import_v1(cfg, src) == sorted(pages)
     r = build.build(cfg, tmp_path / "out")
     assert r == {"v2": [DATE], "v1": ["2026-09-14", "2026-09-15", "2026-09-16"]}
     out = tmp_path / "out"

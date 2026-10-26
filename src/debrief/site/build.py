@@ -6,10 +6,10 @@
   <date>/brief.json   a v2 day's brief.json minus what's only for us (the session, the check's
                       warnings, refused fetches): the day as data, for anything that wants it
 
-v2 days are the runs/<date>/brief.json files that validate. v1's pages were built by the old
-pipeline; `debrief site import-v1 --from DIR` copies them, byte for byte, into <data>/site/v1/
-once, and they never change after that. A v2 brief wins a date that both have. Nothing depends on
-the clock, so the same inputs give the same bytes.
+v2 days are the runs/<date>/brief.json files that validate. The v1 pipeline's pages (2026-09-14
+to 2026-10-25) were copied byte for byte into <data>/site/v1/ when v2 took over the site, and are
+listed unchanged; a v2 brief wins a date that both have. Nothing depends on the clock, so the same
+inputs give the same bytes.
 """
 import json
 import re
@@ -89,21 +89,3 @@ def build(cfg, out, validator=None, log=print):
     (out / "index.html").write_text(page.index_page(entries))
     return {"v2": sorted(v2), "v1": sorted(set(v1) - set(v2))}
 
-
-def import_v1(cfg, src):
-    """Copy v1's built day pages from a served site folder into <data>/site/v1/. Only pages with
-    v1's embedded data are taken, so pointing it at a site v2 has already published is harmless.
-    Returns the dates copied."""
-    src, dest, copied = Path(src), v1_dir(cfg), []
-    if not src.is_dir():
-        raise SiteError(f"no site folder at {src}")
-    for f in sorted(src.glob("*/index.html")):
-        if not DATE.match(f.parent.name):
-            continue
-        body = f.read_bytes()
-        if not V1_DATA.search(body.decode("utf-8", "replace")):
-            continue
-        (dest / f.parent.name).mkdir(parents=True, exist_ok=True)
-        (dest / f.parent.name / "index.html").write_bytes(body)
-        copied.append(f.parent.name)
-    return copied

@@ -1,5 +1,5 @@
 # Debrief v2 sources. One entry per source; adding a source is one entry here (plus an adapter, if
-# its adapter type is new). Field reference: docs/v2/README.md. Quick version:
+# its adapter type is new). Field reference: docs/README.md. Quick version:
 #
 #   id, name     stable id (used in raw paths and the index) and a display name
 #   adapter      the adapter type that will fetch it (M1+); probe-sources ignores this
@@ -12,7 +12,7 @@
 #   auth         {env, header, format}: send a header when that env var is set
 #   enabled      false = ships disabled (optional adapters)
 #
-# "verify" in notes = not yet confirmed live; docs/v2/SOURCES.md has the probe results.
+# "verify" in notes = not yet confirmed live; docs/SOURCES.md has the probe results.
 
 # ---------------------------------------------------------------- labs and companies: anchor, tier 1
 - id: openai-news

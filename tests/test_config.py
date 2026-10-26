@@ -47,12 +47,6 @@ def test_duplicate_ids_are_rejected(tmp_path):
         config.load(write(tmp_path, [SRC, SRC]), env={})
 
 
-def test_refuses_the_v1_data_dir(tmp_path):
-    (tmp_path / "data" / "debriefs").mkdir(parents=True)
-    with pytest.raises(config.ConfigError, match="v1"):
-        config.load(write(tmp_path, [SRC]), env={"DEBRIEF_DATA_DIR": str(tmp_path / "data")})
-
-
 def test_anchor_kind_must_map_to_a_section(tmp_path):
     d = write(tmp_path, [{**SRC, "kind": "mystery"}],
               {"user_agent": "x ({contact})", "contact_default": "c", "sections": {"announcement": "announcements"}})

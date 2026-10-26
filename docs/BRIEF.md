@@ -1,6 +1,6 @@
 <!--
 The original brief for the v2 collector and triage, saved verbatim on 2026-10-22.
-Some of it was changed while planning, so where this brief and docs/v2/PLAN.md disagree, PLAN.md wins.
+Some of it was changed while planning, so where this brief and docs/PLAN.md disagree, PLAN.md wins.
 The main changes: triage runs on Claude through Claude Code headless (the Max subscription), not on a
 local model; there are no embeddings; and raw data is stored as compressed JSONL batches.
 -->

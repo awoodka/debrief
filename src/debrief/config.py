@@ -2,7 +2,7 @@
 config/triage.yml (as settings["triage"]), config/brief.yml (as settings["brief"]), and env.
 
 Environment:
-  DEBRIEF_DATA_DIR   raw data, state and runs (default: <repo>/data/v2). Never the v1 data dir.
+  DEBRIEF_DATA_DIR   raw data, state and runs (default: <repo>/data/v2).
   DEBRIEF_CONTACT    contact for the User-Agent, an email or URL (default: settings.contact_default)
 """
 import os
@@ -114,8 +114,5 @@ def load(config_dir=CONFIG_DIR, env=os.environ):
                               f"in settings.yml (known kinds: {sorted(sections)})")
 
     data_dir = Path(env.get("DEBRIEF_DATA_DIR") or REPO / "data" / "v2")
-    # v1 publishes whatever is in its debriefs/ folder; a v2 run must never write there.
-    if (data_dir / "debriefs").is_dir():
-        raise ConfigError(f"DEBRIEF_DATA_DIR={data_dir} is the v1 pipeline's data dir")
     contact = (env.get("DEBRIEF_CONTACT") or "").strip() or settings["contact_default"]
     return Config(settings=settings, sources=tuple(sources), data_dir=data_dir, contact=contact)

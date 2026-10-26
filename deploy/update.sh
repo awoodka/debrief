@@ -2,7 +2,7 @@
 # Deploy Debrief v2: point the production checkout at a pushed commit, rebuild the image, run the
 # tests there, and roll back if they fail. The timers run whatever this leaves checked out.
 #
-#   deploy/update.sh            the latest origin/v2
+#   deploy/update.sh            the latest origin/main
 #   deploy/update.sh <commit>   a specific commit (a rollback, say)
 #
 # The checkout (/srv/apps/debrief-v2/repo) is a git worktree of the dev repo, detached at the
@@ -23,8 +23,8 @@ mkdir -p "$APP"
 exec 9>"$DATA/.run.lock"
 flock -w 1800 9 || die "a run has held $DATA/.run.lock for 30 minutes"
 
-git -C "$SRC" fetch -q origin v2
-target=$(git -C "$SRC" rev-parse --verify "${1:-origin/v2}^{commit}")
+git -C "$SRC" fetch -q origin main
+target=$(git -C "$SRC" rev-parse --verify "${1:-origin/main}^{commit}")
 previous=$(git -C "$CHECKOUT" rev-parse HEAD 2>/dev/null || true)
 
 if [ -z "$previous" ]; then

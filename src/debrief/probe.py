@@ -7,7 +7,7 @@ robots.txt, and any RSS a page advertises. Sources with `candidates` are tried i
 one works.
 
 Writes the full record to <data>/probe/probe-<stamp>.json and the review table to
-docs/v2/SOURCES.md. Probing never writes to the stores M1 builds.
+docs/SOURCES.md. Probing never writes to the stores M1 builds.
 """
 import json
 import os
@@ -371,6 +371,6 @@ def write(results, cfg, md_path=None):
     meta = {"generated_at": stamp.isoformat(timespec="seconds"), "user_agent": cfg.user_agent,
             "json_path": f"$DEBRIEF_DATA_DIR/probe/{jpath.name}"}
     jpath.write_text(json.dumps({"meta": meta, "results": [asdict(r) for r in results]}, indent=2))
-    md_path = Path(md_path or REPO / "docs" / "v2" / "SOURCES.md")
+    md_path = Path(md_path or REPO / "docs" / "SOURCES.md")
     md_path.write_text(render_markdown(results, meta))
     return jpath, md_path

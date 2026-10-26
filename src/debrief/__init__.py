@@ -1,1 +1,1 @@
-"""Debrief v2: the collector and triage layers. See docs/v2/PLAN.md."""
+"""Debrief: the collector, triage, the brief and the site. See docs/README.md and docs/PLAN.md."""

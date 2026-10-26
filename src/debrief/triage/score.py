@@ -1,4 +1,4 @@
-"""The scoring call (docs/v2/CRITERIA.md "The model call"): one call (triage.yml scoring.model), through
+"""The scoring call (docs/CRITERIA.md "The model call"): one call (triage.yml scoring.model), through
 Claude Code headless on the Max subscription, over every candidate and the most-discussed unattached
 threads (Hacker News, LessWrong and the Alignment Forum).
 
@@ -13,7 +13,7 @@ config/relevance.md), and score (5, 4 or 3, only when relevant). Then code, not 
 
 The call has no tools, an explicit system prompt (prompts/<name>.md with relevance.md appended),
 no settings, MCP servers or slash commands, and runs in an empty directory, so nothing from the
-repo's v1 .claude/ leaks in. Fetched text goes in as JSON data inside tags, with "</" escaped.
+repo (settings, commands, agents) leaks in. Fetched text goes in as JSON data inside tags, with "</" escaped.
 
 Answers are cached in <data>/cache/score/<key>.json, keyed by a hash of everything the call sees
 (system prompt, user message, model, effort, schema). Re-running triage on the same data replays

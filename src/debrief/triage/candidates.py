@@ -1,4 +1,4 @@
-"""Candidates: the deterministic part of triage (docs/v2/CRITERIA.md; thresholds in config/triage.yml).
+"""Candidates: the deterministic part of triage (docs/CRITERIA.md; thresholds in config/triage.yml).
 
 The candidate list is a pure function of the state database, the run's time `at` and the config:
 every window counts back from `at`, every signal is its latest snapshot at or before `at`, and
