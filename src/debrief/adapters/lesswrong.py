@@ -138,8 +138,9 @@ class LessWrongComments(Adapter):
                                  (SELECT comments FROM engagement e WHERE e.mention_id = m.mention_id
                                   ORDER BY observed_at DESC LIMIT 1) AS n
                                FROM mentions m JOIN stories st ON st.story_id = m.story_id
-                               WHERE m.source_id IN ({marks}) AND m.kind='thread' AND st.first_seen >= date(?, ?)""",
-                           (*srcs, ctx.run_date, f"-{o['days'] - 1} days"))
+                               WHERE m.source_id IN ({marks}) AND m.kind='thread'
+                               AND (st.first_seen >= date(?, ?) OR m.posted_at >= date(?, ?))""",
+                           (*srcs, ctx.run_date, f"-{o['days'] - 1} days", ctx.run_date, f"-{o['days'] - 1} days"))
         rows = [tuple(r) for r in rows]
         if ctx.cadence == "daily":
             from ..triage.candidates import unattached_threads

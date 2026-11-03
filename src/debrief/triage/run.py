@@ -11,6 +11,7 @@ relevant story (triage/score.py). If it fails, or with --no-model, `keep` takes 
 fallback_keep candidates instead and the run is degraded. Triage reads the collector's tables and
 never writes them; it records its own run in `runs` (kind "triage").
 """
+import json
 import os
 from datetime import datetime, timezone
 
@@ -29,6 +30,18 @@ def collect_at(store, run_date):
     return row[0] if row else None
 
 
+def prev_triage_at(store, run_date):
+    """The data time (`at`) of the latest triage run for an earlier day, or None: late-paper triggers
+    fire on what changed since then (candidates.lookback). Not `at` minus a day: `at` moves with the
+    6-hourly polls, and a day without triage would lose its crossings."""
+    row = store.one("""SELECT report FROM runs WHERE kind = 'triage' AND run_date < ?
+                       ORDER BY run_date DESC, started_at DESC, run_id DESC LIMIT 1""", (run_date,))
+    try:
+        return json.loads(row[0]).get("at") if row and row[0] else None
+    except (ValueError, AttributeError):
+        return None
+
+
 def keep_fallback(ctx, groups):
     for sec, gs in groups.items():
         n = ctx.t["fallback_keep"].get(sec, 0)
@@ -37,9 +50,9 @@ def keep_fallback(ctx, groups):
                 g.drop("keep", f"candidate #{g.rank}; without the scoring call, the first {n} are kept")
 
 
-def select(store, cfg, at, ledger_doc):
+def select(store, cfg, at, ledger_doc, prev_at=None):
     """Every stage up to the candidates. Returns (ctx, {section: [Group]})."""
-    ctx = candidates.Ctx(store, cfg, at)
+    ctx = candidates.Ctx(store, cfg, at, prev_at)
     groups = candidates.pools(ctx)
     candidates.hard_rules(ctx, groups)
     merge.announcements(ctx, groups)
@@ -69,7 +82,7 @@ def run(cfg, run_date=None, at=None, model=True, model_name=None, runner=None, f
         raise TriageError(f"no collect run for {run_date}; run `debrief collect` first (or pass --at)")
     validator = output.Validator()
     ledger_doc = ledger.load(cfg.data_dir, run_date, validator.validate)
-    ctx, groups = select(store, cfg, at, ledger_doc)
+    ctx, groups = select(store, cfg, at, ledger_doc, prev_triage_at(store, run_date))
     groups["discussion"] = candidates.threads(ctx, ledger_doc)
     ctx.mode, ctx.scoring, cached, degraded = "rules_only", None, False, []
     if model:

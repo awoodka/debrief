@@ -51,6 +51,28 @@ The windows count back from the run. "Not yet in a brief" uses the reported ledg
   - No single list can carry a paper. One org held 4 of the top 12 by upvotes.
 - **Order:** score, then upvotes, then `story_id`. At most 2 per organization. The first 15 go to the model.
 
+### Late papers: at most 10 more
+
+A paper gets one 3-day pool, but some papers matter later: a position paper never gets a repo, and its discussion or citations can come weeks after release. NVIDIA's "Small Language Models are the Future of Agentic AI" had 0 artifacts and a 5-point HN post at release, and its 113-point HN thread a month later attached to the old paper story and went nowhere. So an older paper joins the papers section again when a **trigger** fires since the previous triage run (`papers.lookback`; decided with Alex 2026-11-02):
+
+| Trigger | Fires when | Papers |
+|---|---|---|
+| `use` | it newly passes the use bar | first seen 4–56 days ago |
+| `citations` | its Semantic Scholar citations cross `min_citations` (10) | first seen 4–56 days ago |
+| `trending` | it newly makes Hugging Face's trending list (0 or never seen, then on it) | first seen 4–56 days ago |
+| `discussion` | an HN, LessWrong or Alignment Forum thread about it was posted in the last 48 hours, at least that source's floor | any age past the pool |
+
+- **A crossing needs a baseline:** an observation of that signal from before the previous run. A signal's first reading never fires, so turning on a source doesn't flood the section.
+- **"Since the previous run"** is the previous triage run's `at`, from the `runs` table, not 24 hours: `at` moves with the polls, and a missed day would lose its crossings.
+- **`discussion` and `trending` are attention, not use.** For fresh papers that stays out of the use bar. Weeks later it's different: a paper still drawing new threads or trending has shown staying power that a 3-day spike doesn't.
+- **56 days** keeps every late paper inside the 60-day raw retention, so a rebuild keeps its story.
+- **The signals keep coming.** Past the pool, Hugging Face-listed papers are read again weekly (`hf-paper-detail`, `hf_papers.refresh_every_days`), and every paper's citations weekly (`semantic-scholar`, which needs `SEMANTIC_SCHOLAR_API_KEY`; without it, it fetches nothing). Comment trees are read for threads posted in the last 3 days whatever their story's age.
+- **Then like any story:** rules, merge and the ledger. A reported paper stays out unless the trigger is a new thread, in which case it comes back as an `update`.
+- **Order:** late papers skip the use bar (their trigger is the evidence) and rank by their own fusion, over the same signals plus citations, after the fresh papers. At most 10 (`lookback.cap`) go to the model, flagged `late: true` with `days_old`; the rest drop at `cap`. A crossing fires once, so watch the `cap` drops when tuning.
+- **Newsletters stay out** of the triggers, like every score (M6).
+
+On the week before the change (2026-10-26 to 11-02, rules only), late papers added 0 to 3 candidates a day and changed nothing else: 5 newly trending, 3 brought back by a new thread. Among them, "Agentic Backdoors via Pretraining Poisoning", dropped at the use bar on all three of its pool days while two HN threads attached to it, and a paper reported on 10-31 that came back as an update with a 158-point thread. The model kept both at 4.
+
 ### Releases: at most 10
 
 **Significant model releases only:**
@@ -101,9 +123,9 @@ The caps add up to 100, plus up to 40 threads. A normal day runs about 80–90 c
 The model is `scoring.model` in `triage.yml`. It was planned as Haiku 5.5; the calibration below moved it to Sonnet 5.5.
 
 **Input**, delimited as data, in the deterministic order above:
-- every candidate: its id, section, source and organization; its title; its summary, plus the start of its page when the summary is short, about 1,000 characters in all; its signals
+- every candidate: its id, section, source and organization; its title; its summary, plus the start of its page when the summary is short, about 1,000 characters in all; its signals. A late paper's signals say `late: true` and `days_old`, and the prompt says its late traction is evidence it matters.
 - the unattached threads and posts, with the start of the page they link to (or the post itself)
-- the titles of stories already in a brief in the last 7 days, as a reference list. A follow-up thread can then point at the story it continues, which comes back with status `update`, rather than standing alone.
+- the titles of stories already in a brief in the last 3 days (`scoring.reported_days`), as a reference list. A follow-up thread can then point at the story it continues, which comes back with status `update`, rather than standing alone.
 - `config/relevance.md` whole: the definition, the worked examples, the score
 
 Fetched text is untrusted, and the prompt says so. The model has no tools.

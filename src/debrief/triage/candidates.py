@@ -7,7 +7,8 @@ every sort ends on story_id.
 The stages, in order. triage/run.py logs every drop with its stage.
   pool     per section, the stories in its window that have an enabled source of that section and
            were first seen by `at`:
-             papers         first seen in the last papers.pool_days days
+             papers         first seen in the last papers.pool_days days, plus late papers: older
+                            ones whose traction grew since (lookback, papers.lookback)
              releases       for each release source, a model it first saw in the last 48 hours, or
                             (releases.by_creation: the org watch) a model created in them
              announcements  published in the last 48 hours
@@ -15,15 +16,18 @@ The stages, in order. triage/run.py logs every drop with its stage.
   rules    hard rules (brief 6.2): no title, or a blocklisted domain or pattern
   merge    stories that are one thing become one candidate (triage/merge.py)
   ledger   already in a brief, unless there's meaningful new discussion (triage/ledger.py)
-  threads  the most-discussed threads of the last 48 hours that attached to no story join the
-           discussion section, for the scoring call (triage/score.py), up to a quota per source
   order and cap, per section:
-             papers         the use bar, then rank fusion; at most max_per_org per organization
+             papers         the use bar, then rank fusion; at most max_per_org per organization.
+                            Late papers skip the use bar and rank by their own fusion after the
+                            fresh ones, up to papers.lookback.cap
              releases       tier, then likes, then story_id
              announcements  sources take turns: tier 1 first, then sources.yml order, each giving
                             its newest post
              press_policy   outlets, then Techmeme carried it, then discussion level, then newest,
                             then story_id
+  threads  (run.py, after the candidates) the most-discussed threads of the last 48 hours that
+           attached to no story join the discussion section, for the scoring call
+           (triage/score.py), up to a quota per source
 """
 import re
 from dataclasses import dataclass, field
@@ -99,8 +103,11 @@ def since(at, hours):
 class Ctx:
     """What every stage reads: the store, the config, the run's time, and cached discussion."""
 
-    def __init__(self, store, cfg, at):
+    def __init__(self, store, cfg, at, prev_at=None):
         self.store, self.cfg, self.at = store, cfg, at
+        # The previous triage run's time (run.prev_triage_at): late-paper triggers fire on what
+        # changed since then. A day back when there's none.
+        self.prev_at = prev_at or since(at, 24)
         self.settings, self.t = cfg.settings, cfg.settings["triage"]
         ob = cfg.settings["bands"]
         self.dists = signals.Distributions(store, at, ob["window_days"], ob.get("floor"))
@@ -153,7 +160,71 @@ def pools(ctx):
             keep = False
         if keep:
             out[sec].append(Group(id=sid, section=sec, members=[sid], stories={sid: s}))
+    if "papers" in out and t["papers"].get("lookback"):
+        out["papers"] += lookback(ctx, {g.id for g in out["papers"]})
     return out
+
+
+def lookback(ctx, have=()):
+    """[Group] of late papers (CRITERIA.md "Late papers"): papers past the pool, from an enabled
+    papers source, not in `have`, with at least one trigger since the previous triage run
+    (ctx.prev_at):
+      use         newly passes the use bar
+      citations   crosses papers.lookback.min_citations
+      trending    newly on Hugging Face's trending list (missing counts as off it)
+      discussion  a thread of a discussion.sources source, posted in discussion.window_hours, at
+                  least its bands.floor (any age past the pool)
+    use, citations and trending only for papers first seen in the last lookback.days days, and only
+    with a baseline: a crossing needs an observation of that signal from before prev_at, so a
+    signal's first reading never fires. info: lookback (the triggers), days_old."""
+    store, at, prev, t = ctx.store, ctx.at, ctx.prev_at, ctx.t
+    o = t["papers"]["lookback"]
+    pool_start = since(at, 24 * t["papers"]["pool_days"])
+    found = {}
+    rows = store.q("""SELECT DISTINCT s.story_id FROM stories s JOIN story_signals g ON g.story_id = s.story_id
+                      WHERE s.section = 'papers' AND s.first_seen_at > ? AND s.first_seen_at <= ?
+                      AND g.observed_at > ? AND g.observed_at <= ?""",
+                   (since(at, 24 * o["days"]), pool_start, prev, at))
+    for (sid,) in rows:
+        now, before = store.latest_signals(sid, at), store.latest_signals(sid, prev)
+        if (USE_SIGNALS & set(before) and passes_use_bar(_use(now), t["papers"]["use_bar"])
+                and not passes_use_bar(_use(before), t["papers"]["use_bar"])):
+            found.setdefault(sid, []).append("use")
+        if "citations" in before and before["citations"] < o["min_citations"] <= now.get("citations", 0):
+            found.setdefault(sid, []).append("citations")
+        if now.get("hf_trending_rank", 0) > 0 and not before.get("hf_trending_rank", 0) > 0:
+            found.setdefault(sid, []).append("trending")
+    floors = ctx.settings["bands"].get("floor") or {}
+    enabled = {s.id for s in ctx.cfg.sources if s.enabled}
+    srcs = [src for src in t["discussion"]["sources"] if src in enabled]
+    if srcs:
+        marks = ",".join("?" * len(srcs))
+        for mid, src, sid in store.q(f"""SELECT m.mention_id, m.source_id, m.story_id FROM mentions m
+                                         JOIN stories s ON s.story_id = m.story_id
+                                         WHERE s.section = 'papers' AND s.first_seen_at <= ? AND m.kind = 'thread'
+                                         AND m.source_id IN ({marks}) AND m.posted_at > ? AND m.posted_at <= ?
+                                         AND m.first_seen_at <= ? ORDER BY m.mention_id""",
+                                      (pool_start, *srcs, since(at, t["discussion"]["window_hours"]), at, at)):
+            if (signals._latest(store, mid, at).get("points") or 0) >= floors.get(src, 0):
+                found.setdefault(sid, []).append("discussion")
+    allowed = set(ctx.section_sources.get("papers", ()))
+    out = []
+    for sid in sorted(found):
+        s = store.story(sid)
+        if sid in have or not set(s["sources"]) & allowed:
+            continue
+        days = int((times.parse(at).timestamp() - times.parse(s["first_seen_at"]).timestamp()) // 86400)
+        out.append(Group(id=sid, section="papers", members=[sid], stories={sid: s},
+                         info={"lookback": sorted(set(found[sid])), "days_old": days}))
+    return out
+
+
+USE_SIGNALS = {"github_stars", "hf_models", "hf_datasets", "hf_spaces"}
+
+
+def _use(sigs):
+    return {"adoption": sigs.get("hf_models", 0) + sigs.get("hf_datasets", 0) + sigs.get("hf_spaces", 0),
+            "stars": sigs.get("github_stars", 0)}
 
 
 def _releases_in_window(ctx):
@@ -205,7 +276,8 @@ def paper_values(store, settings, at, story_ids, dists):
     """{story_id: the paper's signals as of `at`}: upvotes, stars, adoption (models, datasets and
     Spaces built on it), hn_points (its best HN thread, from bands.floor up: a 2-point submission
     isn't traction), spread, comments, trending_rank (its place on Hugging Face's trending list, 0
-    when it isn't on it; lower is better, so it can't go into the fusion as it is)."""
+    when it isn't on it; lower is better, so it can't go into the fusion as it is), citations
+    (Semantic Scholar's count; read only for papers past the pool, so it ranks late papers only)."""
     floor = (settings["bands"].get("floor") or {}).get("hn", 0)
     out = {}
     for sid in story_ids:
@@ -214,7 +286,7 @@ def paper_values(store, settings, at, story_ids, dists):
         hn = (d["by_source"].get("hn") or {}).get("points", 0)
         out[sid] = {"upvotes": u["upvotes"], "stars": u["stars"], "adoption": u["artifacts"],
                     "hn_points": hn if hn >= floor else 0, "spread": d["spread"], "comments": u["comments"],
-                    "trending_rank": u["trending_rank"]}
+                    "trending_rank": u["trending_rank"], "citations": u["citations"]}
     return out
 
 
@@ -253,7 +325,7 @@ def rank_papers(store, settings, at, story_ids, dists=None):
 
 def order_papers(ctx, gs):
     t = ctx.t["papers"]
-    by_id = {g.id: g for g in gs if g.alive}
+    by_id = {g.id: g for g in gs if g.alive and "lookback" not in g.info}
     ranked, failed = rank_papers(ctx.store, ctx.settings, ctx.at, list(by_id), ctx.dists)
     for sid, v in failed.items():
         by_id[sid].info["signals"] = v
@@ -272,6 +344,24 @@ def order_papers(ctx, gs):
         g.rank = n
         if n > t["cap"]:
             g.drop("cap", f"paper #{n}, over the cap of {t['cap']}")
+    order_late_papers(ctx, [g for g in gs if g.alive and "lookback" in g.info], n)
+
+
+def order_late_papers(ctx, gs, after):
+    """Late papers skip the use bar (their trigger is the evidence) and rank by fusion among
+    themselves, over the fresh signals plus citations, ranks continuing after the fresh papers' `after`;
+    over papers.lookback.cap they drop at "cap"."""
+    if not gs:
+        return
+    t = ctx.t["papers"]
+    vals = paper_values(ctx.store, ctx.settings, ctx.at, [g.id for g in gs], ctx.dists)
+    score = fusion(vals, [*t["signals"], "citations"], t["k"])
+    cap = t["lookback"]["cap"]
+    for i, g in enumerate(sorted(gs, key=lambda g: (-score[g.id], -vals[g.id]["upvotes"], g.id)), 1):
+        g.info.update({"fusion": round(score[g.id], 6), "signals": vals[g.id]})
+        g.rank = after + i
+        if i > cap:
+            g.drop("cap", f"late paper #{i}, over the cap of {cap}")
 
 
 def order_releases(ctx, gs):

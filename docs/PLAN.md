@@ -518,3 +518,17 @@ Calibration with the revised prompt (it now describes LessWrong posts): 118 and 
 Regression: rules-only triage on a frozen copy of the state for 10-22, 10-23 and 10-24 is byte-identical to the code before M5, and so is the scoring call's user message.
 
 The pruning decision on the AWS ML and NVIDIA developer blogs: on the two scored days, aws-ml-blog gave 21 candidates and 0 kept, nvidia-dev-blog 7 and 0 (NVIDIA's main blog: 1 of 7). Alex dropped both (`enabled: false`, with the numbers in their notes). M5 is done.
+
+## Revision 5: late papers (2026-11-02)
+
+Prompted by a miss: NVIDIA's "Small Language Models are the Future of Agentic AI" (arXiv 2506.02153), a position paper, couldn't reach a brief. At release it had no artifacts, no repo, 26 upvotes and a 5-point HN post, so it failed the use bar; its 113-point HN thread a month later attached to the old paper story by URL, past every window, and no triage stage saw it. Signals also froze: `hf-paper-detail` read only the 3-day pool, and no citation source was built.
+
+Decided with Alex:
+- **A late-paper lane in the papers section,** daily, mixed in (CRITERIA.md "Late papers"): triggers `use`, `citations`, `trending`, `discussion`, each a crossing since the previous triage run with a baseline, capped at 10, flagged `late` for the model and the skill. Fresh papers are unchanged: pool, use bar, fusion and cap, and so is collect's HF comment ranking.
+- **Citations: yes.** This reverses Revision 4's drop of Semantic Scholar for this one use (citations take weeks, and late papers are weeks old). The `semantic_scholar` adapter reads each paper past the pool once a week, in batches of 500; it needs Alex's free key and fetches nothing without it.
+- **HF signals keep updating:** HF-listed papers up to 56 days old are read again weekly, at most 400 a run: about 300–350 lookups a day, which adds about 5 minutes to the 03:00 collect.
+- **Newsletters stay out** of every trigger and score: they're M6's independent check.
+- **`relevance.md`** names position and vision papers as relevant. On 2026-10-24 the model dropped the week's top LessWrong post as "argument without new evidence", and a position paper is an argument too.
+- **Not built:** treating a dropped paper's threads as unattached discussion. For older papers the `discussion` trigger does more (it brings back the paper with its abstract and signals); for fresh ones it would get around "discussion doesn't count toward the use bar".
+
+Checks: 198 tests. Rules-only triage for 2026-10-26 to 11-02 on a frozen copy, old code against new: every existing log line identical; 8 late papers added (5 trending, 3 discussion). Calibration with the new prompt and relevance text: 119 and 119 of 120 (both fresh calls). A scored run for 11-02 on the copy kept both late papers at 4: "Agentic Backdoors via Pretraining Poisoning" (dropped at the use bar on all three of its pool days, its HN threads swallowed) and a paper reported on 10-31, back as an update with a 158-point thread.

@@ -25,6 +25,9 @@ it is dropped and nothing downstream spends a token on it. If it does, a score s
   - a finding about model behavior (robot policies replaying memorized trajectories)
   - a benchmark or environment for a new kind of system (WildAWM for computer-use agents,
     DecisionPivot for decision models)
+  - a position or vision paper from a credible lab or group arguing where the field is heading
+    (NVIDIA's "Small Language Models are the Future of Agentic AI"), especially once others are
+    discussing or citing it. An argument like this is the point, not a lack of evidence
 - **Policy, government and international news.** Regulation and bans, export and industrial
   policy, partnerships between labs and governments, a lab's usage policies, national compute
   programs, and privacy changes in major AI products. For example: Swedish government offices

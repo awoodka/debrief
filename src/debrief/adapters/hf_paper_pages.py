@@ -3,7 +3,10 @@ hf_papers.lookback_days days).
 
 hf_paper_api (enrich): /api/papers/<id> for each paper in the pool, every daily run. It records
 signals only: upvotes, the official repo's stars, and how many models, datasets and Spaces on the
-Hub link the paper. These feed the use bar and the ranking (CRITERIA.md).
+Hub link the paper. These feed the use bar and the ranking (CRITERIA.md). Past the pool, HF-listed
+papers up to triage's papers.lookback.days old are read again once every
+hf_papers.refresh_every_days (stale_papers), so a paper that finds its use later can come back as a
+late paper.
 
 hf_trending_papers (enrich): the Daily Papers API sorted by trending, one request for the top
 hf_trending_papers.limit. A signal, not a source of stories (Alex, 2026-10-24): on 2026-10-24 its
@@ -19,6 +22,7 @@ become mentions attached to the paper; reactions count as likes.
 """
 import json
 import re
+from datetime import date, timedelta
 from html import unescape
 
 from .. import sanitize, times
@@ -36,6 +40,28 @@ def paper_pool(store, run_date, days):
     return [r[0] for r in rows]
 
 
+def stale_papers(store, run_date, min_days, max_days, source_id, every_days, limit, listed_by=None):
+    """Story ids of papers past the min_days-day pool that ends on run_date and inside the max_days
+    days that end on it (by first_seen date), whose last signal from source_id is at least
+    every_days old, or missing: the longest-unread first, then by story id, at most `limit`. With
+    listed_by, only papers that source listed. For lookups that follow older papers (late papers,
+    triage.yml papers.lookback)."""
+    listed = "AND s.sources LIKE ?" if listed_by else ""
+    rows = store.q(f"""SELECT s.story_id, (SELECT MAX(observed_at) FROM story_signals g
+                                           WHERE g.story_id = s.story_id AND g.source_id = ?) AS last
+                       FROM stories s WHERE s.section = 'papers' AND s.first_seen < date(?, ?)
+                       AND s.first_seen >= date(?, ?) {listed}""",
+                   (source_id, run_date, f"-{min_days - 1} days", run_date, f"-{max_days - 1} days",
+                    *([f'%"{listed_by}"%'] if listed_by else [])))
+    due = date_add(run_date, -every_days)
+    stale = [(last or "", sid) for sid, last in rows if not last or last[:10] <= due]
+    return [sid for _, sid in sorted(stale)[:limit]]
+
+
+def date_add(day, days):
+    return (date.fromisoformat(day) + timedelta(days=days)).isoformat()
+
+
 class HfPaperApi(Adapter):
     name = "hf_paper_api"
     phase = "enrich"
@@ -43,7 +69,12 @@ class HfPaperApi(Adapter):
 
     def fetch(self, ctx, source):
         base = source.options.get("api_base", "https://huggingface.co/api/papers")
-        for sid in paper_pool(ctx.store, ctx.run_date, ctx.opts["hf_papers"]["lookback_days"]):
+        o = ctx.opts["hf_papers"]
+        pool = paper_pool(ctx.store, ctx.run_date, o["lookback_days"])
+        days = ctx.settings["triage"]["papers"]["lookback"]["days"]
+        late = stale_papers(ctx.store, ctx.run_date, o["lookback_days"], days, source.id, o["refresh_every_days"],
+                            o["refresh_max"], listed_by="hf-daily-papers")
+        for sid in pool + late:
             ctx.get(source, f"{base}/{sid.split(':', 1)[1]}", each=sid, conditional=False)
 
     def parse(self, record, source, opts):

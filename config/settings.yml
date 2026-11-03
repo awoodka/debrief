@@ -71,6 +71,14 @@ collect:
     limit: 100                  # the API defaults to 50 a day; 64 were listed on 2026-10-21
   hf_papers:
     lookback_days: 3            # the paper pool: papers HF listed, first seen this many days back (CRITERIA.md)
+    # Late papers (triage.yml papers.lookback): HF-listed papers past the pool, up to lookback.days old,
+    # are read again once every refresh_every_days, the longest-unread first, at most refresh_max a run.
+    refresh_every_days: 7
+    refresh_max: 400
+  semantic_scholar:             # adapters/semantic_scholar.py: citation counts for late papers
+    every_days: 7               # each paper past the pool, up to lookback.days old, once this often
+    batch: 500                  # ids per request (the API's maximum)
+    max_ids: 5000               # per run, the longest-unread first
   article_pages:                # adapters/article_pages.py
     sections: [announcements, press_policy, releases]
     days: 2                     # stories first seen this recently (the candidate windows are 48 h)
@@ -86,7 +94,7 @@ collect:
     refresh_days: 3             # re-read points and comments of attached threads posted this recently
   hn_comments:
     thread_source: hn
-    days: 3                     # threads posted this recently
+    days: 3                     # threads on stories first seen this recently, or posted this recently (late papers)
     min_comments: 5
     max_threads: 80             # per run: attached threads, plus (daily) the top unattached ones (triage.yml discussion.sources.hn.prefetch)
     regrow: 1.5                 # re-read a tree once its comment count has grown this many times
@@ -113,7 +121,7 @@ collect:
     roundup_title: '#\d+\b'     # a numbered roundup ("AI #191", "Against Moloch #48"): none of its links attach it
   lesswrong_comments:
     thread_sources: [lesswrong, alignment-forum]
-    days: 3                     # posts on stories first seen this recently, plus (daily) the candidates (triage.yml discussion.sources)
+    days: 3                     # posts on stories first seen this recently, or posted this recently, plus (daily) the candidates (triage.yml discussion.sources)
     min_comments: 3
     max_posts: 30               # per run, at 3.5 s each
     regrow: 1.5                 # re-read a post's comments once its count has grown this many times

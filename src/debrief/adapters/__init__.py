@@ -11,12 +11,14 @@ from .lesswrong import LessWrong, LessWrongComments
 from .listing_page import ListingPage
 from .model_sources import GithubOrg, Leaderboard, OpenRouter
 from .rss import Rss
+from .semantic_scholar import SemanticScholar
 
 REGISTRY = {a.name: a for a in (
     Rss(), ListingPage(), HfDailyPapers(), ArxivRss(), GithubReleases(),          # M1
     Hn(), HnComments(), HfPaperApi(), HfPaperPage(),                                # M2: discussion, paper signals
     HfOrgWatch(), HfTrending(), OpenRouter(), GithubOrg(), Leaderboard(),           # M2: model releases
     ArticlePages(), ThreadPages(),                                                  # M3, M4: pages
-    LessWrong(), LessWrongComments(), HfTrendingPapers())}                          # M5
+    LessWrong(), LessWrongComments(), HfTrendingPapers(),                           # M5
+    SemanticScholar())}                                                             # late papers
 
 __all__ = ["REGISTRY", "Adapter", "FetchContext", "Item"]

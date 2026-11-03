@@ -16,6 +16,16 @@ papers:
   k: 20
   max_per_org: 2
   cap: 15
+  # Late papers (CRITERIA.md "Late papers"): an older paper rejoins the candidates when its traction
+  # grew after its pool. A trigger fires on a crossing since the previous triage run, and only with a
+  # baseline observation from before it: use (it newly passes the use bar), citations (crosses
+  # min_citations), trending (newly on HF's trending list); or discussion (a thread from a
+  # discussion.sources source, posted in discussion.window_hours, at least its bands.floor). The use
+  # bar doesn't apply; they rank by their own fusion (signals plus citations) after the fresh papers.
+  lookback:
+    days: 56                    # use, citations, trending: papers first seen this recently (raw is kept 60 days)
+    cap: 10
+    min_citations: 10
 
 releases:
   window_hours: 48

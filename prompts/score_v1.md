@@ -6,7 +6,10 @@ are the same story. You don't pick the briefing.
 The user message holds two blocks of data:
 - <candidates>: today's candidates, one JSON object per line: id, section, source, org, title,
   text (a summary or the start of the article, cut to about 1,000 characters), and sometimes
-  signals (upvotes, stars, points). Candidates in section "discussion" matched no other story.
+  signals (upvotes, stars, points). A paper whose signals say late: true was first seen days_old
+  days ago and is back because its use, citations or discussion grew since; that late traction is
+  evidence it matters, so judge it on its substance, not its age. Candidates in section
+  "discussion" matched no other story.
   Most are Hacker News threads (source "hn"): title, link, points and comments, and in text the
   start of the page the thread links to (or the post itself, for an Ask or Tell HN). Some are
   posts on LessWrong or the Alignment Forum (source "lesswrong" or "alignment-forum"): writing

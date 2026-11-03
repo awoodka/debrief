@@ -364,15 +364,14 @@
   notes: '2026-10-23: not worth adding: its overview duplicates the abstract and HF''s AI summary, and its comments have no documented endpoint. Before: verify; 404 means no overview yet. Comments are not probed (no documented endpoint)'
 
 - id: semantic-scholar
-  enabled: false
-  name: Semantic Scholar API
+  name: Semantic Scholar API (citation counts)
   adapter: semantic_scholar
   roles: [context]
   tier: 2
-  url: https://api.semanticscholar.org/graph/v1/paper/ARXIV:1706.03762?fields=title,citationCount,influentialCitationCount
+  url: https://api.semanticscholar.org/graph/v1/paper/ARXIV:1706.03762?fields=title,citationCount
   probe: {kind: json, single: true, title: title}
   auth: {env: SEMANTIC_SCHOLAR_API_KEY, header: x-api-key, format: '{}'}
-  notes: 'dropped from the plan 2026-10-23 (Alex): lookups are out of scope (papers are in the pool for 3 days; citations take weeks). Before: keyless shared pool answered 429; needs a free API key (SEMANTIC_SCHOLAR_API_KEY)'
+  notes: 'citations for late papers (Alex, 2026-11-02; reverses the 2026-10-23 drop): each paper past the pool, up to papers.lookback.days old, weekly, by POST /graph/v1/paper/batch. Without SEMANTIC_SCHOLAR_API_KEY it fetches nothing (the keyless shared pool answers 429). The probe uses one sample paper'
 
 - id: openalex
   enabled: false

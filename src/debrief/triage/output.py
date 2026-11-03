@@ -236,9 +236,13 @@ def _artifact_signals(ctx, ids):
 def _compact_signals(g):
     if g.section == "papers":
         v = g.info.get("signals") or {}
-        out = {k: _num(v[k]) for k in ("upvotes", "stars", "adoption", "hn_points", "trending_rank") if v.get(k)}
+        out = {k: _num(v[k]) for k in ("upvotes", "stars", "adoption", "hn_points", "trending_rank", "citations")
+               if v.get(k)}
         if "fusion" in g.info:
             out["fusion"] = g.info["fusion"]
+        if "lookback" in g.info:              # a late paper (candidates.lookback): back because it caught on
+            out["late"] = True
+            out["days_old"] = g.info["days_old"]
         return out
     if g.section == "releases":
         return {"likes": _num(g.info.get("likes", 0))}

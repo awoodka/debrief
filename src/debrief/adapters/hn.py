@@ -109,13 +109,16 @@ class HnComments(Adapter):
         o = {**ctx.opts["hn_comments"], **source.options}
         threads_from = o["thread_source"]
         # Threads on stories first seen recently, whenever the thread started: DeepSeek V4.1 Flash's
-        # 959-point thread was five days old by the time the model became a story here.
+        # 959-point thread was five days old by the time the model became a story here. And threads
+        # started recently, whatever their story's age: a new thread can bring back a late paper.
+        since = f"-{o['days'] - 1} days"
         rows = ctx.store.q("""SELECT m.item_key,
                                 (SELECT comments FROM engagement e WHERE e.mention_id = m.mention_id
                                  ORDER BY observed_at DESC LIMIT 1) AS n
                               FROM mentions m JOIN stories st ON st.story_id = m.story_id
-                              WHERE m.source_id=? AND m.kind='thread' AND st.first_seen >= date(?, ?)""",
-                           (threads_from, ctx.run_date, f"-{o['days'] - 1} days"))
+                              WHERE m.source_id=? AND m.kind='thread'
+                              AND (st.first_seen >= date(?, ?) OR m.posted_at >= date(?, ?))""",
+                           (threads_from, ctx.run_date, since, ctx.run_date, since))
         done = dict(ctx.store.cursor(source.id).get("fetched", {}))
         quota = ctx.settings["triage"]["discussion"]["sources"].get(threads_from)
         if ctx.cadence == "daily" and quota:

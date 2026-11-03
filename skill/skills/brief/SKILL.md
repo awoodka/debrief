@@ -22,6 +22,8 @@ relevant, grouped duplicates and attached the discussion. Your job is judgment a
    - `score`: 5 reshapes the field, 4 clearly moves it, 3 is worth knowing
    - `why`: triage's one-line reason
    - `discussion`: how much, where, and whether it's rising
+   - `signals.late: true` marks an older paper catching on, first seen `signals.days_old` days
+     ago and back because its use, citations or discussion grew. Present it that way, not as new.
 3. Read the detail file (each line's `detail` path) of every story you might write about. Most
    days that's all of them. A detail file has:
    - the full text
