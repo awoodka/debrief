@@ -359,3 +359,57 @@ This replaces "General search" and "Polling" above:
   The M0 universe numbers stay as the record of why.
 - **New in M1:** the board directory (a lookup table, refreshed weekly from the two lists with
   conditional requests), and `debrief jobs watch add|remove|list`.
+
+---
+
+## Revision 2 (Alex, 2026-11-04): the pipeline's shape, and the profile's fields
+
+Alex: "gather everything that fits → filter based on properties in JSON profile → then anything
+that is not filtered out and deemed good enough to pass a threshold (to limit tokens wasted) will be
+passed into a single skill call that will then create the relevance score (also on profile) and
+output the top N (not decided yet) ordered."
+
+This replaces "Filters", "Scoring" and "The daily list" above, and the batch cap in "Usage
+budget":
+1. **Gather (code):** every source becomes postings, with duplicates merged.
+2. **Filter (code, from the profile):**
+   - position types, by title patterns;
+   - level and `max_years`;
+   - location;
+   - posting age;
+   - work authorization or sponsorship;
+   - degree;
+   - clearance;
+   - the blocklist.
+3. **Pre-score and threshold (code, from the profile):**
+   - **Points:** title-match strength against the position types; profile skills, coursework and
+     interests found in the posting text; a company of interest; entry-level wording; freshness.
+   - **Cut-off:** below `ranking.threshold`, a job is logged with its points and not sent.
+   - **Cap:** above it, the highest points go first, up to `ranking.max_candidates`.
+   - **Companies of interest** skip the threshold (still after the filters).
+   - **Posting text:** fetched only for jobs that pass the filters, and only through allowed routes
+     (job-board APIs). Otherwise the points come from the title.
+4. **The scoring call (AI, one call a night, in the form of Debrief's triage call):**
+   - **Sees:** the profile (degree, coursework, skills, position types, projects, interests,
+     companies, wants) plus each candidate (title, company, location, pay, posted, qualifications
+     excerpt).
+   - **Returns per job:** a relevance score (1–10 with a rubric), keep (yes/no), a one-line why,
+     and clear mismatches.
+   - **It makes the final decision.**
+   - The answer is cached per job and profile version.
+5. **Output (code):** the kept jobs ordered by the model's score (ties: pre-score, then newest),
+   top `ranking.top_n`. Every cut is logged with its stage and reason: filtered, below threshold,
+   over the cap, not kept, beyond N.
+
+**Profile v1 fields:**
+- **About Alex:** `degree` {level, field, school, graduation}, `coursework`, `skills`,
+  `position_types` [{name, titles}], `projects` [{name, summary, skills}] (untailored), `interests`,
+  `companies` [{name, board}] (the watchlist), `wants`.
+- **`filters`:** locations, max_years, max_age_days, work_authorization, clearance,
+  exclude_titles, blocklist.
+  - exclude_titles are checked against what is left of a job title after its matched
+    position-type title is taken out. So "Member of Technical Staff" (an entry-level title at AI
+    labs) isn't dropped by "staff", but "Staff Software Engineer" and "Senior Member of Technical
+    Staff" are.
+- **`ranking`:** threshold, max_candidates, top_n. The values are placeholders until M2; Alex
+  hasn't decided N.

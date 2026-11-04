@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/awoodka/debrief/schemas/jobs_profile.schema.json",
+  "title": "jobs profile",
+  "description": "What the jobs pipeline filters, pre-scores and scores against (docs/jobs/PLAN.md, Revision 2). Every saved version is kept on the server in <data>/jobs/profile/, never in the repo. Unknown keys are refused, so a typo can't silently do nothing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["degree", "coursework", "skills", "position_types", "projects", "interests", "companies", "wants",
+               "filters", "ranking"],
+  "properties": {
+    "degree": {
+      "type": "object", "additionalProperties": false, "required": ["level", "field", "school", "graduation"],
+      "properties": {
+        "level": {"enum": ["High school", "Associate", "BS", "BA", "MS", "MEng", "MBA", "PhD", "Other"]},
+        "field": {"type": "string", "minLength": 1},
+        "school": {"type": "string"},
+        "graduation": {"type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$", "description": "YYYY-MM"}
+      }
+    },
+    "coursework": {"$ref": "#/$defs/words"},
+    "skills": {"$ref": "#/$defs/words"},
+    "position_types": {
+      "type": "array", "minItems": 1,
+      "description": "What to look for. A job passes the title filter when its title contains one of a type's titles (whole words, any case).",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name", "titles"],
+        "properties": {"name": {"type": "string", "minLength": 1}, "titles": {"$ref": "#/$defs/words", "minItems": 1}}
+      }
+    },
+    "projects": {
+      "type": "array",
+      "description": "Written once and untailored: the scorer judges fit from these, never from a resume.",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name", "summary", "skills"],
+        "properties": {"name": {"type": "string", "minLength": 1}, "summary": {"type": "string", "minLength": 1},
+                       "skills": {"$ref": "#/$defs/words"}}
+      }
+    },
+    "interests": {"$ref": "#/$defs/words"},
+    "companies": {
+      "type": "array",
+      "description": "Companies of interest: the watchlist. Their boards are read every night, and their jobs skip the pre-score threshold (not the filters).",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "board": {"type": ["string", "null"], "pattern": "^(greenhouse|lever|ashby|workable|smartrecruiters|recruitee|workday):[^\\s]+$",
+                    "description": "system:id; null until found (directory lookup or a pasted careers URL)"},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "wants": {"type": "string", "minLength": 1, "description": "In Alex's words: what to look for and what not. The scorer's definition of relevant."},
+    "filters": {
+      "type": "object", "additionalProperties": false,
+      "required": ["locations", "max_years", "max_age_days", "work_authorization", "clearance", "exclude_titles", "blocklist"],
+      "properties": {
+        "locations": {
+          "type": "object", "additionalProperties": false, "required": ["remote_us", "places"],
+          "properties": {
+            "remote_us": {"type": "boolean"},
+            "places": {"type": "object", "minProperties": 0, "additionalProperties": {"$ref": "#/$defs/words", "minItems": 1},
+                       "description": "{area name: [place names a job's location may contain]}"}
+          }
+        },
+        "max_years": {"type": "integer", "minimum": 0, "maximum": 30,
+                      "description": "drop jobs that require more than this many years of experience"},
+        "max_age_days": {"type": "integer", "minimum": 1, "maximum": 90},
+        "work_authorization": {"enum": ["us_citizen", "permanent_resident", "authorized_no_sponsorship", "needs_sponsorship"]},
+        "clearance": {
+          "type": "object", "additionalProperties": false, "required": ["has", "eligible"],
+          "properties": {"has": {"enum": ["none", "public_trust", "secret", "top_secret", "ts_sci"]},
+                         "eligible": {"type": "boolean", "description": "could obtain one (keeps 'ability to obtain' jobs)"}}
+        },
+        "exclude_titles": {"$ref": "#/$defs/words", "description": "whole words or phrases; any match drops the job. Checked against what is left of the title after its matched position-type title is taken out, so 'member of technical staff' isn't dropped by 'staff', but 'staff software engineer' and 'senior member of technical staff' are."},
+        "blocklist": {"$ref": "#/$defs/words", "description": "company names never shown"}
+      }
+    },
+    "ranking": {
+      "type": "object", "additionalProperties": false, "required": ["threshold", "max_candidates", "top_n"],
+      "properties": {
+        "threshold": {"type": "integer", "minimum": 0, "maximum": 100, "description": "pre-score points needed to reach the scoring call"},
+        "max_candidates": {"type": "integer", "minimum": 1, "maximum": 500, "description": "most jobs sent to the scoring call in a night"},
+        "top_n": {"type": "integer", "minimum": 1, "maximum": 500, "description": "jobs shown on the day's list"}
+      }
+    }
+  },
+  "$defs": {
+    "words": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
+  }
+}
