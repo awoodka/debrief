@@ -1,0 +1,41 @@
+# Jobs settings (docs/jobs/README.md). Sources live in config/jobs/sources.yml; secrets live in .env.
+#
+# {contact} is DEBRIEF_CONTACT, or contact_default when that's unset. USAJobs requires an email
+# address as the User-Agent, so DEBRIEF_CONTACT must be one.
+user_agent: "debrief-jobs/0.1 (personal job search; {contact})"
+contact_default: "+https://github.com/awoodka/debrief"
+
+http:
+  timeout_s: 30
+  max_retries: 2
+  backoff_s: 5
+  max_retry_after_s: 120
+  default_interval_s: 2.0
+  # One request at a time; requests to a bucket (a host and its subdomains) at least interval_s apart.
+  # The job-board APIs below serve every company's careers page, so 2 requests a second is a small load.
+  buckets:
+    greenhouse: {hosts: [boards-api.greenhouse.io], interval_s: 0.5}
+    lever: {hosts: [api.lever.co], interval_s: 0.5}
+    ashby: {hosts: [api.ashbyhq.com], interval_s: 0.5}
+    workable: {hosts: [apply.workable.com], interval_s: 1.0}
+    smartrecruiters: {hosts: [api.smartrecruiters.com], interval_s: 0.5}
+    recruitee: {hosts: [recruitee.com], interval_s: 0.5}          # every tenant shares this budget
+    workday: {hosts: [myworkdayjobs.com], interval_s: 0.5}        # every tenant shares this budget
+    github-raw: {hosts: [raw.githubusercontent.com], interval_s: 1.0}
+    hn-algolia: {hosts: [hn.algolia.com], interval_s: 1.0}
+    hn-firebase: {hosts: [hacker-news.firebaseio.com], interval_s: 0.2}
+    remotive: {hosts: [remotive.com], interval_s: 31}             # Remotive blocks more than 2 a minute
+    jobicy: {hosts: [jobicy.com], interval_s: 5}
+
+probe:
+  # The board-universe timing test: this many boards per job-board system, picked at random (fixed
+  # seed, so a rerun samples the same boards), each listed once.
+  universe_sample: 50
+  seed: 20261104
+  # Boards (per system) that get a second, conditional request, to see if a 304 really comes back.
+  conditional_check: 5
+  # A rough title filter, ONLY for the probe's estimate of how many new jobs a night would reach the
+  # scoring call. The real filters come from the profile (M2).
+  rough_title:
+    include: '(software|machine learning|\bml\b|\bai\b|research|data|product|founding|backend|full[- ]?stack|infrastructure|platform)'
+    exclude: '(senior|\bsr\b|staff|principal|lead|manager|director|head of|vp|intern\b|internship)'

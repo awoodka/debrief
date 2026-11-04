@@ -1,0 +1,371 @@
+# Jobs sources. One entry per source; `debrief jobs probe-sources` checks each one live and writes
+# docs/jobs/SOURCES.md. Field reference:
+#
+#   id, name    stable id and display name
+#   family      list | board | bigtech | api | discussion | email | check | universe
+#                 list      community-kept job lists (GitHub)
+#                 board     one company's job board on a job-board system (an example of that system;
+#                           the universe test covers the rest)
+#                 bigtech   a big company's own careers API
+#                 api       a job API (aggregator or job board with an official API)
+#                 discussion  Hacker News hiring threads and job posts
+#                 email     the alert inbox (LinkedIn, Indeed, ... alert emails)
+#                 check     the miss-check sample (never a source of jobs)
+#                 universe  a list of companies' job boards, to seed the boards we poll
+#   url, each   the endpoint; {each} expands over `each`
+#   method      GET (default) or POST, with `body` as JSON
+#   candidates  alternative urls, tried in order until one works
+#   probe       how the probe parses it: kind json | feed | md_table | csv | text | imap
+#                 items/title/date/count: dotted paths (json); `fields`: {name: dotted path} whose fill
+#                 rate across items the probe reports
+#   auth        {headers: {Header: ENV_VAR}, params: {param: ENV_VAR}}: sent when every var is set,
+#               else the source is "needs_key" and nothing is requested
+#   terms       what the source's terms ask of us (attribution, rate)
+#   enabled     false = listed with its reason, never requested
+
+# ------------------------------------------------------------------ community lists (GitHub, JSON)
+- id: simplify-newgrad
+  name: SimplifyJobs New-Grad-Positions
+  family: list
+  url: https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json
+  probe:
+    kind: json
+    items: ""
+    title: title
+    date: date_posted
+    fields: {company: company_name, locations: locations, url: url, active: active, date_posted: date_posted,
+             date_updated: date_updated, sponsorship: sponsorship, category: category, degrees: degrees}
+  notes: updated about every 30 min; no LICENSE file in the repo
+
+- id: vanshb03-newgrad
+  name: vanshb03 New-Grad-2027
+  family: list
+  url: https://raw.githubusercontent.com/vanshb03/New-Grad-2027/dev/.github/scripts/listings.json
+  probe:
+    kind: json
+    items: ""
+    title: title
+    date: date_posted
+    fields: {company: company_name, locations: locations, url: url, active: active, date_posted: date_posted}
+  notes: urls are go.vansh.nyc short links
+
+- id: speedyapply-ai
+  name: speedyapply 2027-AI-College-Jobs (US new grad)
+  family: list
+  url: https://raw.githubusercontent.com/speedyapply/2027-AI-College-Jobs/main/NEW_GRAD_USA.md
+  probe: {kind: md_table}
+  notes: markdown only (no JSON)
+
+- id: speedyapply-swe
+  name: speedyapply 2027-SWE-College-Jobs (US new grad)
+  family: list
+  url: https://raw.githubusercontent.com/speedyapply/2027-SWE-College-Jobs/main/NEW_GRAD_USA.md
+  probe: {kind: md_table}
+  notes: markdown only (no JSON)
+
+- id: jobright-newgrad
+  name: jobright-ai 2026 new-grad lists
+  family: list
+  url: https://raw.githubusercontent.com/jobright-ai/{each}/master/README.md
+  each: [2026-Software-Engineer-New-Grad, 2026-Data-Analysis-New-Grad, 2026-Product-Management-New-Grad]
+  probe: {kind: md_table}
+  notes: markdown only; README commits hourly; no 2027 repos yet
+
+# ---------------------------------------------------- job-board systems: one example board each
+# The universe test (below) samples many boards per system; these show each system's full shape.
+- id: board-greenhouse
+  name: Greenhouse (Anthropic's board)
+  family: board
+  url: https://boards-api.greenhouse.io/v1/boards/anthropic/jobs
+  probe:
+    kind: json
+    items: jobs
+    title: title
+    date: first_published
+    count: meta.total
+    fields: {location: location.name, updated_at: updated_at, first_published: first_published, url: absolute_url}
+
+- id: board-lever
+  name: Lever (Palantir's board)
+  family: board
+  url: https://api.lever.co/v0/postings/palantir?mode=json
+  probe:
+    kind: json
+    items: ""
+    title: text
+    date: createdAt
+    fields: {location: categories.location, created: createdAt, workplace: workplaceType, pay: salaryRange,
+             commitment: categories.commitment, url: hostedUrl}
+
+- id: board-ashby
+  name: Ashby (OpenAI's board)
+  family: board
+  url: https://api.ashbyhq.com/posting-api/job-board/openai?includeCompensation=true
+  probe:
+    kind: json
+    items: jobs
+    title: title
+    date: publishedAt
+    fields: {location: location, remote: isRemote, workplace: workplaceType, pay: compensation.compensationTierSummary,
+             published: publishedAt, url: jobUrl}
+
+- id: board-workable
+  name: Workable (Hugging Face's board)
+  family: board
+  url: https://apply.workable.com/api/v1/widget/accounts/huggingface
+  probe:
+    kind: json
+    items: jobs
+    title: title
+    date: published_on
+    fields: {country: country, city: city, remote: telecommuting, published: published_on, url: url}
+
+- id: board-smartrecruiters
+  name: SmartRecruiters (Visa's board)
+  family: board
+  enabled: false
+  url: https://api.smartrecruiters.com/v1/companies/Visa/postings?limit=100
+  probe:
+    kind: json
+    items: content
+    title: name
+    date: releasedDate
+    count: totalFound
+    fields: {country: location.country, city: location.city, remote: location.remote, released: releasedDate}
+  notes: "OFF: api.smartrecruiters.com robots.txt allows /v1/companies/ only to LinkedInBot (User-agent: * Disallow: /),
+    checked 2026-11-04. SmartRecruiters jobs reach us through the community lists and LinkedIn alerts."
+
+- id: board-recruitee
+  name: Recruitee (Hatchtech's board)
+  family: board
+  url: https://hatchtech.recruitee.com/api/offers/
+  probe:
+    kind: json
+    items: offers
+    title: title
+    date: published_at
+    fields: {country: country, city: city, remote: remote, published: published_at, pay: salary.min, url: careers_url}
+
+- id: board-workday
+  name: Workday (NVIDIA's board)
+  family: board
+  method: POST
+  url: https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia/NVIDIAExternalCareerSite/jobs
+  body: {appliedFacets: {}, limit: 20, offset: 0, searchText: ""}
+  probe:
+    kind: json
+    items: jobPostings
+    title: title
+    date: postedOn
+    count: total
+    fields: {location: locationsText, posted: postedOn, path: externalPath}
+  notes: list dates are relative ("Posted Today"); the job's own page has the ISO startDate
+
+# ----------------------------------------------------------------- big companies' own careers APIs
+- id: amazon
+  name: Amazon (amazon.jobs)
+  family: bigtech
+  enabled: false
+  url: https://www.amazon.jobs/en/search.json?result_limit=100&offset=0&sort=recent&country=USA
+  probe:
+    kind: json
+    items: jobs
+    title: title
+    date: posted_date
+    count: hits
+    fields: {location: location, city: city, posted: posted_date, path: job_path}
+  notes: "OFF (Alex, 2026-11-04): robots.txt allows it, but amazon.jobs links to Amazon's Conditions of Use, which
+    forbid robots and data-gathering tools. Amazon's roles come through the community lists and LinkedIn alerts."
+
+- id: microsoft
+  name: Microsoft (careers pcsx API)
+  family: bigtech
+  url: https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&query=&location=United%20States&start=0
+  probe: {kind: json}
+  notes: robots.txt explicitly allows /api/pcsx
+
+- id: apple
+  name: Apple (jobs.apple.com search API)
+  family: bigtech
+  enabled: false
+  method: POST
+  url: https://jobs.apple.com/api/v1/search
+  body: {query: "", filters: {locations: [postLocation-USA]}, page: 1, locale: en-us, sort: newest}
+  probe: {kind: json}
+  notes: "OFF: undocumented, and with the site's filters it returned no results (2026-11-04). Apple's new-grad roles
+    come through the community lists (57 active on Simplify) and LinkedIn alerts."
+
+- id: google-careers
+  name: Google Careers
+  family: bigtech
+  enabled: false
+  notes: no API; results pages are disallowed by robots.txt. Covered by LinkedIn alerts and the miss-check.
+
+- id: meta-careers
+  name: Meta Careers
+  family: bigtech
+  enabled: false
+  notes: robots.txt asks for express written permission for automated collection. Covered by LinkedIn alerts.
+
+# --------------------------------------------------------------------------------------- job APIs
+- id: adzuna
+  name: Adzuna (US)
+  family: api
+  url: https://api.adzuna.com/v1/api/jobs/us/search/1?results_per_page=50&what=software%20engineer&max_days_old=1&content-type=application/json
+  auth: {params: {app_id: ADZUNA_APP_ID, app_key: ADZUNA_APP_KEY}}
+  probe:
+    kind: json
+    items: results
+    title: title
+    date: created
+    count: count
+    fields: {company: company.display_name, location: location.display_name, pay_min: salary_min, created: created,
+             url: redirect_url}
+  terms: personal job search is a permitted use; attribution ("Jobs by Adzuna") required
+
+- id: usajobs
+  name: USAJobs (federal)
+  family: api
+  url: https://data.usajobs.gov/api/search?Keyword=software&DatePosted=1&ResultsPerPage=100
+  auth: {headers: {Authorization-Key: USAJOBS_API_KEY}}
+  probe:
+    kind: json
+    items: SearchResult.SearchResultItems
+    title: MatchedObjectDescriptor.PositionTitle
+    date: MatchedObjectDescriptor.PublicationStartDate
+    count: SearchResult.SearchResultCountAll
+    fields: {org: MatchedObjectDescriptor.OrganizationName, location: MatchedObjectDescriptor.PositionLocationDisplay,
+             pay: MatchedObjectDescriptor.PositionRemuneration, url: MatchedObjectDescriptor.PositionURI}
+  terms: User-Agent must be the email the key was registered with (DEBRIEF_CONTACT)
+
+- id: themuse
+  name: The Muse
+  family: api
+  url: https://www.themuse.com/api/public/jobs?page=0&level=Entry%20Level&category=Software%20Engineering
+  probe:
+    kind: json
+    items: results
+    title: name
+    date: publication_date
+    count: total
+    fields: {company: company.name, locations: locations, levels: levels, published: publication_date}
+  terms: 500 requests an hour without a key
+
+- id: himalayas
+  name: Himalayas (remote)
+  family: api
+  url: https://himalayas.app/jobs/api?limit=20&offset=0
+  probe:
+    kind: json
+    items: jobs
+    title: title
+    date: pubDate
+    fields: {company: companyName, location: locationRestrictions, pay_min: minSalary, published: pubDate,
+             url: applicationLink}
+  terms: attribution and link back; apply through applicationLink
+
+- id: remoteok
+  name: RemoteOK
+  family: api
+  url: https://remoteok.com/api
+  probe:
+    kind: json
+    items: ""
+    title: position
+    date: date
+    fields: {company: company, location: location, pay_min: salary_min, date: date, url: url}
+  terms: link back to RemoteOK and mention it as the source; the first item is a legal notice
+
+- id: weworkremotely
+  name: We Work Remotely (RSS)
+  family: api
+  url: https://weworkremotely.com/remote-jobs.rss
+  probe: {kind: feed}
+
+- id: jobicy
+  name: Jobicy (remote)
+  family: api
+  candidates:
+    - url: https://jobicy.com/api/v2/remote-jobs?count=50&geo=usa
+      probe: {kind: json, items: jobs, title: jobTitle, date: pubDate,
+              fields: {company: companyName, geo: jobGeo, level: jobLevel, pay_min: salaryMin, published: pubDate}}
+    - url: https://jobicy.com/api/jobs?geo=usa
+      probe: {kind: json, items: jobs, title: jobTitle, date: pubDate}
+  terms: poll at most once an hour; credit Jobicy with a link
+
+- id: remotive
+  name: Remotive (remote)
+  family: api
+  enabled: false
+  url: https://remotive.com/api/remote-jobs?category=software-dev&limit=50
+  probe:
+    kind: json
+    items: jobs
+    title: title
+    date: publication_date
+    fields: {company: company_name, location: candidate_required_location, pay: salary, published: publication_date}
+  terms: jobs appear 24 h late; at most 4 requests a day; attribution; don't resubmit to other boards
+  notes: "OFF: remotive.com robots.txt has Disallow: /api/* for every User-Agent (checked 2026-11-04)"
+
+# ------------------------------------------------------------------------- Hacker News (hiring)
+- id: hn-whoishiring
+  name: HN "Who is hiring?" (monthly)
+  family: discussion
+  url: https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=6
+  probe: {kind: json, items: hits, title: title, date: created_at, fields: {id: objectID, comments: num_comments}}
+  notes: free-text comments, one per company; the November thread is the newest
+
+- id: hn-jobs
+  name: HN job posts (YC companies)
+  family: discussion
+  url: https://hacker-news.firebaseio.com/v0/jobstories.json
+  probe: {kind: json, items: ""}
+
+# ----------------------------------------------------------------------- the alert inbox (Gmail)
+- id: alert-inbox
+  name: Job-alert inbox (Gmail IMAP)
+  family: email
+  url: imaps://imap.gmail.com:993
+  auth: {env: [JOBS_IMAP_USER, JOBS_IMAP_PASSWORD]}
+  probe:
+    kind: imap
+    senders: {linkedin: linkedin.com, indeed: indeed.com, glassdoor: glassdoor.com, wellfound: wellfound.com,
+              handshake: joinhandshake.com, dice: dice.com, builtin: builtin.com}
+  notes: logs in and counts alert emails per sender; reads no message bodies
+
+# --------------------------------------------------------- the miss-check sample (Google's job results)
+- id: serpapi-account
+  name: SerpAPI account (free; doesn't use a search)
+  family: check
+  url: https://serpapi.com/account.json
+  auth: {params: {api_key: SERPAPI_KEY}}
+  probe: {kind: json, items: null, single: true, title: plan_name,
+          fields: {searches_left: total_searches_left, per_month: searches_per_month}}
+
+- id: serpapi-google-jobs
+  name: SerpAPI google_jobs (uses 1 of the 250 free monthly searches)
+  family: check
+  url: https://serpapi.com/search.json?engine=google_jobs&q=software%20engineer%20new%20grad&location=New%20York%2C%20New%20York%2C%20United%20States&hl=en&gl=us
+  auth: {params: {api_key: SERPAPI_KEY}}
+  probe:
+    kind: json
+    items: jobs_results
+    title: title
+    date: detected_extensions.posted_at
+    fields: {company: company_name, location: location, posted: detected_extensions.posted_at, via: via,
+             apply: apply_options}
+
+# -------------------------------------------- the board universe: lists of companies' job boards
+- id: universe-kalil
+  name: kalil0321/ats-scrapers company lists (MIT)
+  family: universe
+  url: https://raw.githubusercontent.com/kalil0321/ats-scrapers/main/ats-companies/{each}.csv
+  each: [greenhouse, lever, ashby, workday, workable, smartrecruiters, recruitee]
+  probe: {kind: csv}
+
+- id: universe-riley
+  name: Riley-Dorrington/job-board-aggregator company lists (MIT)
+  family: universe
+  url: https://raw.githubusercontent.com/Riley-Dorrington/job-board-aggregator/main/data/{each}_companies.json
+  each: [greenhouse, lever, ashby, workday]
+  probe: {kind: json, items: ""}

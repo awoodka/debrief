@@ -22,6 +22,7 @@
   debrief brief hook fetch|stop          the skill session's hooks (the fetch cap, the check on stop)
   debrief site build --out DIR           the site as static files: every day's page and the archive
   debrief snapshot-fixtures              arrives in M6
+  debrief jobs ...                       the job-listing collector (src/debrief/jobs/cli.py)
 """
 import argparse
 import sys
@@ -294,6 +295,9 @@ def main(argv=None):
     p.set_defaults(func=_site)
 
     sub.add_parser("snapshot-fixtures").set_defaults(func=_not_yet("M6"))
+
+    from .jobs import cli as jobs_cli
+    jobs_cli.register(sub)
 
     args = ap.parse_args(argv)
     try:

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Save one secret in the repo's .env without it appearing on screen or in shell history:
+#
+#   scripts/set-env ADZUNA_APP_KEY        prompts for the value, then adds or replaces the line
+#
+# It needs a real terminal: run it in your own SSH session, not through Claude Code's `!` prefix.
+set -euo pipefail
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ENV_FILE=${ENV_FILE:-$REPO/.env}
+name=${1:?usage: scripts/set-env NAME}
+[[ $name =~ ^[A-Z][A-Z0-9_]*$ ]] || { echo "set-env: '$name' isn't an env var name" >&2; exit 2; }
+[ -t 0 ] || { echo "set-env: needs a terminal (run it in your own SSH session)" >&2; exit 2; }
+read -rsp "$name: " value; echo
+[ -n "$value" ] || { echo "set-env: empty, nothing changed" >&2; exit 1; }
+touch "$ENV_FILE"; chmod 600 "$ENV_FILE"
+tmp=$(mktemp "$ENV_FILE.XXXXXX"); chmod 600 "$tmp"
+grep -v "^$name=" "$ENV_FILE" > "$tmp" || true
+printf '%s=%s\n' "$name" "$value" >> "$tmp"
+mv "$tmp" "$ENV_FILE"
+echo "set-env: $name saved in $ENV_FILE (mode 600)"
