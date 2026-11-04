@@ -12,7 +12,7 @@ import yaml
 from ..config import REPO, ConfigError
 
 CONFIG_DIR = REPO / "config" / "jobs"
-FAMILIES = {"list", "board", "bigtech", "api", "discussion", "email", "check", "universe"}
+FAMILIES = {"list", "board", "bigtech", "api", "discussion", "email", "check", "universe", "watchlist"}
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,9 @@ class JobSource:
     candidates: tuple = ()
     probe: dict = field(default_factory=dict)
     auth: dict = field(default_factory=dict)
+    adapter: str | None = None      # the collector that reads it (jobs/adapters); None = probe only
+    options: dict = field(default_factory=dict)
+    headers: dict = field(default_factory=dict)     # extra headers; "{contact}" is DEBRIEF_CONTACT
     terms: str = ""
     notes: str = ""
 
@@ -81,8 +84,11 @@ def _source(raw, seen):
         raise ConfigError(f"{where}: unknown keys {sorted(unknown)}")
     if "{each}" in (raw.get("url") or "") and not raw.get("each"):
         raise ConfigError(f"{where}: url uses {{each}} but no `each` list is given")
-    if raw.get("enabled", True) and not (raw.get("url") or raw.get("candidates")):
+    if raw.get("enabled", True) and raw["family"] != "watchlist" and not (raw.get("url") or raw.get("candidates")):
         raise ConfigError(f"{where}: an enabled source needs a url or candidates")
+    if raw.get("enabled", True) and raw.get("adapter") and raw["family"] != "watchlist" and not (
+            raw.get("url") or (raw.get("options") or {}).get("endpoint")):
+        raise ConfigError(f"{where}: its collector needs a url (or options.endpoint); candidates are for the probe only")
     method = raw.get("method", "GET").upper()
     if method not in ("GET", "POST"):
         raise ConfigError(f"{where}: method must be GET or POST")

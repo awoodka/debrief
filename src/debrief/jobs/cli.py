@@ -4,6 +4,12 @@
                                    check every job source once and time the board universe (M0)
   debrief jobs profile show | check FILE | save FILE [--note TEXT]
                                    the profile: latest version, a check, a new version (FILE may be -)
+  debrief jobs collect [--source ID ...] [--date D]   fetch every source, build postings (M1)
+  debrief jobs collect --replay DATE [--into PATH]    rebuild a day from raw files, no network
+  debrief jobs collect --rebuild                      rebuild the database from all raw files (parser change)
+  debrief jobs watch add NAME [--url URL] | remove NAME | list
+                                   the watchlist (each change is a new profile version)
+  debrief jobs posting QUERY [--all]                  one posting, its listings and keys
 """
 import sys
 
@@ -56,6 +62,81 @@ def _profile(args):
     return 0
 
 
+def _collect(args):
+    from datetime import datetime
+    from . import collect, config
+    cfg = config.load()
+    if args.rebuild:
+        out = collect.rebuild(cfg)
+        print(f"rebuilt from {len(out['dates'])} day(s) of raw data: {out['totals']}"
+              + (f"; previous database kept as state/{out['backup']}" if out["backup"] else ""))
+        return 0
+    if args.replay:
+        into = args.into or cfg.data_dir / "replay" / f"{args.replay}-{datetime.now():%Y%m%d-%H%M%S}.sqlite"
+        out = collect.replay(cfg, args.replay, into)
+        print(f"replayed {len(out['runs'])} run(s) into {out['into']}: {out['totals']}")
+        return 0
+    report = collect.run(cfg, only=set(args.source or []) or None, run_date=args.date)
+    print(f"jobs collect {report['run_id']}: {report['status']} · "
+          + ", ".join(f"{k} {v}" for k, v in sorted(report["statuses"].items()))
+          + f" · {report['postings']['open']} open postings · report in jobs/runs/{report['run_date']}/collect-{report['run_id']}.md")
+    return 0 if report["status"] == "ok" else 3
+
+
+def _watch(args):
+    from . import config, watch
+    cfg = config.load()
+    try:
+        if args.step == "add":
+            entry, notes, version = watch.add(cfg, args.name, url=args.url, note=args.note)
+            for n in notes:
+                print(f"  {n}")
+            print(f"added {entry['name']} ({entry['board'] or 'no board'}): profile version {version}")
+            if not entry["board"]:
+                print("  no public board found; set a LinkedIn alert for it, or rerun with --url <careers page>")
+        elif args.step == "remove":
+            print(f"removed {args.name}: profile version {watch.remove(cfg, args.name)}")
+        else:
+            for name, board, n in watch.listing(cfg):
+                print(f"{name:30} {board or '(no board)':45} {'' if n is None else f'{n} open'}")
+    except watch.WatchError as e:
+        print(e, file=sys.stderr)
+        return 1
+    return 0
+
+
+def _posting(args):
+    import json
+    from . import config
+    from .items import company_norm
+    from .store import JobsStore, state_path
+    from ..store.db import loads
+    cfg = config.load()
+    store = JobsStore(state_path(cfg))
+    q = args.query
+    rows = store.q("SELECT posting_id FROM postings WHERE posting_id=?", (q,)) or store.q(
+        "SELECT posting_id FROM postings WHERE title LIKE ? OR company LIKE ? ORDER BY first_seen_at DESC LIMIT 20",
+        (f"%{q}%", f"%{q}%"))
+    if not rows:
+        print("no posting matches", file=sys.stderr)
+        return 1
+    if len(rows) > 1 and not args.all:
+        for r in rows:
+            p = store.posting(r[0])
+            print(f"{p['posting_id']}  {p['company'][:28]:28} {p['title'][:60]:60} {'closed' if p['closed_at'] else 'open'}")
+        print("(more than one: pass a posting id, or --all)")
+        return 0
+    for r in rows:
+        p = store.posting(r[0])
+        print(json.dumps({**p, "keys": [k[0] for k in store.q("SELECT key FROM posting_keys WHERE posting_id=?", (p["posting_id"],))],
+                          "listings": [{"source": i["source_id"], "key": i["item_key"], "active": bool(i["active"]),
+                                        "first_seen": i["first_seen_at"], "url": loads(i["data"])["url"]}
+                                       for i in store.q("SELECT * FROM items WHERE posting_id=? ORDER BY first_seen_at", (p["posting_id"],))],
+                          "text_from": [x[0] for x in store.q("SELECT source_id FROM posting_text WHERE posting_id=?", (p["posting_id"],))]},
+                         indent=1, ensure_ascii=False))
+    return 0
+
+
 def register(sub):
     p = sub.add_parser("jobs", help="the job-listing collector (docs/jobs)")
     jsub = p.add_subparsers(dest="jobs_cmd", required=True)
@@ -78,6 +159,31 @@ def register(sub):
         if step == "save":
             pp.add_argument("--note", help="why this version (kept in history.jsonl)")
     jp.set_defaults(func=lambda args, _cfg: _run(_profile, args))
+
+    jp = jsub.add_parser("collect", help="fetch every job source, keep raw responses, build postings (M1)")
+    jp.add_argument("--source", action="append", help="collect only this source id (repeatable)")
+    jp.add_argument("--date", help="logical run date for raw files (default: today)")
+    jp.add_argument("--replay", metavar="DATE", help="rebuild DATE from raw files into a new database, no network")
+    jp.add_argument("--into", help="replay target (default: <data>/jobs/replay/<date>-<time>.sqlite)")
+    jp.add_argument("--rebuild", action="store_true",
+                    help="rebuild the state database from all raw data (after a parser change); keeps ETags and run history")
+    jp.set_defaults(func=lambda args, _cfg: _run(_collect, args))
+
+    jp = jsub.add_parser("watch", help="the watchlist (the profile's companies): add, remove, list")
+    wsub = jp.add_subparsers(dest="step", required=True)
+    wp = wsub.add_parser("add", help="find the company's board (directory, or --url) and add it")
+    wp.add_argument("name")
+    wp.add_argument("--url", help="the company's careers or job-board URL, when the directory doesn't have it")
+    wp.add_argument("--note")
+    wp = wsub.add_parser("remove", help="take a company off the watchlist")
+    wp.add_argument("name")
+    wsub.add_parser("list", help="the watchlist, with each board's open postings")
+    jp.set_defaults(func=lambda args, _cfg: _run(_watch, args))
+
+    jp = jsub.add_parser("posting", help="one posting: its listings, keys and sources")
+    jp.add_argument("query", help="a posting id, or part of a title or company")
+    jp.add_argument("--all", action="store_true", help="print every match in full")
+    jp.set_defaults(func=lambda args, _cfg: _run(_posting, args))
 
 
 def _run(fn, args):

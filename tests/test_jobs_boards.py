@@ -55,7 +55,10 @@ def test_workday_age(text, age):
 def test_parse_list_each_system():
     gh = {"jobs": [{"title": "SWE", "first_published": "2026-11-03T10:00:00-05:00", "location": {"name": "NYC"}}],
           "meta": {"total": 1}}
-    assert boards.parse_list("greenhouse", gh) == ([{"title": "SWE", "published": "2026-11-03T15:00:00Z", "location": "NYC"}], None)
+    (g,), total = boards.parse_list("greenhouse", gh)
+    assert total is None and g["id"] is None
+    assert {k: g[k] for k in ("title", "published", "location", "locations")} == {
+        "title": "SWE", "published": "2026-11-03T15:00:00Z", "location": "NYC", "locations": ["NYC"]}
     lever = [{"text": "ML Eng", "createdAt": 1762200000000, "categories": {"location": "SF"}}]
     jobs, _ = boards.parse_list("lever", lever)
     assert jobs[0]["title"] == "ML Eng" and jobs[0]["published"].startswith("2025-11-03") and jobs[0]["location"] == "SF"
@@ -69,7 +72,8 @@ def test_parse_list_each_system():
     jobs, total = boards.parse_list("smartrecruiters", sr)
     assert total == 250 and jobs[0]["published"] == "2026-11-01T09:00:00Z"
     rc = {"offers": [{"title": "Eng", "published_at": "2026-11-01 12:00:00 UTC", "city": "Oslo", "remote": False}]}
-    assert boards.parse_list("recruitee", rc)[0][0] == {"title": "Eng", "published": "2026-11-01T12:00:00Z", "location": "Oslo"}
+    r = boards.parse_list("recruitee", rc)[0][0]
+    assert {k: r[k] for k in ("title", "published", "location")} == {"title": "Eng", "published": "2026-11-01T12:00:00Z", "location": "Oslo"}
     wd = {"total": 41, "jobPostings": [{"title": "Engineer", "postedOn": "Posted Today", "locationsText": "US, CA"}]}
     jobs, total = boards.parse_list("workday", wd)
     assert total == 41 and jobs[0]["age_days"] == 0 and jobs[0]["published"] is None

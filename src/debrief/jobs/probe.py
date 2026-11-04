@@ -316,7 +316,7 @@ def probe_imap(spec, user, password, host="imap.gmail.com", port=993, connect=im
 
 # ------------------------------------------------------------------------------- one source
 
-def probe_source(client, src, env=os.environ, now=None, bodies=None):
+def probe_source(client, src, env=os.environ, now=None, bodies=None, contact=""):
     res = Result(id=src.id, name=src.name, family=src.family, enabled=src.enabled, status="ok",
                  notes=src.notes, terms=src.terms)
     missing = src.missing_keys(env)
@@ -332,6 +332,7 @@ def probe_source(client, src, env=os.environ, now=None, bodies=None):
         res.attempts, res.status, res.endpoint = [att], att.status, att.url
         return res
     headers, params = src.auth_parts(env)
+    headers = {**{k: v.replace("{contact}", contact) for k, v in (src.headers or {}).items()}, **headers}
     conditional = src.family != "check" and (src.probe or {}).get("conditional", True)
     if src.url:
         groups = [[(src.probe or {}, u, e) for e, u in urls.expand(src.url, src.each)]]
@@ -557,7 +558,10 @@ def run(cfg, only=None, skip=(), env=os.environ, universe=True, sample=None, log
                                   status="disabled", notes=src.notes, terms=src.terms))
             log("disabled (not requested)")
             continue
-        r = probe_source(client, src, env=env, now=now, bodies=bodies)
+        if src.family == "watchlist":
+            log("collected from the profile's companies (not probed)")
+            continue
+        r = probe_source(client, src, env=env, now=now, bodies=bodies, contact=cfg.contact)
         log(r.status + (f" ({r.summary})" if r.summary else ""))
         results.append(r)
     report = {"generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "user_agent": cfg.user_agent,

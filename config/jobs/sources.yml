@@ -2,7 +2,7 @@
 # docs/jobs/SOURCES.md. Field reference:
 #
 #   id, name    stable id and display name
-#   family      list | board | bigtech | api | discussion | email | check | universe
+#   family      list | board | bigtech | api | discussion | email | check | universe | watchlist
 #                 list      community-kept job lists (GitHub)
 #                 board     one company's job board on a job-board system (an example of that system;
 #                           the universe test covers the rest)
@@ -11,7 +11,9 @@
 #                 discussion  Hacker News hiring threads and job posts
 #                 email     the alert inbox (LinkedIn, Indeed, ... alert emails)
 #                 check     the miss-check sample (never a source of jobs)
-#                 universe  a list of companies' job boards, to seed the boards we poll
+#                 universe  a list of companies' job boards: the board directory, for finding a watchlist
+#                           company's board (never polled as a whole; Revision 1)
+#                 watchlist the profile's companies' boards, read in full every night
 #   url, each   the endpoint; {each} expands over `each`
 #   method      GET (default) or POST, with `body` as JSON
 #   candidates  alternative urls, tried in order until one works
@@ -20,6 +22,9 @@
 #                 rate across items the probe reports
 #   auth        {headers: {Header: ENV_VAR}, params: {param: ENV_VAR}}: sent when every var is set,
 #               else the source is "needs_key" and nothing is requested
+#   adapter     the collector that reads it nightly (src/debrief/jobs/adapters); none = probe only
+#   options     the collector's settings (endpoint, when it differs from the probe's url; paging; searches)
+#   headers     extra request headers; "{contact}" is DEBRIEF_CONTACT
 #   terms       what the source's terms ask of us (attribution, rate)
 #   enabled     false = listed with its reason, never requested
 
@@ -27,6 +32,7 @@
 - id: simplify-newgrad
   name: SimplifyJobs New-Grad-Positions
   family: list
+  adapter: simplify_json
   url: https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json
   probe:
     kind: json
@@ -40,6 +46,7 @@
 - id: vanshb03-newgrad
   name: vanshb03 New-Grad-2027
   family: list
+  adapter: simplify_json
   url: https://raw.githubusercontent.com/vanshb03/New-Grad-2027/dev/.github/scripts/listings.json
   probe:
     kind: json
@@ -52,6 +59,7 @@
 - id: speedyapply-ai
   name: speedyapply 2027-AI-College-Jobs (US new grad)
   family: list
+  adapter: md_table
   url: https://raw.githubusercontent.com/speedyapply/2027-AI-College-Jobs/main/NEW_GRAD_USA.md
   probe: {kind: md_table}
   notes: markdown only (no JSON)
@@ -59,6 +67,7 @@
 - id: speedyapply-swe
   name: speedyapply 2027-SWE-College-Jobs (US new grad)
   family: list
+  adapter: md_table
   url: https://raw.githubusercontent.com/speedyapply/2027-SWE-College-Jobs/main/NEW_GRAD_USA.md
   probe: {kind: md_table}
   notes: markdown only (no JSON)
@@ -66,6 +75,7 @@
 - id: jobright-newgrad
   name: jobright-ai 2026 new-grad lists
   family: list
+  adapter: md_table
   url: https://raw.githubusercontent.com/jobright-ai/{each}/master/README.md
   each: [2026-Software-Engineer-New-Grad, 2026-Data-Analysis-New-Grad, 2026-Product-Management-New-Grad]
   probe: {kind: md_table}
@@ -211,6 +221,8 @@
 - id: adzuna
   name: Adzuna (US)
   family: api
+  adapter: adzuna
+  options: {endpoint: "https://api.adzuna.com/v1/api/jobs/us/search/{page}", max_pages: 2, max_days_old: 2}
   url: https://api.adzuna.com/v1/api/jobs/us/search/1?results_per_page=50&what=software%20engineer&max_days_old=1&content-type=application/json
   auth: {params: {app_id: ADZUNA_APP_ID, app_key: ADZUNA_APP_KEY}}
   probe:
@@ -226,6 +238,9 @@
 - id: usajobs
   name: USAJobs (federal)
   family: api
+  adapter: usajobs
+  headers: {User-Agent: "{contact}"}
+  options: {endpoint: "https://data.usajobs.gov/api/search", places: ["Washington, DC"], date_posted: 3}
   url: https://data.usajobs.gov/api/search?Keyword=software&DatePosted=1&ResultsPerPage=100
   auth: {headers: {Authorization-Key: USAJOBS_API_KEY}}
   probe:
@@ -236,11 +251,14 @@
     count: SearchResult.SearchResultCountAll
     fields: {org: MatchedObjectDescriptor.OrganizationName, location: MatchedObjectDescriptor.PositionLocationDisplay,
              pay: MatchedObjectDescriptor.PositionRemuneration, url: MatchedObjectDescriptor.PositionURI}
-  terms: User-Agent must be the email the key was registered with (DEBRIEF_CONTACT)
+  terms: User-Agent must be the email the key was registered with (DEBRIEF_CONTACT; sent by the collector)
 
 - id: themuse
   name: The Muse
   family: api
+  adapter: themuse
+  options: {endpoint: "https://www.themuse.com/api/public/jobs", categories: [Software Engineering, Data and Analytics],
+            level: Entry Level, max_pages: 5, page_size: 20, stop_days: 3}
   url: https://www.themuse.com/api/public/jobs?page=0&level=Entry%20Level&category=Software%20Engineering
   probe:
     kind: json
@@ -254,6 +272,8 @@
 - id: himalayas
   name: Himalayas (remote)
   family: api
+  adapter: himalayas
+  options: {endpoint: "https://himalayas.app/jobs/api", max_pages: 15, page_size: 20, stop_days: 2}
   url: https://himalayas.app/jobs/api?limit=20&offset=0
   probe:
     kind: json
@@ -267,6 +287,7 @@
 - id: remoteok
   name: RemoteOK
   family: api
+  adapter: remoteok
   url: https://remoteok.com/api
   probe:
     kind: json
@@ -279,18 +300,17 @@
 - id: weworkremotely
   name: We Work Remotely (RSS)
   family: api
+  adapter: wwr_rss
   url: https://weworkremotely.com/remote-jobs.rss
   probe: {kind: feed}
 
 - id: jobicy
   name: Jobicy (remote)
   family: api
-  candidates:
-    - url: https://jobicy.com/api/v2/remote-jobs?count=50&geo=usa
-      probe: {kind: json, items: jobs, title: jobTitle, date: pubDate,
-              fields: {company: companyName, geo: jobGeo, level: jobLevel, pay_min: salaryMin, published: pubDate}}
-    - url: https://jobicy.com/api/jobs?geo=usa
-      probe: {kind: json, items: jobs, title: jobTitle, date: pubDate}
+  adapter: jobicy
+  url: https://jobicy.com/api/v2/remote-jobs?count=50&geo=usa
+  probe: {kind: json, items: jobs, title: jobTitle, date: pubDate, conditional: false,
+          fields: {company: companyName, geo: jobGeo, level: jobLevel, pay_min: salaryMin, published: pubDate}}
   terms: poll at most once an hour; credit Jobicy with a link
 
 - id: remotive
@@ -311,6 +331,7 @@
 - id: hn-whoishiring
   name: HN "Who is hiring?" (monthly)
   family: discussion
+  adapter: hn_whoishiring
   url: https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=6
   probe: {kind: json, items: hits, title: title, date: created_at, fields: {id: objectID, comments: num_comments}}
   notes: free-text comments, one per company; the November thread is the newest
@@ -318,8 +339,18 @@
 - id: hn-jobs
   name: HN job posts (YC companies)
   family: discussion
+  adapter: hn_jobs
+  options: {max_new: 40}
   url: https://hacker-news.firebaseio.com/v0/jobstories.json
   probe: {kind: json, items: ""}
+
+# ----------------------------------------------------- the watchlist: the profile's companies (Revision 1)
+- id: watchlist
+  name: Watchlist boards (the profile's companies)
+  family: watchlist
+  adapter: watchlist
+  options: {max_pages: 100}
+  notes: each company's whole board, every night; Workday boards page 20 at a time (max_pages caps it at 2,000 jobs)
 
 # ----------------------------------------------------------------------- the alert inbox (Gmail)
 - id: alert-inbox
@@ -359,6 +390,7 @@
 - id: universe-kalil
   name: kalil0321/ats-scrapers company lists (MIT)
   family: universe
+  adapter: directory
   url: https://raw.githubusercontent.com/kalil0321/ats-scrapers/main/ats-companies/{each}.csv
   each: [greenhouse, lever, ashby, workday, workable, smartrecruiters, recruitee]
   probe: {kind: csv}
@@ -366,6 +398,7 @@
 - id: universe-riley
   name: Riley-Dorrington/job-board-aggregator company lists (MIT)
   family: universe
+  adapter: directory
   url: https://raw.githubusercontent.com/Riley-Dorrington/job-board-aggregator/main/data/{each}_companies.json
   each: [greenhouse, lever, ashby, workday]
   probe: {kind: json, items: ""}

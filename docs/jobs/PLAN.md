@@ -413,3 +413,81 @@ budget":
     Staff" are.
 - **`ranking`:** threshold, max_candidates, top_n. The values are placeholders until M2; Alex
   hasn't decided N.
+
+---
+
+## M1 results (2026-11-04): the collector
+
+`debrief jobs collect` runs every source in family order (watchlist, lists, APIs, HN, directory).
+It keeps every response in `<data>/jobs/raw/` and builds postings in `<data>/jobs/state/jobs.sqlite`.
+
+The code:
+- `jobs/adapters/`: lists, apis, hn, boards_watch.
+- `jobs/build.py`, `jobs/collect.py`, `jobs/store.py`, `jobs/items.py`, `jobs/watch.py`.
+- Debrief's `Store` gained a `migrations` class attribute, the only change to Debrief's code
+  (behavior unchanged).
+
+**First live run (22:10Z), 1.5 minutes, about 80 requests:**
+
+| Source | Listings | Notes |
+|---|---|---|
+| Watchlist | 1,665 | Anthropic 682, OpenAI 811, Hugging Face 6, Scale AI 166; descriptions included |
+| Simplify | 3,068 | active, of 19,036; 17,136 closed before we started, skipped |
+| vanshb03 | 796 | active |
+| speedyapply AI + SWE | 1,357 | |
+| jobright (3 lists) | 1,606 | |
+| The Muse | 40 | |
+| Himalayas | 300 | |
+| RemoteOK | 99 | |
+| We Work Remotely | 100 | |
+| Jobicy | 50 | second run |
+| HN "Who is hiring?" | 163 | |
+| HN job posts | 31 | |
+| Board directory | 42,183 | boards, from both lists plus every board a source links to; weekly |
+
+**Skipped:**
+- Adzuna and USAJobs: keys not set, so nothing was requested.
+- The alert inbox and the miss-check: M3.
+- Microsoft: not a board system and not on the watchlist; Simplify lists its new-grad roles.
+
+**Checks:**
+- **No duplicates:** a second run made 0 new postings for anything already stored. The lists
+  answered 304, and the boards and APIs re-read every job and found nothing new.
+- **Exact replay:** replaying the day from raw files gave identical rows in all 5 tables (8,553
+  postings, 9,274 listings, 11,698 keys, 2,407 texts, 54,246 directory rows).
+- **Merging:** 721 listings joined an existing posting. Every posting with 4 or more listings was
+  inspected, and each was the same job:
+  - the same job across Simplify, vanshb03, speedyapply and jobright;
+  - a company reposting the same job under new ids.
+
+  Near-identical pairs left unmerged across sources: 68 of 8,515 (<1%). Two safe rules then
+  merged 12 more and left 54, mostly genuinely different roles:
+  - "Engineer 1" equals "Engineer I";
+  - a trailing country ("– US") is dropped.
+- **`watch add` lookup**, read-only test:
+  - Stripe: greenhouse:stripe (758 open).
+  - Ramp: ashby:ramp (169), not a stale Greenhouse board with 1 job.
+  - Palantir: lever:palantir (309); SmartRecruiters refused by robots.txt.
+  - "Notion Labs": not found; suggests Notion (ashby:notion).
+
+**Rules decided while building (for Alex to review):**
+- Two listings are one posting when they share a job-board job id (Greenhouse, Lever, Ashby,
+  Workable, Recruitee, Workday, SmartRecruiters), or, failing that, the same normalized company
+  and title with overlapping locations.
+- Different Greenhouse, Lever or Ashby ids with the same title stay separate (two teams). Ids from
+  systems we can't read (Apple, iCIMS, short links) don't block a merge, so identical reposts
+  show once.
+- A posting closes when every listing of it is gone:
+  - Simplify's `active` flag;
+  - missing from a complete markdown list or watchlist board (a 304 says nothing);
+  - a complete response that parses to nothing while more than 5 were open closes nothing and
+    warns.
+- Every request checks robots.txt first. An API key in a URL is replaced by `<redacted>`
+  before anything is stored.
+
+**Commands:**
+- `debrief jobs collect [--source ID]`, `--replay DATE`, `--rebuild`;
+- `debrief jobs watch add NAME [--url URL] | remove NAME | list`;
+- `debrief jobs posting QUERY`.
+
+Tests: 293.

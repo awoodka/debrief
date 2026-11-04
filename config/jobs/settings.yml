@@ -26,6 +26,11 @@ http:
     hn-firebase: {hosts: [hacker-news.firebaseio.com], interval_s: 0.2}
     remotive: {hosts: [remotive.com], interval_s: 31}             # Remotive blocks more than 2 a minute
     jobicy: {hosts: [jobicy.com], interval_s: 5}
+    adzuna: {hosts: [api.adzuna.com], interval_s: 2.5}            # Adzuna's free tier: 25 a minute, 250 a day
+    themuse: {hosts: [themuse.com], interval_s: 1.0}             # 500 an hour without a key
+
+collect:
+  raw_retention_days: 60
 
 probe:
   # The board-universe timing test: this many boards per job-board system, picked at random (fixed

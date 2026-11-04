@@ -9,7 +9,10 @@ reads the JSON into (jobs, total). `total` is set for paged systems (Workday, Sm
 each job is {"title", "published" (ISO UTC or None), "age_days" (Workday's relative dates), "location"}.
 """
 import re
+from html import unescape
 from urllib.parse import parse_qs, urlsplit
+
+from bs4 import BeautifulSoup
 
 from .. import times
 
@@ -34,17 +37,18 @@ def split(board):
     return system, board_id
 
 
-def list_request(board, page=0):
-    """(method, url, json_body) for one page of the board's list."""
+def list_request(board, page=0, full=False):
+    """(method, url, json_body) for one page of the board's list. full=True asks for descriptions
+    and pay where the list call can carry them (watchlist boards; the probe lists without)."""
     system, b = split(board)
     if system == "greenhouse":
-        return "GET", f"https://boards-api.greenhouse.io/v1/boards/{b}/jobs", None
+        return "GET", f"https://boards-api.greenhouse.io/v1/boards/{b}/jobs" + ("?content=true&pay_transparency=true" if full else ""), None
     if system == "lever":
         return "GET", f"https://api.lever.co/v0/postings/{b}?mode=json", None
     if system == "ashby":
         return "GET", f"https://api.ashbyhq.com/posting-api/job-board/{b}?includeCompensation=true", None
     if system == "workable":
-        return "GET", f"https://apply.workable.com/api/v1/widget/accounts/{b}", None
+        return "GET", f"https://apply.workable.com/api/v1/widget/accounts/{b}" + ("?details=true" if full else ""), None
     if system == "smartrecruiters":
         return ("GET", f"https://api.smartrecruiters.com/v1/companies/{b}/postings"
                        f"?limit={SMARTRECRUITERS_PAGE}&offset={page * SMARTRECRUITERS_PAGE}", None)
@@ -95,42 +99,121 @@ def _loc(*parts):
     return ", ".join(str(p) for p in parts if p)
 
 
+def html_text(html, cap=20000):
+    """Plain text from a description's HTML (Greenhouse sends it HTML-escaped), capped."""
+    if not html:
+        return None
+    text = BeautifulSoup(unescape(str(html)), "html.parser").get_text("\n")
+    text = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+    return text[:cap] or None
+
+
+def _pay(lo, hi, currency=None, period=None):
+    if lo in (None, "", 0) and hi in (None, "", 0):
+        return None
+    return {"min": lo, "max": hi, "currency": currency, "period": period}
+
+
 def parse_list(system, data):
-    """(jobs, total) from a board's list JSON. Raises ValueError on an unexpected shape."""
+    """(jobs, total) from a board's list JSON. Raises ValueError on an unexpected shape.
+
+    Each job: id (the system's id for it), title, published (ISO UTC or None), age_days (Workday's
+    relative dates), location (one line), locations (list), url, path (Workday's externalPath),
+    text (description, when the list carries one), pay, remote."""
     total = None
     if system == "greenhouse":
-        rows = data["jobs"]
-        jobs = [{"title": j.get("title"), "published": when(j.get("first_published") or j.get("updated_at")),
-                 "location": (j.get("location") or {}).get("name")} for j in rows]
+        jobs = []
+        for j in data["jobs"]:
+            ranges = j.get("pay_input_ranges") or []
+            r = ranges[0] if ranges else {}
+            loc = (j.get("location") or {}).get("name")
+            jobs.append({"id": str(j["id"]) if j.get("id") is not None else None, "title": j.get("title"),
+                         "published": when(j.get("first_published") or j.get("updated_at")),
+                         "location": loc, "locations": [loc] if loc else [], "url": j.get("absolute_url"),
+                         "text": html_text(j.get("content")),
+                         "pay": _pay(r.get("min_cents") and r["min_cents"] / 100, r.get("max_cents") and r["max_cents"] / 100,
+                                     r.get("currency_type")) if r else None,
+                         "remote": None})
     elif system == "lever":
         if not isinstance(data, list):
             raise ValueError(f"expected a list, got {type(data).__name__}")
-        jobs = [{"title": j.get("text"),
-                 "published": when(j.get("createdAt")),
-                 "location": (j.get("categories") or {}).get("location")} for j in data]
+        jobs = []
+        for j in data:
+            cat = j.get("categories") or {}
+            sr = j.get("salaryRange") or {}
+            text = "\n".join(x for x in [j.get("descriptionPlain")] + [
+                f"{li.get('text', '')}\n{html_text(li.get('content')) or ''}" for li in j.get("lists") or []] if x)
+            jobs.append({"id": j.get("id"), "title": j.get("text"), "published": when(j.get("createdAt")),
+                         "location": cat.get("location"),
+                         "locations": list(cat.get("allLocations") or ([cat["location"]] if cat.get("location") else [])),
+                         "url": j.get("hostedUrl"), "text": (text or None) and text[:20000],
+                         "pay": _pay(sr.get("min"), sr.get("max"), sr.get("currency"), sr.get("interval")),
+                         "remote": (j.get("workplaceType") == "remote") if j.get("workplaceType") else None})
     elif system == "ashby":
-        jobs = [{"title": j.get("title"), "published": when(j.get("publishedAt")),
-                 "location": j.get("location") or ("Remote" if j.get("isRemote") else None)} for j in data["jobs"]]
+        jobs = []
+        for j in data["jobs"]:
+            locs = [j["location"]] if j.get("location") else []
+            locs += [x.get("location") for x in j.get("secondaryLocations") or [] if x.get("location")]
+            comp = j.get("compensation") or {}
+            jobs.append({"id": j.get("id"), "title": j.get("title"), "published": when(j.get("publishedAt")),
+                         "location": j.get("location") or ("Remote" if j.get("isRemote") else None),
+                         "locations": locs, "url": j.get("jobUrl"),
+                         "text": (j.get("descriptionPlain") or html_text(j.get("descriptionHtml")) or None),
+                         "pay": ({"summary": comp["compensationTierSummary"]} if comp.get("compensationTierSummary") else None),
+                         "remote": j.get("isRemote")})
     elif system == "workable":
-        jobs = [{"title": j.get("title"), "published": when(j.get("published_on") or j.get("created_at")),
-                 "location": _loc(j.get("city"), j.get("state"), j.get("country"))
-                 + (" (remote)" if j.get("telecommuting") else "")} for j in data["jobs"]]
+        jobs = []
+        for j in data["jobs"]:
+            loc = _loc(j.get("city"), j.get("state"), j.get("country"))
+            locs = [_loc(x.get("city"), x.get("region"), x.get("country")) for x in j.get("locations") or []] or ([loc] if loc else [])
+            jobs.append({"id": j.get("shortcode"), "title": j.get("title"),
+                         "published": when(j.get("published_on") or j.get("created_at")),
+                         "location": loc + (" (remote)" if j.get("telecommuting") else ""), "locations": locs,
+                         "url": j.get("url") or j.get("shortlink"), "text": html_text(j.get("description")),
+                         "pay": None, "remote": bool(j.get("telecommuting"))})
     elif system == "smartrecruiters":
         total = data.get("totalFound")
-        jobs = [{"title": j.get("name"), "published": when(j.get("releasedDate")),
-                 "location": _loc((j.get("location") or {}).get("city"), (j.get("location") or {}).get("region"),
-                                  (j.get("location") or {}).get("country"))} for j in data["content"]]
+        jobs = []
+        for j in data["content"]:
+            loc = _loc((j.get("location") or {}).get("city"), (j.get("location") or {}).get("region"),
+                       (j.get("location") or {}).get("country"))
+            jobs.append({"id": j.get("id"), "title": j.get("name"), "published": when(j.get("releasedDate")),
+                         "location": loc, "locations": [loc] if loc else [], "url": None, "text": None, "pay": None,
+                         "remote": (j.get("location") or {}).get("remote")})
     elif system == "recruitee":
-        jobs = [{"title": j.get("title"), "published": when(j.get("published_at") or j.get("created_at")),
-                 "location": _loc(j.get("city"), j.get("country")) + (" (remote)" if j.get("remote") else "")}
-                for j in data["offers"]]
+        jobs = []
+        for j in data["offers"]:
+            loc = _loc(j.get("city"), j.get("country"))
+            sal = j.get("salary") or {}
+            jobs.append({"id": j.get("slug") or str(j.get("id")), "title": j.get("title"),
+                         "published": when(j.get("published_at") or j.get("created_at")),
+                         "location": loc + (" (remote)" if j.get("remote") else ""), "locations": [loc] if loc else [],
+                         "url": j.get("careers_url"), "text": html_text(j.get("description")),
+                         "pay": _pay(sal.get("min"), sal.get("max"), sal.get("currency"), sal.get("period")),
+                         "remote": j.get("remote")})
     elif system == "workday":
         total = data.get("total")
-        jobs = [{"title": j.get("title"), "published": None, "age_days": workday_age_days(j.get("postedOn")),
-                 "location": j.get("locationsText")} for j in data["jobPostings"]]
+        jobs = []
+        for j in data["jobPostings"]:
+            path = j.get("externalPath") or ""
+            jobs.append({"id": workday_req(path), "title": j.get("title"), "published": None,
+                         "age_days": workday_age_days(j.get("postedOn")), "location": j.get("locationsText"),
+                         "locations": [j["locationsText"]] if j.get("locationsText") else [], "path": path,
+                         "url": None, "text": None, "pay": None, "remote": None})
     else:
         raise ValueError(f"unknown job-board system {system!r}")
     return jobs, total
+
+
+_WD_REQ = re.compile(r"_([A-Za-z0-9-]+)$")
+
+
+def workday_req(path):
+    """A Workday job's requisition id from its path ("/job/US-CA-Santa-Clara/Engineer_JR2011267" ->
+    "JR2011267"); the last path segment when there's no "_<id>" suffix."""
+    last = [x for x in (path or "").split("/") if x][-1:] or [""]
+    m = _WD_REQ.search(last[0])
+    return m.group(1) if m else (last[0] or None)
 
 
 # ------------------------------------------------------------------ recognizing a board from a URL
@@ -196,3 +279,72 @@ def universe_rows(system, rows):
         if k and k.startswith(system + ":"):
             out.append(k)
     return out
+
+
+# ------------------------------------------------------------------- recognizing a job from a URL
+
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
+def job_from_url(url):
+    """The job-board id of the job a URL points at, as "<system>:<id>", or None. Greenhouse,
+    Lever, Ashby and SmartRecruiters ids are global; Workable, Recruitee and Workday ids are scoped
+    to the company ("workable:<board>/<code>", "workday:<tenant>/<req>"). Company-hosted pages that
+    carry a Greenhouse or Ashby id in the query ("?gh_jid=", "?ashby_jid=") count too."""
+    try:
+        p = urlsplit((url or "").strip())
+    except ValueError:
+        return None
+    host = (p.hostname or "").lower()
+    parts = [x for x in p.path.split("/") if x]
+    q = parse_qs(p.query)
+    if q.get("gh_jid") and q["gh_jid"][0].isdigit():
+        return f"greenhouse:{q['gh_jid'][0]}"
+    if q.get("ashby_jid") and _UUID.match(q["ashby_jid"][0]):
+        return f"ashby:{q['ashby_jid'][0].lower()}"
+    if host.endswith("greenhouse.io"):
+        if parts[:2] == ["embed", "job_app"] and q.get("token") and q["token"][0].isdigit():
+            return f"greenhouse:{q['token'][0]}"
+        if len(parts) >= 3 and parts[1] == "jobs" and parts[2].isdigit():
+            return f"greenhouse:{parts[2]}"
+        return None
+    if host in ("jobs.lever.co", "jobs.eu.lever.co") and len(parts) >= 2 and _UUID.match(parts[1]):
+        return f"lever:{parts[1].lower()}"
+    if host == "jobs.ashbyhq.com" and len(parts) >= 2 and _UUID.match(parts[1]):
+        return f"ashby:{parts[1].lower()}"
+    if host == "apply.workable.com" and len(parts) >= 3 and parts[1] == "j":
+        return f"workable:{parts[0].lower()}/{parts[2]}"
+    if host in ("jobs.smartrecruiters.com", "careers.smartrecruiters.com") and len(parts) >= 2:
+        m = re.match(r"^(\d{6,})", parts[1])
+        return f"smartrecruiters:{m.group(1)}" if m else None
+    if host.endswith(".recruitee.com") and len(parts) >= 2 and parts[0] == "o":
+        return f"recruitee:{host.split('.')[0]}/{parts[1]}"
+    tenant = None
+    m = _WD_HOST.match(host)
+    if m:
+        tenant = m.group(1).lower()
+    elif _WD_SITE_HOST.match(host) and len(parts) >= 2 and parts[0] == "recruiting":
+        tenant = parts[1].lower()
+    if tenant and any(x in ("job", "details") for x in parts):
+        req = workday_req("/".join(parts))
+        return f"workday:{tenant}/{req}" if req else None
+    return None
+
+
+def job_key(board, job_id):
+    """The same id job_from_url gives, from a board and the id its list call returned."""
+    system, b = split(board)
+    if system in ("greenhouse", "smartrecruiters"):
+        return f"{system}:{job_id}"
+    if system in ("lever", "ashby"):
+        return f"{system}:{str(job_id).lower()}"
+    if system in ("workable", "recruitee"):
+        return f"{system}:{b.lower()}/{job_id}"
+    if system == "workday":
+        return f"workday:{b.split('|')[0].lower()}/{job_id}"
+    raise ValueError(f"unknown job-board system {system!r}")
+
+
+def workday_job_url(board, path):
+    tenant, wd, site = split(board)[1].split("|")
+    return f"https://{tenant}.{wd}.myworkdayjobs.com/{site}{path}" if path else None

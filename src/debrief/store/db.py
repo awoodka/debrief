@@ -21,6 +21,8 @@ def loads(text, default=None):
 
 
 class Store:
+    migrations = MIGRATIONS          # a subclass with its own database points this at its own folder
+
     def __init__(self, path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -42,7 +44,7 @@ class Store:
         if has_meta:
             row = self.conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
             version = int(row[0]) if row else 0
-        for f in sorted(MIGRATIONS.glob("*.sql")):
+        for f in sorted(self.migrations.glob("*.sql")):
             n = int(f.name.split("_", 1)[0])
             if n <= version:
                 continue
