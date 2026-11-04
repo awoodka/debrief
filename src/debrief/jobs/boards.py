@@ -10,7 +10,7 @@ each job is {"title", "published" (ISO UTC or None), "age_days" (Workday's relat
 """
 import re
 from html import unescape
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 
@@ -329,6 +329,29 @@ def job_from_url(url):
         req = workday_req("/".join(parts))
         return f"workday:{tenant}/{req}" if req else None
     return None
+
+
+def job_page(url):
+    """A job board's application-form link turned into the job's own page, where the page is the
+    same URL without the form's suffix:
+      Ashby     jobs.ashbyhq.com/<board>/<uuid>/application[?embed=true]  -> .../<uuid>
+      Lever     jobs.lever.co/<company>/<uuid>/apply                       -> .../<uuid>
+      Workable  apply.workable.com/<company>/j/<code>/apply                -> .../j/<code>/
+    Any other URL comes back unchanged."""
+    try:
+        p = urlsplit(url or "")
+    except ValueError:
+        return url
+    host = (p.hostname or "").lower()
+    parts = [x for x in p.path.split("/") if x]
+    if host == "jobs.ashbyhq.com" and len(parts) == 3 and _UUID.match(parts[1]) and parts[2] == "application":
+        query = "&".join(kv for kv in p.query.split("&") if kv and kv.split("=")[0] != "embed")
+        return urlunsplit((p.scheme, p.netloc, "/" + "/".join(parts[:2]), query, ""))
+    if host in ("jobs.lever.co", "jobs.eu.lever.co") and len(parts) == 3 and _UUID.match(parts[1]) and parts[2] == "apply":
+        return urlunsplit((p.scheme, p.netloc, "/" + "/".join(parts[:2]), p.query, ""))
+    if host == "apply.workable.com" and len(parts) == 4 and parts[1] == "j" and parts[3] == "apply":
+        return urlunsplit((p.scheme, p.netloc, "/" + "/".join(parts[:3]) + "/", p.query, ""))
+    return url
 
 
 def job_key(board, job_id):

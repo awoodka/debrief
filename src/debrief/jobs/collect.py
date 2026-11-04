@@ -35,6 +35,12 @@ def ordered(sources):
     return sorted(sources, key=lambda s: ORDER.index(s.family) if s.family in ORDER else len(ORDER))
 
 
+def early_sources(cfg):
+    """The community lists (family "list"): every one is a new-grad list, so all their listings are
+    early-career."""
+    return frozenset(s.id for s in cfg.sources if s.family == "list")
+
+
 def eligibility(source, store, env, now):
     if not source.enabled:
         return "disabled"
@@ -80,7 +86,8 @@ def collect_source(cfg, store, client, source, run_id, run_date, now, prof, env,
     stamp = now.isoformat(timespec="seconds")
     try:
         with store.transaction():
-            counts = build.apply(store, source, adapter, ctx.records, refs, warn=ctx.warn)
+            counts = build.apply(store, source, adapter, ctx.records, refs, warn=ctx.warn,
+                                 early_sources=early_sources(cfg))
             status = classify(ctx.records, counts, crash, quiet_ok=adapter.quiet_ok)
             for rec, ref in zip(ctx.records, refs):
                 store.record_fetch(run_id, source.id, rec["seq"], rec["url"], rec["fetched_at"], rec.get("status", 0),
@@ -205,7 +212,8 @@ def replay(cfg, run_date, into, log=print, fresh=True):
             rel, records = by_source[source.id]
             refs = [f"{rel}#{r['seq']}" for r in records]
             with store.transaction():
-                totals.update(build.apply(store, source, REGISTRY[source.adapter], records, refs))
+                totals.update(build.apply(store, source, REGISTRY[source.adapter], records, refs,
+                                          early_sources=early_sources(cfg)))
         for sid in sorted(set(by_source) - set(by_id)):
             log(f"replay {run_id}: skipping {sid} (no longer in sources.yml)")
     store.close()

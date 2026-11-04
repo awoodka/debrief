@@ -209,6 +209,99 @@ def test_merge_by_job_key_then_fuzzy(store):
     assert set(p["locations"]) == {"New York, NY", "New York"}
 
 
+def _only_posting(store):
+    (pid,) = [r[0] for r in store.q("SELECT posting_id FROM postings")]
+    return store.posting(pid)
+
+
+def test_link_prefers_the_companys_own_listing(store):
+    # An aggregator's page first, then the company's own careers page (not a known board): the company wins.
+    apply(store, "jobright", [it("j1", url="https://jobright.ai/jobs/info/abc")])
+    apply(store, "simplify", [it("s1", url="https://apply.careers.microsoft.com/careers/job/197")])
+    assert _only_posting(store)["url"] == "https://apply.careers.microsoft.com/careers/job/197"
+    # A job-board page beats the company's other pages; the board's own listing (watchlist) beats both.
+    gh = "https://job-boards.greenhouse.io/acme/jobs/123"
+    apply(store, "speedyapply", [it("m1", url=gh + "/application?embed=true", job_key="job:greenhouse:123")])
+    assert _only_posting(store)["url"] == gh + "/application?embed=true"
+    apply(store, "watchlist", [it("greenhouse:123", url=gh, job_key="job:greenhouse:123", board="greenhouse:acme")])
+    assert _only_posting(store)["url"] == gh
+    # The board's listing goes away while the others stay open: the best open listing's link is used.
+    apply(store, "watchlist", [it("greenhouse:123", url=gh, job_key="job:greenhouse:123", active=False)],
+          fetched_at="2026-11-05T08:00:00Z")
+    p = _only_posting(store)
+    assert p["url"] == gh + "/application?embed=true" and p["closed_at"] is None
+
+
+def test_link_ranks():
+    r = build.link_rank
+    assert r("watchlist", "https://x.test/", True) < r("s", "https://jobs.lever.co/a/0f1e2d3c-1111-2222-3333-444455556666", True)
+    assert r("s", "https://careers.acme.com/job/1", True) < r("s", "https://go.vansh.nyc/P4", True)
+    assert r("s", "https://www.linkedin.com/jobs/view/1", True)[1] == 3
+    assert r("s", "https://go.vansh.nyc/P4", True) < r("watchlist", "https://x.test/", False)              # open beats gone
+    newer, older = r("s", "https://t.test/2", True, "2026-08-04T00:00:00Z"), r("s", "https://t.test/1", True, "2026-08-03T00:00:00Z")
+    assert newer < older                                                                                    # newest repost wins
+
+
+def test_application_form_links_become_job_pages():
+    u = "0f1e2d3c-1111-2222-3333-444455556666"
+    assert clean_url(f"https://jobs.ashbyhq.com/acme/{u}/application?embed=true&utm_source=x") == f"https://jobs.ashbyhq.com/acme/{u}"
+    assert clean_url(f"https://jobs.ashbyhq.com/acme/{u}/application") == f"https://jobs.ashbyhq.com/acme/{u}"
+    assert clean_url(f"https://jobs.lever.co/acme/{u}/apply") == f"https://jobs.lever.co/acme/{u}"
+    assert clean_url(f"https://jobs.eu.lever.co/acme/{u}/apply") == f"https://jobs.eu.lever.co/acme/{u}"
+    assert clean_url("https://apply.workable.com/acme/j/912979C2F0/apply") == "https://apply.workable.com/acme/j/912979C2F0/"
+    for same in ("https://www.amazon.jobs/jobs/10514428/apply", "https://x.applytojob.com/apply/RrI9QanYDY/Junior-Software-Engineer",
+                 f"https://jobs.ashbyhq.com/acme/{u}"):
+        assert clean_url(same) == same
+
+
+def test_early_career_words():
+    assert items.core_title("New Grad 2027: AI Security Engineer") == items.core_title("AI Security Engineer - 2027 New Grad")
+    assert items.core_title("Software Engineer I") == items.core_title("Software Engineer, Early Career")
+    assert items.core_title("Software Engineer II") != items.core_title("Software Engineer")
+    assert items.early_career("Graduate Software Engineer") and items.early_career("Software Engineer 1")
+    assert items.early_career("Data Scientist (2026)") and not items.early_career("AI Engineer")
+
+
+EARLY = frozenset({"simplify", "vansh"})
+
+
+def early_apply(store, source_id, listings):
+    with store.transaction():
+        return build.apply(store, src(id=source_id), FakeAdapter({0: listings}), [rec("{}", seq=0)], ["ref#0"],
+                           early_sources=EARLY)
+
+
+def test_early_career_second_chance(store):
+    gh = "https://job-boards.greenhouse.io/acme/jobs/{}"
+    early_apply(store, "simplify", [it("s1", title="AI Engineer New Grad", url=gh.format(1)),
+                                    it("s2", title="Data Engineer", url=gh.format(2))])
+    early_apply(store, "watchlist", [it("w1", title="Platform Engineer", job_key="job:greenhouse:3")])   # not early-career
+    c = early_apply(store, "vansh", [it("v1", title="New Grad 2027: AI Engineer", url="https://go.vansh.nyc/A"),
+                                     it("v2", title="New Grad: Data Engineer", url="https://go.vansh.nyc/B"),      # list => early
+                                     it("v3", title="New Grad: Platform Engineer", url="https://go.vansh.nyc/C"),  # experienced posting
+                                     it("v4", title="New Grad: AI Engineer", locations=("Austin, TX",))])         # another city
+    assert c["merged"] == 2 and c["postings_new"] == 2
+    p = store.posting(store.item("vansh", "v1")["posting_id"])
+    assert p["title"] == "AI Engineer New Grad" and p["url"] == gh.format(1)
+    # A job API (not a list) with no early-career words in the title gets no second chance.
+    c = early_apply(store, "remoteok", [it("r1", title="Engineer, AI")])
+    assert c["postings_new"] == 1
+    # One candidate, but its job id differs: a different job.
+    c = early_apply(store, "speedy", [it("m1", title="AI Engineer, Early Career", url=gh.format(9))])
+    assert c["postings_new"] == 1
+
+
+def test_early_career_second_chance_needs_exactly_one(store):
+    early_apply(store, "simplify", [it("s1", title="Software Engineer New Grad", url="https://jobs.lever.co/a/0f1e2d3c-1111-2222-3333-444455556666"),
+                                    it("s2", title="Software Engineer I", url="https://jobs.lever.co/a/9f1e2d3c-1111-2222-3333-444455556666")])
+    c = early_apply(store, "vansh", [it("v1", title="New Grad: Software Engineer", url="https://go.vansh.nyc/A")])
+    assert c["postings_new"] == 1                                                    # two candidates: left alone
+    # A third similar role: still more than one candidate, so left alone.
+    c = early_apply(store, "speedy", [it("m1", title="Software Engineer, Early Career",
+                                         url="https://jobs.lever.co/a/1f1e2d3c-1111-2222-3333-444455556666")])
+    assert c["postings_new"] == 1
+
+
 def test_same_title_different_job_or_city_stays_apart(store):
     apply(store, "w", [it("1", url="https://jobs.lever.co/acme/0f1e2d3c-1111-2222-3333-444455556666")])
     c = apply(store, "l", [it("2", url="https://jobs.lever.co/acme/9f1e2d3c-1111-2222-3333-444455556666"),     # another job id

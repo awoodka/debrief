@@ -17,7 +17,8 @@ DROP_PARAMS = re.compile(r"^(utm_.*|ref|gh_src|source|src|lever-source.*|lever-o
 
 def clean_url(url):
     """The URL without tracking parameters (utm_*, ref, gh_src, ...), so a daily-changing tracker
-    doesn't make the same job look new. gh_jid and other ids stay."""
+    doesn't make the same job look new. gh_jid and other ids stay. A job board's application-form
+    link becomes the job's page (boards.job_page)."""
     url = (url or "").strip()
     try:
         p = urlsplit(url)
@@ -26,7 +27,7 @@ def clean_url(url):
     if not p.scheme.startswith("http"):
         return url
     q = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True) if not DROP_PARAMS.match(k)]
-    return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), ""))
+    return boards.job_page(urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), "")))
 
 
 def _key(*parts):

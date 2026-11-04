@@ -105,6 +105,24 @@ def _remote(tokens):
     return any("remote" in t.split() or t in _REMOTE_PLACES for t in tokens)
 
 
+# Words that mark a role as early-career; the core title ignores them, plus class years and a
+# trailing level "I", so "New Grad 2027: AI Engineer" and "AI Engineer - New Grad" share a core.
+_EARLY = {"grad", "grads", "graduate", "graduates", "college", "university", "entry", "junior", "jr"}
+_CORE_IGNORE = _EARLY | {"new", "early", "career", "level", "i"}
+_YEAR = re.compile(r"^20[2-3]\d$")
+
+
+def early_career(title):
+    toks = title_norm(title).split()
+    return (bool(_EARLY & set(toks)) or any(_YEAR.match(t) for t in toks) or toks[-1:] == ["i"]
+            or "early career" in " ".join(toks))
+
+
+def core_title(title):
+    """The title's words without the early-career ones, as a set (word order ignored)."""
+    return frozenset(t for t in title_norm(title).split() if t not in _CORE_IGNORE and not _YEAR.match(t))
+
+
 def fuzzy_key(company, title):
     c, t = company_norm(company), title_norm(title)
     return f"fz:{c}|{t}" if c and t else None

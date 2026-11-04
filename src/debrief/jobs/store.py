@@ -60,6 +60,21 @@ class JobsStore(Store):
     def job_keys(self, posting_id):
         return [r[0] for r in self.q("SELECT key FROM posting_keys WHERE posting_id=? AND key LIKE 'job:%'", (posting_id,))]
 
+    def posting_links(self, posting_id):
+        """Every listing's link for a posting: source_id, item_key, url, active, published_at, first_seen_at."""
+        return self.q("""SELECT source_id, item_key, COALESCE(json_extract(data, '$.url'), '') AS url, active,
+                                json_extract(data, '$.published_at') AS published_at, first_seen_at
+                         FROM items WHERE posting_id=?""", (posting_id,))
+
+    def open_postings_at(self, company_norm):
+        """Open postings whose fuzzy key names this company: posting_id, title, locations (JSON)."""
+        return self.q("""SELECT DISTINCT p.posting_id, p.title, p.locations FROM posting_keys k JOIN postings p USING (posting_id)
+                         WHERE k.key >= ? AND k.key < ? AND p.closed_at IS NULL ORDER BY p.posting_id""",
+                      (f"fz:{company_norm}|", f"fz:{company_norm}}}"))       # "}" sorts right after "|"
+
+    def posting_sources(self, posting_id):
+        return {r[0] for r in self.q("SELECT DISTINCT source_id FROM items WHERE posting_id=?", (posting_id,))}
+
     def any_active(self, posting_id):
         return self.one("SELECT 1 FROM items WHERE posting_id=? AND active=1 LIMIT 1", (posting_id,)) is not None
 

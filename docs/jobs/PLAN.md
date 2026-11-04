@@ -485,6 +485,56 @@ The code:
 - Every request checks robots.txt first. An API key in a URL is replaced by `<redacted>`
   before anything is stored.
 
+Alex approved the merging and closing rules (2026-11-04) and added one for links: when a job
+has several listings, its link is the company's own listing of it. A posting's link is chosen
+again from all its listings whenever one changes:
+1. the company's board, read through its API (the watchlist);
+2. a job-board page for the job (Greenhouse, Lever, Ashby, Workday, ...);
+3. another page on the company's own site (amazon.jobs, careers.microsoft.com, ...);
+4. an aggregator's page or a short link (jobright, go.vansh.nyc, Himalayas, RemoteOK, HN, and
+   the alert-email senders), only when nothing better exists.
+
+An open listing beats one that's gone. Within a step the newest listing wins, so a company that
+posts the same role under several ids (TikTok, JP Morgan) gets its latest one.
+
+**Fixes from the M1 review (Alex, 2026-11-04):**
+- **vanshb03's short links.** Every vanshb03 link is a go.vansh.nyc redirect; the real URLs live
+  only with the shortener (its repo's `golinks.py` says so). go.vansh.nyc's robots.txt is
+  `Disallow: /` for every crawler, so they are never followed.
+- **Instead, an early-career second chance when matching (`build.early_match`).** vanshb03 puts
+  its own "New Grad:" / "New Grad 2027:" prefix on titles, so its jobs missed the same job from other
+  sources. A listing that matches nothing by job id or exact title now joins the one open posting
+  that has:
+  - the same company;
+  - the same core title (new-grad words, class years and a trailing "I" ignored; word order too);
+  - an overlapping place.
+
+  It also needs all of these:
+  - both sides are early-career (the title says so, or a new-grad list lists it);
+  - another source lists the posting;
+  - its job id doesn't conflict;
+  - exactly one posting qualifies. A company with several similar new-grad roles in one place is
+    left alone.
+- **Application-form links.** Ashby `/application[?embed=true]`, Lever `/apply` and Workable `/apply`
+  links become the job's page. Amazon's `/apply` stays (it can't be checked, and it's Amazon's own
+  site); JazzHR's `/apply/...` URLs already are the job page.
+
+Result after a rebuild:
+- **Merges:** 8,553 postings became 8,303. 237 vanshb03 and jobright listings joined another
+  source's posting, for example OpenAI's Applied Emerging Talent role. A random sample of 15, and
+  both that joined a watchlist posting, were checked by hand: all were the same job.
+- **vanshb03 only:** 480 jobs are left, down from 704. The rest are companies no other source
+  lists, different titles, or ambiguous.
+- **Form links:** 491 open postings linked to an application form, now 0.
+- **Links of open postings:**
+  - the watchlist board 1,665;
+  - a job-board page 2,760;
+  - the company's own site 1,260;
+  - an aggregator 2,614 (jobs only jobright, vanshb03 or a job API lists);
+  - no link 4.
+
+Tests: 299.
+
 **Commands:**
 - `debrief jobs collect [--source ID]`, `--replay DATE`, `--rebuild`;
 - `debrief jobs watch add NAME [--url URL] | remove NAME | list`;
