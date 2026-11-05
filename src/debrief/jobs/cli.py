@@ -73,7 +73,8 @@ def _collect(args):
     if args.rebuild:
         out = collect.rebuild(cfg)
         print(f"rebuilt from {len(out['dates'])} day(s) of raw data: {out['totals']}"
-              + (f"; previous database kept as state/{out['backup']}" if out["backup"] else ""))
+              + (f"; previous database kept as state/{out['backup']}" if out["backup"] else "")
+              + (f"; moved to merged postings: {out['moved']}" if out.get("moved") else ""))
         return 0
     if args.replay:
         into = args.into or cfg.data_dir / "replay" / f"{args.replay}-{datetime.now():%Y%m%d-%H%M%S}.sqlite"

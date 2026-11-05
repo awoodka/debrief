@@ -12,6 +12,9 @@ aggregators are never fetched. Every request goes through the context, so robots
 and the response is kept raw; texts() reads a record back with no network, so replay rebuilds
 the same descriptions.
 
+Where the board names the job's country (Workday, Lever, Ashby), texts() adds it to the job's facts
+(board_country, board_more_places): the filters trust it over a list's place.
+
 The board's answer also says whether a job is still open (gone()): a per-job request (Greenhouse,
 Lever, Workday) answering 404 or 410, or a complete board list (Ashby, Workable, Recruitee: one
 response, ok and not empty) without the job, means it closed on the company's own board. A
@@ -85,6 +88,13 @@ def targets(store, profile, now):
             if guess:
                 out.append(guess)
     return out
+
+
+def _country(country, more_places):
+    """The board's own word on where the job is: {board_country, board_more_places} when the board
+    names a country (Workday, Lever, Ashby), else nothing. filters.check uses it to keep a list's
+    wrong place from passing a job its board puts abroad."""
+    return {"board_country": str(country).strip(), "board_more_places": bool(more_places)} if country else {}
 
 
 def _gh_url(board_name, job_id):
@@ -208,7 +218,8 @@ class Describe(Adapter):
         if system == "workday":
             info = data.get("jobPostingInfo") or {}
             text = boards.html_text(info.get("jobDescription"))
-            facts = {"employment": info.get("timeType")}
+            facts = {"employment": info.get("timeType"),
+                     **_country((info.get("country") or {}).get("descriptor"), bool(info.get("additionalLocations")))}
             return [(next(iter(wanted)), text, facts)] if wanted and (text or info.get("timeType")) else []
         if system == "greenhouse":
             jobs, _ = boards.parse_list("greenhouse", {"jobs": [data]})
@@ -222,7 +233,8 @@ class Describe(Adapter):
                 continue
             key = boards.job_key(board, j["id"])
             if key in wanted:
-                out.append((key, j.get("text"), {"employment": j.get("employment"), "pay": j.get("pay")}))
+                out.append((key, j.get("text"), {"employment": j.get("employment"), "pay": j.get("pay"),
+                                                 **_country(j.get("country"), j.get("more_places"))}))
         return out
 
 

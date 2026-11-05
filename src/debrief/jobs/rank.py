@@ -326,6 +326,23 @@ def _entry(rank, p, pts, a, also=(), more=0, new=True, bonus=0):
 
 # ------------------------------------------------------------------------------------- reports
 
+def display_title(title, profile=None):
+    """How a title is printed. A Hacker News "Who is hiring" post keeps its whole first line as its
+    title ("Mechanize | San Francisco, CA (Onsite) | Junior Engineer | ..."), because the filters
+    read all of it; the list shows just its role: the segment a position type matches, else the
+    second one. Display only: storage, filters, matching and the model's input are unchanged."""
+    if not title or " | " not in title:
+        return title
+    segs = [x.strip() for x in title.split("|") if x.strip()]
+    if len(segs) < 2:
+        return title
+    if profile:
+        for seg in segs[1:]:
+            if filters.title_fit(seg, profile)[0] is not None:
+                return seg
+    return segs[1]
+
+
 TITLES = {"new": "The list", "watchlist": "Watchlist", "catchup": "Catch-up", "older": "Older roles"}
 
 
@@ -358,7 +375,7 @@ def render_report(r):
         L += ["", f"## {TITLES.get(name, name)}", ""]
         for e in es:
             bonus = f" +{e['bonus']}" if e.get("bonus") else ""
-            L.append(f"{e['rank']}. **{e['score'] if e['score'] is not None else '–'}{bonus}** {e['title']} — {e['company']} "
+            L.append(f"{e['rank']}. **{e['score'] if e['score'] is not None else '–'}{bonus}** {display_title(e['title'])} — {e['company']} "
                      f"({'; '.join(e['locations'][:2])}) · posted {e.get('posted') or '?'} · {e['points']} pts · {e['url'] or ''}")
             if e["why"]:
                 L.append(f"   {e['why']}")
@@ -393,6 +410,7 @@ def today(cfg, list_date=None, show_all=False, catchup=None):
         return f"no {catchup} list yet (debrief jobs catchup)" if catchup else "no list yet (debrief jobs score)"
     rows = store.q(f"SELECT * FROM daily_list WHERE list_date=? AND section IN ({marks}) ORDER BY section, rank",
                    (list_date, *wanted))
+    prof = profiles.latest(cfg)[1]
     run_id = rows[0]["run_id"] if rows else None
     rep = store.one("SELECT report FROM runs WHERE run_id=?", (run_id,)) if run_id else None
     report = json.loads(rep[0]) if rep else {}
@@ -425,7 +443,7 @@ def today(cfg, list_date=None, show_all=False, catchup=None):
             where = "; ".join((e.get("locations") or p.get("locations") or [])[:2])
             when = _day(e.get("posted") or (posted(p) if p else None))
             sc = e.get("score")
-            L.append(f"{e['rank']:3}. [{sc if sc is not None else '–':>2}] {e['title']} — {e['company']}"
+            L.append(f"{e['rank']:3}. [{sc if sc is not None else '–':>2}] {display_title(e['title'], prof)} — {e['company']}"
                      + (f" · {where}" if where else "") + (f" · {pay}" if pay else "") + (f" · posted {when}" if when else ""))
             if e.get("why"):
                 L.append(f"       {e['why']}")

@@ -15,7 +15,7 @@ Ashby, Workable, Recruitee or Workday:
   - SmartRecruiters never (robots.txt allows only LinkedInBot), nor the companies in the source's
     exclude_companies (Amazon, Google, Meta: each OFF for its own reason in sources.yml).
 A company's boards are asked again only for postings first seen after their last answer, or once
-retry_days have passed; a board that answered 403/404/410 rests for dead_days. Both come from the
+retry_days have passed; a board that answered 403/404/410/422 rests for dead_days. Both come from the
 fetches table, as the description step's refusals do. max_requests caps a night.
 
 The match is the merge rule's (items.core_title and locations_overlap): the same core title and an
@@ -43,7 +43,7 @@ from . import Adapter
 
 LIST_SYSTEMS = ("greenhouse", "lever", "ashby", "workable", "recruitee")
 SEARCH_SYSTEMS = ("workday",)
-DEAD = (403, 404, 410)
+DEAD = (403, 404, 410, 422)      # 422: a Workday site that no longer exists on that host (Salesforce moved wd1 -> wd12)
 _SEVERAL = re.compile(r"^\d+\s+locations?$", re.I)      # Workday's "2 Locations": places unknown, not a city
 
 

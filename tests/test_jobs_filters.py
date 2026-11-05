@@ -236,3 +236,21 @@ def test_profile_v6_titles(title, expected):
     prof["filters"]["exclude_titles"] = prof["filters"]["exclude_titles"] + ["manager"]
     v = filters.check(job(title=title), prof, NOW)
     assert (v.stage if not v.ok else "ok") == expected
+
+
+# ------------------------------------------------- F1 (11-05): the job's own board decides its country
+
+@pytest.mark.parametrize("data,expected", [
+    ({}, "ok"),                                                                    # no board answer: as before
+    ({"board_country": "United Kingdom", "board_more_places": False}, "place"),
+    ({"board_country": "United States of America", "board_more_places": False}, "ok"),
+    ({"board_country": "US", "board_more_places": False}, "ok"),
+    ({"board_country": "USA", "board_more_places": False}, "ok"),
+    ({"board_country": "United Kingdom", "board_more_places": True}, "ok"),       # several places: the lists decide
+])
+def test_the_board_country_outranks_a_list(data, expected):
+    j = job(title="Software Engineer Analyst", locations=("London, UK", "San Francisco, CA"), **data)
+    v = filters.check(j, PROFILE, NOW)
+    assert (v.stage if not v.ok else "ok") == expected
+    if expected == "place":
+        assert v.reason == "its own job board places it in United Kingdom"

@@ -373,3 +373,12 @@ def test_named_catchup_since_a_date_keeps_the_first_catchup(tmp_path):
     assert marks == {"catchup": 1, "older": 2}
     with pytest.raises(SystemExit):
         rank.catchup(cfg, name="new")
+
+
+def test_display_title_shows_an_hn_role():
+    prof = copy.deepcopy(BASE)
+    t = "Mechanize | San Francisco, CA (Onsite) | Junior Software Engineer | Full-time | $150k"
+    assert rank.display_title(t, prof) == "Junior Software Engineer"
+    assert rank.display_title("River | Staff Engineers (Elixir) | NYC") == "Staff Engineers (Elixir)"
+    assert rank.display_title("Software Engineer, New Grad", prof) == "Software Engineer, New Grad"
+    assert rank.display_title("") == ""

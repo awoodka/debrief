@@ -135,6 +135,20 @@ def core_title(title):
     return frozenset(t for t in title_norm(title).split() if t not in _CORE_IGNORE and not _YEAR.match(t))
 
 
+# Words a company's name may carry or drop from one source to the next ("Palantir" and "Palantir
+# Technologies"); the new-grad merge's last fallback compares names without them.
+COMPANY_TAIL = {"technologies", "technology", "inc", "incorporated", "llc", "ltd", "corp", "corporation", "co",
+                "company", "group", "holdings"}
+
+
+def company_short(norm):
+    """A normalized company name without generic last words: "palantir technologies" -> "palantir"."""
+    ws = (norm or "").split()
+    while len(ws) > 1 and ws[-1] in COMPANY_TAIL:
+        ws.pop()
+    return " ".join(ws)
+
+
 def fuzzy_key(company, title):
     c, t = company_norm(company), title_norm(title)
     return f"fz:{c}|{t}" if c and t else None

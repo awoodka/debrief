@@ -8,7 +8,8 @@ that fails names the stage:
               excluded word is in what's left of the title once that match is taken out
   gone        not closed on its own job board (the describe step's check)
   place       one of the profile's areas, remote in the US, or just "United States" (no location
-              at all passes too: the model sees it)
+              at all passes too: the model sees it); and not placed abroad by the job's own board
+              (board_country from the describe step), whatever a list says
   age         published (or, failing that, first seen) within max_age_days
   level       new_grad_only: some sign the job is for new grads (new_grad_sign)
   degree      not PhD- or Master's-only by its title, and not above the profile's degree when a source
@@ -156,6 +157,19 @@ def _us(raw):
 
 
 REMOTE_WORDS = re.compile(r"\b(remote|in|hybrid|on-?site|onsite|in-office|work from home|wfh)\b")
+
+
+US_COUNTRY = {"united states", "united states of america", "us", "usa", "u s", "u s a"}
+
+
+def board_abroad(data):
+    """The country the job's own board puts it in, when that's outside the US and the board lists no
+    other place; else None. The board outranks a list: speedyapply listed Blackstone's London
+    analyst role as "Berkeley, CA", its Workday board says United Kingdom."""
+    country = (data or {}).get("board_country")
+    if not country or (data or {}).get("board_more_places"):
+        return None
+    return None if " ".join(words(country)) in US_COUNTRY else country
 
 
 def place_fit(locations, profile, remote_flag=None):
@@ -392,6 +406,9 @@ def check(posting, profile, now, text=None, listed_early=False, skip=()):
     if gone:
         return Verdict(False, "gone", f"closed on its own job board (HTTP {gone.get('status')} or missing from "
                                       f"its list, {str(gone.get('at') or '')[:10]})", facts)
+    abroad = board_abroad(d)
+    if abroad:
+        return Verdict(False, "place", f"its own job board places it in {abroad}", facts)
     area, why = place_fit(posting.get("locations") or [], profile, d.get("remote"))
     if area is None:
         return Verdict(False, "place", why, facts)

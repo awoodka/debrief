@@ -848,3 +848,36 @@ were still unbuilt or without keys. Alex's answers:
 Alert inbox (IMAP, read-only, parsers built from real samples), Adzuna and USAJobs with keys, the
 SerpAPI sample and `jobs coverage` with a cause for every miss. Plan:
 `~/.claude/plans/now-create-a-plan-precious-aho.md`, sections 2.0–2.4.
+
+## Fixes before Part 2 (Alex, 2026-11-05: "make the fixes … ensure … the proposed fixes do not break the system or alter the end product behavior")
+- **F1, the board decides the country.** speedyapply listed Blackstone's London analyst role as
+  "Berkeley, CA" (Simplify and the Workday board say London), and places are a union, so it passed.
+  describe now keeps the board's country where it names one (Workday `country`, Lever `country`,
+  Ashby `address.postalAddress.addressCountry`) as `board_country` / `board_more_places`; the place
+  stage cuts a job its own board puts outside the US with no other place ("its own job board places
+  it in United Kingdom"). Of the 112 described jobs with a board answer, it changes only Blackstone.
+- **F2, copies find their job when nothing else matched.** A posting whose company/title key an
+  earlier posting had taken (a same-title role elsewhere, or a repost under a new job id) was
+  invisible to the new-grad merge rule; it now gets an `fa:` alias key. `early_match` tries, only
+  when its normal lookup finds no candidate at all: those hidden postings, then company names
+  that differ only by a generic last word ("Palantir Technologies"). The fallbacks refuse a listing
+  its own source has twice for the same company, core title and city (jobright's two Amazon
+  "Software Development Engineer, Newark" are two jobs) and a posting that already has a listing
+  from the same source. Every merge made before is made the same way.
+- **F2b, rebuilds keep what was shown.** `collect.remap_carried`: after a rebuild, rows of the
+  carried tables that name a posting the rebuild no longer has move to the posting their listings
+  now belong to; a merged posting counts as shown if any copy was; a score moves only where the
+  posting has none.
+- **F3, HN titles print their role** (`rank.display_title`): display only.
+- **F4, a Workday 422 is a gone board** (`finder.DEAD`): Salesforce moved its sites from wd1 to wd12;
+  the finder now rests them and reports ok.
+- **Not changed (Alex):** the catch-up list's company crowding stays as is.
+- **Verified** on two frozen copies of the live data, rebuilt with the pushed code (ad0eceb) and
+  with the fixes: 0 merges lost; 30 postings now hold copies that were apart (Palantir's Query
+  Engines role is one posting instead of three; the rest TikTok, SpaceX, Citadel, Voleon, PayPal,
+  L3Harris…), none holding two employer job ids; filter results changed only for Blackstone (now
+  cut at place) and for 3 merged copies that inherited their job's earlier date or place (none on
+  any list); every listing shown before is still shown (no repeats); tomorrow's dry-run list is
+  identical. A requirements audit passed 13 of 13 (profile v6 values, new-grad only, the bonus,
+  2 per company, the blocklist, one call a night, pay never sent to the model, the job-id rule, the
+  catch-up lists, no repeats). 420 tests pass.

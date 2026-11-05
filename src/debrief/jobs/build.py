@@ -29,8 +29,8 @@ from urllib.parse import urlsplit
 
 from ..store import loads, raw
 from .boards import job_from_url
-from .items import (company_norm, content_hash, core_title, early_career, fuzzy_key, job_key, locations_overlap,
-                    posting_id_for)
+from .items import (company_norm, company_short, content_hash, core_title, early_career, fuzzy_key, job_key,
+                    locations_overlap, place_tokens, posting_id_for)
 
 MASS_CLOSE_GUARD = 5
 
@@ -82,32 +82,57 @@ def best_link(store, pid):
     return best["url"] or None
 
 
-def early_match(store, source, it, jk, early_sources):
+def early_match(store, source, it, jk, early_sources, fallback=True):
     """The second chance for a listing that matched nothing by job key or exact title: the one
     open early-career posting at the same company with the same core title (class-year and
     new-grad words ignored, so vanshb03's "New Grad 2027: AI Engineer" finds Simplify's "AI Engineer
     New Grad") and an overlapping place. Both sides must be early-career: the title says so, or a
     new-grad list (early_sources) lists it. Another source must list the posting, its job id must not
-    conflict, and exactly one posting may qualify (a conflicting one still counts); otherwise None."""
+    conflict, and exactly one posting may qualify (a conflicting one still counts); otherwise None.
+
+    Two fallbacks, each tried only when nothing at all qualified before it, so every merge made
+    without them is made the same way with them (PLAN.md "Revision 6", F2):
+      - postings whose company/title key an earlier posting had taken (their "fa:" alias key);
+      - companies whose names differ only by a generic last word ("Palantir Technologies").
+    They're more of a guess, so they refuse two more cases: a listing its own source lists twice
+    (fallback=False: jobright's two "Software Development Engineer, Newark" at Amazon are two jobs),
+    and a posting that already has a listing from this source.
+    """
     core = core_title(it.title)
     if not core or not (source.id in early_sources or early_career(it.title)):
         return None
-    found = []
-    for row in store.open_postings_at(company_norm(it.company)):
-        if core_title(row["title"]) != core or not locations_overlap(loads(row["locations"], []), it.locations):
-            continue
-        sources = store.posting_sources(row["posting_id"])
-        if sources <= {source.id} or not (early_career(row["title"]) or sources & early_sources):
-            continue
-        found.append(row["posting_id"])
+    norm = company_norm(it.company)
+
+    def qualify(rows, strict=False):
+        found = []
+        for row in rows:
+            if core_title(row["title"]) != core or not locations_overlap(loads(row["locations"], []), it.locations):
+                continue
+            sources = store.posting_sources(row["posting_id"])
+            if sources <= {source.id} or not (early_career(row["title"]) or sources & early_sources):
+                continue
+            if strict and source.id in sources:
+                continue
+            found.append(row["posting_id"])
+        return found
+
+    found = qualify(store.open_postings_at(norm))
+    if not found and fallback:
+        found = qualify(store.alias_postings_at(norm), strict=True)
+        if not found:
+            short = company_short(norm)
+            if len(short) >= 3:
+                found = qualify([r for r in store.open_postings_named(short)
+                                 if r["company"] != norm and company_short(r["company"]) == short], strict=True)
     if len(found) != 1:
         return None                                    # several similar roles: don't guess
     other = store.job_keys(found[0])
     return None if jk is not None and other and jk not in other else found[0]
 
 
-def resolve(store, source, it, at, early_sources=frozenset()):
-    """(posting_id, "new" | "merged") for a listing seen for the first time."""
+def resolve(store, source, it, at, early_sources=frozenset(), ambiguous=False):
+    """(posting_id, "new" | "merged") for a listing seen for the first time. ambiguous: its source
+    lists the same company and core title more than once in this batch (no early_match fallback)."""
     jk, fk = job_key(it), fuzzy_key(it.company, it.title)
     if jk:
         pid = store.find_key(jk)
@@ -127,7 +152,7 @@ def resolve(store, source, it, at, early_sources=frozenset()):
                 if jk:
                     store.add_key(jk, pid)
                 return pid, "merged"
-    pid = early_match(store, source, it, jk, early_sources)
+    pid = early_match(store, source, it, jk, early_sources, fallback=not ambiguous)
     if pid:
         if jk:
             store.add_key(jk, pid)
@@ -142,6 +167,8 @@ def resolve(store, source, it, at, early_sources=frozenset()):
     for k in (jk, fk):
         if k:
             store.add_key(k, pid)
+    if fk and store.find_key(fk) != pid:              # an earlier posting has this company and title
+        store.add_key(f"fa:{fk[3:]}#{pid}", pid)       # so early_match's fallback can still find this one
     return pid, "new"
 
 
@@ -187,12 +214,20 @@ def refresh_posting(store, pid, at):
     return change
 
 
+def _fallback_key(it):
+    """What makes two of one source's listings look like the same job to early_match's fallback:
+    company, core title and city (TikTok's same title in San Jose and in Seattle is two jobs)."""
+    return company_short(company_norm(it.company)), core_title(it.title), frozenset(place_tokens(it.locations))
+
+
 def apply(store, source, adapter, records, refs, warn=None, early_sources=frozenset()):
     """Store one source's records. Returns counts. early_sources: the ids of the new-grad lists,
     whose every listing is early-career (for early_match)."""
     counts = Counter()
     seen = defaultdict(set)
-    for rec, ref in zip(records, refs):
+    parsed = [list(adapter.parse(rec, source)) for rec in records]
+    per_job = Counter(_fallback_key(it) for its in parsed for it in its if it.active)
+    for rec, ref, listings in zip(records, refs, parsed):
         at = rec["fetched_at"]
         for key, text, facts in adapter.texts(rec, source):
             pid = store.find_key(f"job:{key}")
@@ -222,7 +257,7 @@ def apply(store, source, adapter, records, refs, warn=None, early_sources=frozen
         for board, name in adapter.directory(rec, source):
             store.save_directory(board, name, company_norm(name), source.id, at)
             counts["directory"] += 1
-        for it in adapter.parse(rec, source):
+        for it in listings:
             counts["items"] += 1
             seen[it.scope].add(it.item_key)
             data, h = it.as_dict(), content_hash(it)
@@ -231,7 +266,7 @@ def apply(store, source, adapter, records, refs, warn=None, early_sources=frozen
                 if not it.active:
                     counts["skipped_inactive"] += 1
                     continue
-                pid, how = resolve(store, source, it, at, early_sources)
+                pid, how = resolve(store, source, it, at, early_sources, ambiguous=per_job[_fallback_key(it)] > 1)
                 store.insert_item(source.id, it.item_key, it.scope, pid, at, h, ref, data, active=True)
                 counts["new"] += 1
                 counts["postings_new" if how == "new" else "merged"] += 1

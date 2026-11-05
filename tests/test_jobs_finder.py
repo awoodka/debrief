@@ -356,3 +356,10 @@ def test_collect_since_widens_only_the_detail_steps():
     wide = collect.widened(prof, "2026-10-01", datetime(2026, 11, 5, 12, tzinfo=timezone.utc))
     assert wide["filters"]["max_age_days"] == 36 and prof["filters"]["max_age_days"] == 14
     assert collect.widened(prof, "2026-11-01", datetime(2026, 11, 5, tzinfo=timezone.utc))["filters"]["max_age_days"] == 14
+
+
+def test_a_workday_422_is_a_gone_board_not_a_broken_source():
+    adapter, = finder.ADAPTERS
+    assert 422 in finder.DEAD and adapter.tolerate == finder.DEAD
+    recs = [rec("", status=422, url="https://salesforce.wd1.myworkdayjobs.com/wday/cxs/salesforce/datorama/jobs")]
+    assert collect.classify(recs, {}, None, quiet_ok=adapter.quiet_ok, tolerate=adapter.tolerate) == "ok"

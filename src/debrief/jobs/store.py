@@ -72,6 +72,26 @@ class JobsStore(Store):
                          WHERE k.key >= ? AND k.key < ? AND p.closed_at IS NULL ORDER BY p.posting_id""",
                       (f"fz:{company_norm}|", f"fz:{company_norm}}}"))       # "}" sorts right after "|"
 
+    def alias_postings_at(self, company_norm):
+        """Open postings whose company/title key was already taken by an earlier posting (a second
+        posting of the same title: a repost under a new job id, or the same role in another city).
+        They carry an "fa:" alias key, which only the new-grad merge's fallback reads."""
+        return self.q("""SELECT DISTINCT p.posting_id, p.title, p.locations FROM posting_keys k JOIN postings p USING (posting_id)
+                         WHERE k.key >= ? AND k.key < ? AND p.closed_at IS NULL ORDER BY p.posting_id""",
+                      (f"fa:{company_norm}|", f"fa:{company_norm}}}"))
+
+    def open_postings_named(self, prefix):
+        """Open postings with an "fz:" or "fa:" key whose company starts with `prefix`, with that
+        key's company name: posting_id, title, locations, company."""
+        out = {}
+        for ns in ("fz:", "fa:"):
+            for r in self.q("""SELECT p.posting_id, p.title, p.locations, k.key FROM posting_keys k JOIN postings p USING (posting_id)
+                               WHERE k.key >= ? AND k.key < ? AND p.closed_at IS NULL ORDER BY p.posting_id""",
+                            (f"{ns}{prefix}", f"{ns}{prefix}~")):
+                out.setdefault(r["posting_id"], {"posting_id": r["posting_id"], "title": r["title"],
+                                                 "locations": r["locations"], "company": r["key"][3:].split("|", 1)[0]})
+        return list(out.values())
+
     def posting_sources(self, posting_id):
         return {r[0] for r in self.q("SELECT DISTINCT source_id FROM items WHERE posting_id=?", (posting_id,))}
 

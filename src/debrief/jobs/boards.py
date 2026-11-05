@@ -150,7 +150,8 @@ def parse_list(system, data):
                          "url": j.get("hostedUrl"), "text": (text or None) and text[:20000],
                          "pay": _pay(sr.get("min"), sr.get("max"), sr.get("currency"), sr.get("interval")),
                          "remote": (j.get("workplaceType") == "remote") if j.get("workplaceType") else None,
-                         "employment": cat.get("commitment")})
+                         "employment": cat.get("commitment"),
+                         "country": j.get("country"), "more_places": len(cat.get("allLocations") or []) > 1})
     elif system == "ashby":
         jobs = []
         for j in data["jobs"]:
@@ -162,7 +163,9 @@ def parse_list(system, data):
                          "locations": locs, "url": j.get("jobUrl"),
                          "text": (j.get("descriptionPlain") or html_text(j.get("descriptionHtml")) or None),
                          "pay": ({"summary": comp["compensationTierSummary"]} if comp.get("compensationTierSummary") else None),
-                         "remote": j.get("isRemote"), "employment": j.get("employmentType")})
+                         "remote": j.get("isRemote"), "employment": j.get("employmentType"),
+                         "country": ((j.get("address") or {}).get("postalAddress") or {}).get("addressCountry"),
+                         "more_places": bool(j.get("secondaryLocations"))})
     elif system == "workable":
         jobs = []
         for j in data["jobs"]:

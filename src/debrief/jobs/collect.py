@@ -245,10 +245,45 @@ def replay(cfg, run_date, into, log=print, fresh=True):
 STATE_TABLES = ("source_state", "http_validators", "runs", "fetches", "scores", "daily_list", "highlighted", "meta")
 
 
+def remap_carried(con):
+    """Inside rebuild(), with the old database attached as `old`: rows the carried tables keep for
+    a posting the rebuilt database no longer has (a matching change merged it into another, or
+    renumbered it) move to the posting its listings now belong to (old and new items joined on
+    source and item key). A job shown before stays shown, so it never comes back as a repeat; a
+    score moves only where the posting has none for that profile (merges never join different job
+    ids); rows of postings that still exist are untouched. Returns {table: rows moved}."""
+    from collections import defaultdict
+    pairs = con.execute("""SELECT DISTINCT o.posting_id, n.posting_id FROM old.items o
+                           JOIN main.items n ON n.source_id = o.source_id AND n.item_key = o.item_key
+                           WHERE o.posting_id != n.posting_id
+                             AND o.posting_id NOT IN (SELECT posting_id FROM main.postings)""").fetchall()
+    to = defaultdict(set)
+    for gone, now in pairs:
+        to[gone].add(now)
+    tables = {r[0] for r in con.execute("SELECT name FROM main.sqlite_master WHERE type='table'")}
+    moved = Counter()
+    for gone, nows in sorted(to.items()):
+        nows = sorted(nows)
+        for table in ("highlighted", "scores"):
+            if table not in tables:
+                continue
+            rows = con.execute(f"SELECT * FROM main.{table} WHERE posting_id=?", (gone,)).fetchall()
+            for row in rows:
+                for now in nows:
+                    con.execute(f"INSERT OR IGNORE INTO main.{table} VALUES ({','.join('?' * len(row))})", (now, *row[1:]))
+            moved[table] += con.execute(f"DELETE FROM main.{table} WHERE posting_id=?", (gone,)).rowcount
+        for table in ("daily_list", "coverage_samples"):
+            if table in tables:
+                moved[table] += con.execute(f"UPDATE main.{table} SET posting_id=? WHERE posting_id=?",
+                                            (nows[0], gone)).rowcount
+    return {k: v for k, v in moved.items() if v}
+
+
 def rebuild(cfg, log=print):
     """Rebuild the state database from every raw day after a parser or matching change, with no
     network. Replays all of raw/ in date and run order into a new database, carries over what
-    replay can't reproduce (ETags, source state, run history, scores, lists, what was shown), backs up the current database next
+    replay can't reproduce (ETags, source state, run history, scores, lists, what was shown; rows of
+    a posting the rebuild merged away move to its new posting: remap_carried), backs up the current database next
     to it, and copies the rebuilt one over it. Only as complete as the raw store (60 days)."""
     import sqlite3
     live = state_path(cfg)
@@ -263,7 +298,7 @@ def rebuild(cfg, log=print):
         log(f"rebuild: {d} ({len(out['runs'])} runs)")
     JobsStore(tmp).close()                       # an empty raw store still gets a migrated database
     new = sqlite3.connect(tmp)
-    backup_name = None
+    backup_name, moved = None, {}
     if live.exists():
         new.execute("ATTACH DATABASE ? AS old", (str(live),))
         old_tables = {r[0] for r in new.execute("SELECT name FROM old.sqlite_master WHERE type='table'")}
@@ -273,6 +308,9 @@ def rebuild(cfg, log=print):
             keep_version = " WHERE key != 'schema_version'" if name == "meta" else ""   # the new file's own version stays
             new.execute(f"DELETE FROM main.{name}{keep_version}")
             new.execute(f"INSERT INTO main.{name} SELECT * FROM old.{name}{keep_version}")
+        moved = remap_carried(new)
+        if moved:
+            log(f"rebuild: rows moved to the postings their listings now belong to: {moved}")
         new.commit()
         new.execute("DETACH DATABASE old")
         backup_name = f"jobs.before-rebuild-{stamp}.sqlite"
@@ -284,4 +322,4 @@ def rebuild(cfg, log=print):
     target.close()
     new.close()
     tmp.unlink()
-    return {"dates": dates, "totals": dict(totals), "backup": backup_name}
+    return {"dates": dates, "totals": dict(totals), "backup": backup_name, "moved": moved}

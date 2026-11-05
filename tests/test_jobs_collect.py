@@ -543,3 +543,128 @@ def test_describe_targets_and_store(store, tmp_path):
     pid = store.find_key("job:greenhouse:1")
     assert store.one("SELECT text FROM posting_text WHERE posting_id=?", (pid,))[0] == "Python and SQL"
     assert describe_mod.targets(store, prof, datetime(2026, 11, 4, 12, tzinfo=timezone.utc)) == []    # described now
+
+
+def test_describe_facts_carry_the_board_country():
+    d = REGISTRY["describe"]
+    wd = rec({"jobPostingInfo": {"jobDescription": "<p>x</p>", "timeType": "Full time", "location": "Berkeley Square House London",
+                                 "country": {"descriptor": "United Kingdom"}}},
+             meta={"system": "workday", "board": "workday:bx|wd1|Campus", "wanted": ["workday:bx/45667"]})
+    (_, _, facts), = d.texts(wd, src(id="describe"))
+    assert facts == {"employment": "Full time", "board_country": "United Kingdom", "board_more_places": False}
+    lever = rec({"id": "0f1e2d3c-1111-2222-3333-444455556666", "text": "SWE", "country": "GB",
+                 "categories": {"location": "London", "allLocations": ["London"]}},
+                meta={"system": "lever", "board": "lever:acme", "wanted": ["lever:0f1e2d3c-1111-2222-3333-444455556666"]})
+    (_, _, facts), = d.texts(lever, src(id="describe"))
+    assert facts["board_country"] == "GB" and facts["board_more_places"] is False
+    u = "0f1e2d3c-1111-2222-3333-444455556666"
+    ashby = rec({"jobs": [{"id": u, "title": "SWE", "location": "NYC", "secondaryLocations": [{"location": "SF"}],
+                           "address": {"postalAddress": {"addressCountry": "United States"}}}]},
+                meta={"system": "ashby", "board": "ashby:acme", "wanted": [f"ashby:{u}"]})
+    (_, _, facts), = d.texts(ashby, src(id="describe"))
+    assert facts["board_country"] == "United States" and facts["board_more_places"] is True
+    gh = rec({"id": 1, "title": "SWE", "content": "x"}, meta={"system": "greenhouse", "board": "greenhouse:a", "wanted": ["greenhouse:1"]})
+    (_, _, facts), = d.texts(gh, src(id="describe"))
+    assert "board_country" not in facts                                                 # Greenhouse names no country
+
+
+# ---------------------------------------- F2 (11-05): copies find their job when nothing else matched
+
+E = frozenset({"simplify-newgrad", "vanshb03-newgrad", "jobright-newgrad"})
+
+
+def _put(store, source_id, listings):
+    with store.transaction():
+        return build.apply(store, src(id=source_id), FakeAdapter({0: listings}), [rec("{}", fetched_at=AT)], ["r"],
+                           early_sources=E)
+
+
+def test_the_palantir_copies_merge(store):
+    q = "Software Engineer New Grad - Query Engines"
+    _put(store, "simplify-newgrad", [
+        it("s1", title=q, company="Palantir", locations=("London, UK",), job_key="job:lever:aaaa"),
+        it("s2", title=q, company="Palantir", locations=("NYC",), job_key="job:lever:bbbb")])        # same title: key taken
+    nyc = store.find_key("job:lever:bbbb")
+    c = _put(store, "vanshb03-newgrad", [it("v1", title="Software Engineer, Query Engines", company="Palantir")])
+    assert c["merged"] == 1
+    c = _put(store, "jobright-newgrad", [it("j1", title="Software Engineer, New Grad - Query Engines",
+                                           company="Palantir Technologies", locations=("New York, NY, United States",))])
+    assert c["merged"] == 1
+    assert store.one("SELECT COUNT(*) FROM postings")[0] == 2
+    assert store.posting_sources(nyc) == {"simplify-newgrad", "vanshb03-newgrad", "jobright-newgrad"}
+
+
+def test_an_existing_merge_is_unchanged_by_the_fallback(store):
+    _put(store, "simplify-newgrad", [
+        it("s1", title="AI Engineer, New Grad", company="Zed", locations=("NYC",), job_key="job:lever:aaaa"),
+        it("s2", title="AI Engineer, New Grad", company="Zed", locations=("NYC",), job_key="job:lever:bbbb")])  # a repost
+    first = store.find_key("job:lever:aaaa")
+    _put(store, "vanshb03-newgrad", [it("v1", title="New Grad: AI Engineer", company="Zed")])
+    assert "vanshb03-newgrad" in store.posting_sources(first)          # the visible posting, as before the fix
+
+
+def test_two_hidden_candidates_mean_no_merge(store):
+    _put(store, "simplify-newgrad", [
+        it("s0", title="AI Engineer, New Grad", company="Zed", locations=("London, UK",), job_key="job:lever:aaaa"),
+        it("s1", title="AI Engineer, New Grad", company="Zed", locations=("NYC",), job_key="job:lever:bbbb"),
+        it("s2", title="AI Engineer, New Grad", company="Zed", locations=("NYC",), job_key="job:lever:cccc")])
+    c = _put(store, "vanshb03-newgrad", [it("v1", title="New Grad: AI Engineer", company="Zed")])
+    assert c["postings_new"] == 1 and store.one("SELECT COUNT(*) FROM postings")[0] == 4
+
+
+def test_name_variants_need_the_same_job(store):
+    _put(store, "simplify-newgrad", [it("s1", title="Data Analyst, New Grad", company="Apex Group", job_key="job:lever:aaaa")])
+    c = _put(store, "vanshb03-newgrad", [it("v1", title="New Grad: Software Engineer", company="Apex Technologies")])
+    assert c["postings_new"] == 1                                         # another role: no merge
+    c = _put(store, "jobright-newgrad", [it("j1", title="New Grad Data Analyst", company="Apex Technologies Inc")])
+    assert c["merged"] == 1 and "jobright-newgrad" in store.posting_sources(store.find_key("job:lever:aaaa"))
+    assert items.company_short("palantir technologies") == "palantir" and items.company_short("group") == "group"
+
+
+# --------------------------------- F2b (11-05): a rebuild moves rows of postings it merged away
+
+def test_remap_carried_moves_shown_and_scored_rows(tmp_path):
+    from debrief.jobs import collect as coll
+    old_p, new_p = tmp_path / "old.sqlite", tmp_path / "new.sqlite"
+    for p in (old_p, new_p):
+        JobsStore(p).close()
+    item = "INSERT INTO items VALUES (?,?,'',?,?,?,1,'h','r','{}')"
+    post = "INSERT INTO postings VALUES (?,'A','t','[]',NULL,NULL,NULL,?,?,NULL,'{}')"
+    o = sqlite3.connect(old_p)
+    o.executemany(item, [("s", "copy", "p:copy", AT, AT), ("s", "main", "p:main", AT, AT), ("s", "same", "p:same", AT, AT)])
+    o.commit(); o.close()
+    n = sqlite3.connect(new_p)
+    n.executemany(post, [("p:main", AT, AT), ("p:same", AT, AT)])
+    n.executemany(item, [("s", "copy", "p:main", AT, AT), ("s", "main", "p:main", AT, AT), ("s", "same", "p:same", AT, AT)])
+    score = "INSERT INTO scores VALUES (?,?,'run','2026-11-05T00:00:00Z',?,1,'why','[]','m','v')"
+    n.executemany(score, [("p:copy", "prof", 7), ("p:main", "prof", 5), ("p:copy", "other", 6), ("p:same", "prof", 4)])
+    n.executemany("INSERT INTO highlighted VALUES (?,?,?,?)", [("p:copy", "2026-11-05", "c1", "catchup"),
+                                                              ("p:same", "2026-11-05", "c1", "catchup")])
+    n.execute("ATTACH DATABASE ? AS old", (str(old_p),))
+    moved = coll.remap_carried(n)
+    assert moved == {"highlighted": 1, "scores": 2}
+    assert n.execute("SELECT posting_id FROM highlighted ORDER BY 1").fetchall() == [("p:main",), ("p:same",)]
+    scores = dict(((p, prof), s) for p, prof, s in n.execute("SELECT posting_id, profile_id, score FROM scores"))
+    assert scores == {("p:main", "prof"): 5, ("p:main", "other"): 6, ("p:same", "prof"): 4}   # its own answer wins
+    n.close()
+
+
+def test_the_fallback_refuses_a_source_listing_the_same_job_twice(store):
+    _put(store, "simplify-newgrad", [
+        it("s0", title="Software Development Engineer", company="Amazon", locations=("Seattle, WA",), job_key="job:x:1"),
+        it("s1", title="Software Development Engineer", company="Amazon", locations=("Newark, NJ",), job_key="job:x:2")])
+    c = _put(store, "jobright-newgrad", [
+        it("j1", title="Software Development Engineer", company="Amazon", locations=("Newark, NJ, United States",)),
+        it("j2", title="Software Development Engineer", company="Amazon", locations=("Newark, NJ, United States",))])
+    assert c["postings_new"] == 2 and c.get("merged", 0) == 0      # two postings of their own, exactly as before the fix
+    assert "jobright-newgrad" not in store.posting_sources(store.find_key("job:x:2"))
+
+
+def test_the_same_title_in_two_cities_is_not_ambiguous(store):
+    t = "Machine Learning Engineer Graduate - E-Commerce Video"
+    _put(store, "simplify-newgrad", [
+        it("s0", title=t, company="TikTok", locations=("Seattle, WA",), job_key="job:x:1"),
+        it("s1", title=t, company="TikTok", locations=("San Jose, CA",), job_key="job:x:2")])   # hidden behind s0's key
+    c = _put(store, "speedyapply-ai", [it("a1", title=t + " - 2027 Start", company="TikTok", locations=("San Jose, CA",)),
+                                       it("a2", title=t + " - 2027 Start", company="TikTok", locations=("Seattle, WA",))])
+    assert c["merged"] == 2 and c.get("postings_new", 0) == 0
