@@ -333,6 +333,46 @@ def job_from_url(url):
     return None
 
 
+# A company's words that a Greenhouse board name often leaves off, or shortens.
+_GENERIC_TAIL = {"inc", "llc", "ltd", "corp", "corporation", "co", "company", "systems", "technology",
+                 "technologies", "labs", "ai", "group", "holdings"}
+_SHORTER = {"technology": "tech", "technologies": "tech"}
+_HOST_SKIP = {"www", "careers", "jobs", "job", "apply", "greenhouse", "co", "com"}
+
+
+def greenhouse_guesses(company, url=None, most=4):
+    """Board names to try for a job that carries a Greenhouse id ("?gh_jid=") on a company page
+    whose board we don't know: the company's words joined ("sambanovasystems"), without generic
+    last words ("sambanova"), with "technology" shortened ("bluerivertech"), and the page's own
+    domain name ("precisely" from www.precisely.com). Only the board's API answering for that
+    exact job id proves a guess: Greenhouse job ids are global."""
+    words = re.findall(r"[a-z0-9]+", re.sub(r"['’]", "", (company or "").lower()))
+    out = []
+
+    def add(name):
+        if name and name not in out:
+            out.append(name)
+
+    if words:
+        add("".join(words))
+        core = list(words)
+        while len(core) > 1 and core[-1] in _GENERIC_TAIL:
+            core.pop()
+        add("".join(core))
+        add("".join(_SHORTER.get(w, w) for w in words))
+    try:
+        labels = [x for x in (urlsplit(url or "").hostname or "").lower().split(".") if x]
+    except ValueError:
+        labels = []
+    if len(labels) >= 2:
+        label = labels[-2]
+        if label in ("co", "com") and len(labels) >= 3:      # careers.acme.co.uk
+            label = labels[-3]
+        if label not in _HOST_SKIP:
+            add(re.sub(r"[^a-z0-9]", "", label))
+    return out[:most]
+
+
 def job_page(url):
     """A job board's application-form link turned into the job's own page, where the page is the
     same URL without the form's suffix:

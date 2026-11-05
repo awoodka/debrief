@@ -2,7 +2,7 @@
 
 fetch() picks the open postings that pass every filter that doesn't need a description
 (filters.check with no text), have no description yet, and carry a job-board id whose board we
-know. It asks the job board's own public API for each:
+know, or a Greenhouse id whose board we don't (below). It asks the job board's own public API for each:
   Greenhouse, Lever   one request per job
   Workday             the job's cxs page (one request per job)
   Ashby, Workable,    the board's list, once per board, for all of that board's wanted jobs
@@ -11,6 +11,13 @@ SmartRecruiters is never asked (its robots.txt allows only LinkedInBot). Company
 aggregators are never fetched. Every request goes through the context, so robots.txt is checked
 and the response is kept raw; texts() reads a record back with no network, so replay rebuilds
 the same descriptions.
+
+A Greenhouse id from a company page ("sambanova.ai/...?gh_jid=6240725004") names the job but not
+its board. For those, up to 4 board names (boards.greenhouse_guesses) are tried against the board
+API's page for that exact job, stopping at the first that answers: Greenhouse job ids are global,
+so an answer proves the board. A found board is reused for the company's other jobs that night,
+and directory() files it in the board directory, so later nights know it. A guess that 404s is
+never asked again (the refused set).
 """
 import json
 from datetime import datetime, timezone
@@ -57,6 +64,7 @@ def targets(store, profile, now):
         p = store.posting(r["posting_id"])
         if not filters.check(p, profile, now, skip=("level",)).ok:      # the description may show the level
             continue
+        guess = None
         for key in sorted(store.job_keys(p["posting_id"])):
             jk = key.removeprefix("job:")
             system = jk.split(":", 1)[0]
@@ -66,7 +74,16 @@ def targets(store, profile, now):
             if board:
                 out.append((system, board, jk, p))
                 break
+            if system == "greenhouse" and guess is None:
+                guess = (system, None, jk, p)          # board unknown: fetch() guesses it
+        else:
+            if guess:
+                out.append(guess)
     return out
+
+
+def _gh_url(board_name, job_id):
+    return f"https://boards-api.greenhouse.io/v1/boards/{board_name}/jobs/{job_id}?pay_transparency=true"
 
 
 class Describe(Adapter):
@@ -87,10 +104,11 @@ class Describe(Adapter):
         def get(url, **kw):
             nonlocal n
             if url in refused:                      # asked before and refused or gone: don't ask again
-                return
-            ctx.get(source, url, conditional=False, **kw)
+                return None
             n += 1
+            return ctx.get(source, url, conditional=False, **kw)
 
+        guessed = {}                                # company -> the Greenhouse board found tonight, or None
         for system, board, jk, p in targets(ctx.store, ctx.profile, now):
             if system in PER_BOARD:
                 per_board.setdefault(board, []).append(jk)
@@ -98,12 +116,14 @@ class Describe(Adapter):
             if n >= cap:
                 ctx.warn(f"stopped at {cap} requests; the rest wait for the next run")
                 break
-            b = boards.split(board)[1]
             job_id = jk.split(":", 1)[1]
+            if board is None:                       # a Greenhouse id, its board unknown
+                self._guess(ctx, get, p, jk, job_id, guessed, lambda: n >= cap)
+                continue
+            b = boards.split(board)[1]
             meta = {"system": system, "board": board, "wanted": [jk]}
             if system == "greenhouse":
-                get(f"https://boards-api.greenhouse.io/v1/boards/{b}/jobs/{job_id}?pay_transparency=true",
-                    each=board, meta=meta)
+                get(_gh_url(b, job_id), each=board, meta=meta)
             elif system == "lever":
                 get(f"https://api.lever.co/v0/postings/{b}/{job_id}?mode=json", each=board, meta=meta)
             else:                                   # workday
@@ -121,7 +141,35 @@ class Describe(Adapter):
             _, url, _ = boards.list_request(board, full=True)
             get(url, each=board, meta={"system": boards.split(board)[0], "board": board, "wanted": sorted(wanted)})
 
+    @staticmethod
+    def _guess(ctx, get, p, jk, job_id, guessed, over_cap):
+        company = company_norm(p["company"])
+        meta = {"system": "greenhouse", "wanted": [jk], "company": p["company"], "guessed": True}
+        if company in guessed:                      # tried tonight for another of its jobs
+            if guessed[company]:
+                get(_gh_url(boards.split(guessed[company])[1], job_id), each=guessed[company],
+                    meta={**meta, "board": guessed[company]})
+            return
+        urls = [p.get("url")] + [r["url"] for r in ctx.store.posting_links(p["posting_id"])]
+        page = next((u for u in urls if u and boards.job_from_url(u) == jk), None)
+        guessed[company] = None
+        for name in boards.greenhouse_guesses(p["company"], page):
+            if over_cap():
+                return
+            board = boards.key("greenhouse", name)
+            rec = get(_gh_url(name, job_id), each=board, meta={**meta, "board": board})
+            if rec is not None and raw.ok(rec):
+                guessed[company] = board
+                return
+
     def parse(self, record, source):
+        return []
+
+    def directory(self, record, source):
+        """A Greenhouse board found by guessing, under the company's name."""
+        meta = record.get("meta") or {}
+        if meta.get("guessed") and meta.get("company") and meta.get("board") and raw.ok(record):
+            return [(meta["board"], meta["company"])]
         return []
 
     def texts(self, record, source):

@@ -741,5 +741,26 @@ years ("2–3 years"). The model refused some of these, and the profile's `max_y
 - Tried on a copy: of 196 jobs scored without a description, 11 gained one and 24 were revealed as
   old reposts (cut by the 14-day age filter). Top 20 with descriptions: 7 -> 9.
 - Going live needs one `jobs collect --rebuild` on live data so the new merges apply.
-- Open: Raydar (966 near-identical Workable postings) twice in the top 20; 6 old reposts left there
-  (no board known); SambaNova has a gh_jid but no description.
+- On the copy, 6 of the 11-04 top 20 (Whatnot, Ambral, Human Interest, Strada, SuperApp, Hyphenate)
+  dropped out: each merged with its July–September Simplify twin and the age filter cut it. (An
+  earlier version of this note had them as still in the list; that was a misreading.)
+- Open then: Raydar twice in the top 20; SambaNova scored on its title alone. Both fixed below.
+
+## Two list fixes (Alex, 2026-11-05)
+- **Raydar is blocklisted** (profile v5, `filters.blocklist`). It's a recruiting agency: its
+  listings say "Raydar is recruiting for this role on behalf of our client" and don't name the
+  company. It had 38 open roles, 31 from Simplify's new-grad list, mostly scored 7–9.
+- **At most 2 jobs per company in the list** (profile v5, `ranking.per_company: 2`; optional, no
+  limit when missing). A company's groups past the first 2 are cut as "company limit" wherever they
+  rank, so they never take a slot; its last entry shows "also kept at <company>: N more", and
+  `jobs today --all` lists them. The watchlist section is unchanged. (SambaNova alone has 8
+  new-grad roles open.)
+- **Greenhouse boards for "?gh_jid=" jobs** (describe): a company page's Greenhouse id names the
+  job but not its board, so describe couldn't ask for the description. Now it tries up to 4 board
+  names (`boards.greenhouse_guesses`: the name's words joined, without a generic last word,
+  "technology" as "tech", the page's domain name) against `boards-api.greenhouse.io/v1/boards/<name>/
+  jobs/<id>`. An answer proves the board, because Greenhouse job ids are global; a 404 is never
+  asked again. A found board is reused that night and goes in the board directory. Checked live:
+  SambaNova Systems is `sambanovasystems` and Blue River Technology is `bluerivertech`; Precisely
+  isn't found. `boards.greenhouse.io/embed/` stays off (robots.txt). On 11-05 four jobs that pass
+  the filters were in this state.

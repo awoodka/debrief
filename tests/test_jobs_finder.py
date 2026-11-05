@@ -1,11 +1,12 @@
 """The board finder (src/debrief/jobs/adapters/finder.py): the match rule, a night end to end
 (found job -> job id, the company's link, a description; the list still decides closing), the
-fetch-history rules that keep it from asking twice, and the markdown fixes found with it."""
+fetch-history rules that keep it from asking twice, and the markdown fixes found with it. Also
+describe's board guess for "?gh_jid=" jobs (src/debrief/jobs/adapters/describe.py)."""
 import json
 from datetime import datetime, timedelta, timezone
 
 from debrief.http import Fetched
-from debrief.jobs import build, collect, items
+from debrief.jobs import boards, build, collect, items
 from debrief.jobs.adapters import finder
 from debrief.jobs.adapters.lists import _cells, _links, _text
 from debrief.jobs.store import JobsStore, state_path
@@ -224,3 +225,81 @@ def test_markdown_cells_keep_pipes_and_brackets_inside_links():
     assert _links(cells[1]) == ["https://jobright.ai/jobs/info/1"]
     assert _cells("| A \\| B | Eng |") == ["A | B", "Eng"]
     assert _cells("| Acme | Unbalanced [ title | NYC |") == ["Acme", "Unbalanced [ title", "NYC"]
+
+
+# ----------------------------------------------------- describe: the Greenhouse board for ?gh_jid= jobs
+
+def test_greenhouse_guesses():
+    g = boards.greenhouse_guesses
+    assert g("SambaNova Systems", "https://sambanova.ai/sambanova-available-positions/?gh_jid=6240725004") == \
+        ["sambanovasystems", "sambanova"]
+    assert g("Blue River Technology", "https://www.bluerivertechnology.com/job/?gh_jid=8337794") == \
+        ["bluerivertechnology", "blueriver", "bluerivertech"]
+    assert g("Precisely", "https://www.precisely.com/careers-and-culture/us-jobs/job/4750854005?gh_jid=4750854005") == \
+        ["precisely"]
+    assert g("Acme AI Labs", "https://careers.acme-corp.co.uk/?gh_jid=1") == ["acmeailabs", "acme", "acmecorp"]
+    assert g("Ben & Jerry\u2019s", None) == ["benjerrys"]
+    assert g("", None) == []
+
+
+GH = "https://boards-api.greenhouse.io/v1/boards/{}/jobs/{}?pay_transparency=true"
+
+
+def _describe_night(cfg, store, client):
+    source = next(s for s in cfg.sources if s.id == "describe")
+    from debrief.jobs import profile
+    _, prof = profile.latest(cfg)
+    NIGHTS.append(f"run-describe-{len(NIGHTS)}")
+    return collect.collect_source(cfg, store, client, source, NIGHTS[-1], "2026-11-05", datetime.now(timezone.utc),
+                                  prof, {}, lambda *a, **k: None)
+
+
+def test_describe_guesses_the_greenhouse_board_once(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path, monkeypatch, {"describe", "simplify-newgrad"})
+    s = JobsStore(state_path(cfg))
+    br = "https://www.bluerivertechnology.com/job/?gh_jid={}"
+    _list(s, [it("s1", title="Software Engineer", company="Blue River Technology", url=br.format(11)),
+              it("s2", title="Software Engineer, New Grad", company="Blue River Technology", url=br.format(12)),
+              it("s3", title="Software Engineer", company="Precisely", url="https://www.precisely.com/job/13?gh_jid=13")],
+          _iso(datetime.now(timezone.utc) - timedelta(hours=1)), source_id="simplify-newgrad", snapshot="window")
+    client = BoardClient({GH.format("bluerivertech", 11): {"id": 11, "title": "Software Engineer", "content": "Cameras"},
+                          GH.format("bluerivertech", 12): {"id": 12, "title": "Software Engineer, New Grad", "content": "CI"}})
+    out = _describe_night(cfg, s, client)
+    assert out["status"] == "ok"
+    asked = [c[1] for c in client.calls]
+    assert len(asked) == 5 and sorted(asked).count(GH.format("precisely", 13)) == 1
+    assert {GH.format("bluerivertech", 11), GH.format("bluerivertech", 12)} <= set(asked)
+    assert sum("/bluerivertechnology/" in u or "/blueriver/" in u for u in asked) == 2      # guessed for one job only
+    assert s.texts_for(s.find_key("job:greenhouse:11")) == "Cameras"
+    assert s.texts_for(s.find_key("job:greenhouse:12")) == "CI"
+    assert [r["board"] for r in s.directory_by_name(items.company_norm("Blue River Technology"))] == ["greenhouse:bluerivertech"]
+    assert s.directory_by_name(items.company_norm("Precisely")) == []
+
+    # The next night: Blue River is described, and Precisely's 404 isn't asked again.
+    client.calls.clear()
+    _describe_night(cfg, s, client)
+    assert client.calls == []
+
+    # A new Blue River job: its board is in the directory now, so one request and no guessing.
+    _list(s, [it("s4", title="Software Engineer, Cameras", company="Blue River Technology", url=br.format(14))],
+          _iso(datetime.now(timezone.utc)), source_id="simplify-newgrad", snapshot="window")
+    client.pages[GH.format("bluerivertech", 14)] = {"id": 14, "title": "Software Engineer, Cameras", "content": "Optics"}
+    _describe_night(cfg, s, client)
+    assert client.calls == [("GET", GH.format("bluerivertech", 14))]
+    s.close()
+
+
+def test_a_known_board_beats_a_greenhouse_guess(tmp_path):
+    from debrief.jobs.adapters import describe
+    from test_jobs_collect import BASE
+    s = JobsStore(tmp_path / "j.sqlite")
+    _list(s, [it("s1", title="Software Engineer", company="Acme", url="https://acme.com/jobs?gh_jid=5",
+                 job_key="job:greenhouse:5")], _iso(datetime.now(timezone.utc)), source_id="simplify-newgrad",
+          snapshot="window")
+    found = describe.targets(s, json.loads(json.dumps(BASE)), datetime.now(timezone.utc))
+    assert [(sy, b, k) for sy, b, k, _ in found] == [("greenhouse", None, "greenhouse:5")]      # to guess
+    with s.transaction():
+        s.save_directory("greenhouse:acme", "Acme", "acme", "universe", _iso(datetime.now(timezone.utc)))
+    found = describe.targets(s, json.loads(json.dumps(BASE)), datetime.now(timezone.utc))
+    assert [(sy, b, k) for sy, b, k, _ in found] == [("greenhouse", "greenhouse:acme", "greenhouse:5")]
+    s.close()

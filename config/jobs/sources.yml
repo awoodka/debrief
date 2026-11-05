@@ -373,7 +373,9 @@
   adapter: describe
   options: {max_requests: 300}
   notes: runs last; only open jobs that pass the profile's filters and have no description; Greenhouse, Lever and
-    Workday per job, Ashby, Workable and Recruitee per board; never company sites or aggregators
+    Workday per job, Ashby, Workable and Recruitee per board; never company sites or aggregators. A Greenhouse id
+    from a company page (?gh_jid=) with no known board gets up to 4 guessed board names, proved by the API answering
+    for that exact job; a found board goes in the directory
 
 # ----------------------------------------------------------------------- the alert inbox (Gmail)
 - id: alert-inbox

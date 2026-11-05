@@ -181,3 +181,40 @@ def test_money_is_taken_out():
     assert score.no_pay("The base salary range is $120,000 - $150,000 per year.") == "The base salary range is [pay]."
     assert score.no_pay("Pay: $40/hr. Python, C++.") == "Pay: [pay]. Python, C++."
     assert "$" not in score.qualifications("Requirements: Python. Compensation $180K–$220K + equity.", 600)
+
+
+def test_place_limits_jobs_per_company():
+    def g(pid, company):
+        return (({"posting_id": pid, "title": f"Role {pid}", "company": company}, 50, {"score": 8}), [])
+    groups = [g("1", "Raydar"), g("2", "Raydar Inc."), g("3", "Raydar"), g("4", "Beta"), g("5", "Gamma"), g("6", "Raydar")]
+    placed = rank.place(groups, top_n=3, per_company=2)
+    assert [(x[0][0]["posting_id"], where) for x, where in placed] == [
+        ("1", "new"), ("2", "new"), ("3", "company limit"), ("4", "new"), ("5", "beyond N"), ("6", "company limit")]
+    assert [w for _, w in rank.place(groups, top_n=3)] == ["new"] * 3 + ["beyond N"] * 3       # no limit set
+
+
+def test_score_run_company_limit(tmp_path):
+    c = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
+    prof = copy.deepcopy(BASE)
+    prof["position_types"] = [{"name": "SWE", "titles": ["software engineer", "ai engineer"]}]
+    prof["ranking"] = {"threshold": 0, "max_candidates": 10, "top_n": 2, "per_company": 1}
+    profile.save(c, prof)
+    store = JobsStore(state_path(c))
+    with store.transaction():
+        build.apply(store, src(id="simplify-newgrad"), FakeAdapter({0: [
+            it("a", title="AI Engineer, New Grad", company="Zed"),                    # 9
+            it("b", title="AI Software Engineer, New Grad", company="Zed"),           # 9, but Zed has its one
+            it("c", title="Software Engineer I", company="Beta")]}),                  # 5: takes the second slot
+            [rec("{}", fetched_at="2026-11-04T08:00:00Z")], ["r"])
+    store.close()
+    rep = rank.run(c, run_date="2026-11-04", runner=Runner(), now=NOW, log=lambda *a: None)
+    new = rep["list"]["new"]
+    assert [(e["company"], e["title"], e["more"]) for e in new] == [("Zed", "AI Engineer, New Grad", 1),
+                                                                   ("Beta", "Software Engineer I", 0)]
+    held, = [x for x in rep["cuts"] if x["stage"] == "company limit"]
+    assert held["title"] == "AI Software Engineer, New Grad" and "Zed already has 1" in held["reason"]
+    out = rank.today(c)
+    assert "also kept at Zed: 1 more (jobs today --all)" in out
+    assert "AI Software Engineer, New Grad" not in out
+    assert "AI Software Engineer, New Grad" in rank.today(c, show_all=True)
+    assert "also kept at Zed: 1 more" in (c.data_dir / "runs" / "2026-11-04" / f"{rep['run_id']}.md").read_text()

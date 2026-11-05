@@ -10,8 +10,9 @@
 4. The scoring call (score.py), only for jobs with no answer for this profile version, in chunks of
    score.chunk_size. If it fails, the list is ranked by points and the cursor stays put, so the next
    run asks again.
-5. The list: kept jobs by score (ties: points, newest, id), top ranking.top_n as "new", and every
-   kept watchlist job as "watchlist". Saved in daily_list. The report, runs/<date>/score-<run>.json
+5. The list: kept jobs by score (ties: points, newest, id), top ranking.top_n as "new", with at
+   most ranking.per_company from one company (the rest are cut as "company limit" and counted
+   under that company's last entry), and every kept watchlist job as "watchlist". Saved in daily_list. The report, runs/<date>/score-<run>.json
    and .md, has every cut with its stage and reason.
 """
 import json
@@ -111,17 +112,25 @@ def run(cfg, run_date=None, no_cap=False, dry_run=False, runner=run_claude, now=
                                                                                     or x[0].get("first_seen_at")),
                              x[0]["posting_id"]))
     groups = collapse(kept)
-    top_n = prof["ranking"]["top_n"]
-    new = groups[:top_n]
-    for (p, pts, a), _ in groups[top_n:]:
-        report["cuts"].append(_cut(p, "beyond N", f"kept, ranked below the top {top_n}", pts, a["score"] if a else None))
+    top_n, per_company = prof["ranking"]["top_n"], prof["ranking"].get("per_company")
+    placed = place(groups, top_n, per_company)
+    new = [g for g, where in placed if where == "new"]
+    for ((p, pts, a), _), where in placed:
+        if where == "beyond N":
+            report["cuts"].append(_cut(p, where, f"kept, ranked below the top {top_n}", pts, a["score"] if a else None))
+        elif where == "company limit":
+            report["cuts"].append(_cut(p, where, f"kept; {p['company']} already has {per_company} in the list", pts,
+                                       a["score"] if a else None))
+    held = Counter(company_norm(g[0][0]["company"]) for g, where in placed if where == "company limit")
+    last = {company_norm(g[0][0]["company"]): i for i, g in enumerate(new)}
     for (p0, *_), same in groups:
         for p, pts, a in same:
             report["cuts"].append(_cut(p, "same job", f"shown with {p0['posting_id']} ({p0['title']})", pts,
                                        a["score"] if a else None))
     watch = [g for g in groups if prescore.watched(g[0][0], prof)]
     report["kept"], report["kept_distinct"], report["not_kept"] = len(kept), len(groups), len(not_kept)
-    report["list"] = {"new": [_entry(i + 1, *g[0], also=g[1]) for i, g in enumerate(new)],
+    report["list"] = {"new": [_entry(i + 1, *g[0], also=g[1], more=held[c] if last[c] == i else 0)
+                              for i, g in enumerate(new) for c in [company_norm(g[0][0]["company"])]],
                       "watchlist": [_entry(i + 1, *g[0], also=g[1]) for i, g in enumerate(watch)]}
     report["status"] = status
     report["stages"] = dict(Counter(c["stage"] for c in report["cuts"]))
@@ -192,6 +201,24 @@ def collapse(kept):
     return [groups[k] for k in order]
 
 
+def place(groups, top_n, per_company=None):
+    """[(group, "new" | "company limit" | "beyond N")] in rank order. A company's groups past the
+    first per_company are "company limit" wherever they rank, so they never take a slot and all
+    count as that company's "more"; the rest fill the list up to top_n. No per_company: no limit."""
+    out, shown, n = [], Counter(), 0
+    for g in groups:
+        c = company_norm(g[0][0]["company"])
+        if per_company and shown[c] >= per_company:
+            out.append((g, "company limit"))
+        elif n < top_n:
+            out.append((g, "new"))
+            shown[c] += 1
+            n += 1
+        else:
+            out.append((g, "beyond N"))
+    return out
+
+
 def _cut(p, stage, reason, points=None, score_=None):
     out = {"posting_id": p["posting_id"], "company": p["company"], "title": p["title"], "stage": stage,
            "reason": reason}
@@ -202,11 +229,13 @@ def _cut(p, stage, reason, points=None, score_=None):
     return out
 
 
-def _entry(rank, p, pts, a, also=()):
+def _entry(rank, p, pts, a, also=(), more=0):
+    """more: the company's jobs held back by ranking.per_company (on its last entry only)."""
     return {"rank": rank, "posting_id": p["posting_id"], "company": p["company"], "title": p["title"],
             "locations": p["locations"], "url": p["url"], "points": pts, "score": a["score"] if a else None,
             "why": a["why"] if a else None, "mismatches": a["mismatches"] if a else [],
-            "also": [{"posting_id": q["posting_id"], "title": q["title"], "url": q["url"]} for q, *_ in also]}
+            "also": [{"posting_id": q["posting_id"], "title": q["title"], "url": q["url"]} for q, *_ in also],
+            "more": more}
 
 
 # ------------------------------------------------------------------------------------- reports
@@ -232,6 +261,8 @@ def render_report(r):
                      f"({'; '.join(e['locations'][:2])}) · {e['points']} pts · {e['url'] or ''}")
             if e["why"]:
                 L.append(f"   {e['why']}")
+            if e.get("more"):
+                L.append(f"   also kept at {e['company']}: {e['more']} more (company limit)")
         if not r["list"][name]:
             L.append("(none)")
     detail = [c for c in r["cuts"] if c["stage"] not in BIG_STAGES]
@@ -262,7 +293,7 @@ def today(cfg, list_date=None, show_all=False):
     entries = report.get("list", {})
     sections = [("new", "New"), ("watchlist", "Watchlist")]
     if show_all:
-        allkept = [c for c in report.get("cuts", []) if c["stage"] == "beyond N"]
+        allkept = [c for c in report.get("cuts", []) if c["stage"] in ("beyond N", "company limit")]
         sections.append(("beyond", f"Also kept ({len(allkept)})"))
         entries = {**entries, "beyond": [{"rank": i + 1, **c, "locations": [], "url": store.posting(c["posting_id"])["url"],
                                           "why": None, "mismatches": []} for i, c in enumerate(allkept)]}
@@ -288,5 +319,7 @@ def today(cfg, list_date=None, show_all=False):
                 L.append(f"       {e['url']}")
             for o in e.get("also") or []:
                 L.append(f"       also listed as \"{o['title']}\": {o['url']}")
+            if e.get("more"):
+                L.append(f"       also kept at {e['company']}: {e['more']} more (jobs today --all)")
     store.close()
     return "\n".join(L)
