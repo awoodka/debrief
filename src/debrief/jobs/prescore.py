@@ -65,22 +65,24 @@ def watched(posting, profile):
     return company_norm(posting["company"]) in names
 
 
-def select(scored, profile, cap=None):
+def select(scored, profile, cap=None, first=frozenset()):
     """Split [(posting, points, ...)] into (sent, cut) by the profile's ranking: watchlist companies
-    first and past the threshold, then the rest by points (ties: newest, then id), up to the cap
-    (ranking.max_candidates unless `cap` is given; cap=0 means no cap). cut items carry their reason."""
+    first and past the threshold, then the postings in `first` (tonight's new ones), then the rest,
+    each by points (ties: newest, then id), up to the cap (ranking.max_candidates unless `cap` is
+    given; cap=0 means no cap; a negative cap means none left). cut items carry their reason."""
     r = profile["ranking"]
     cap = r["max_candidates"] if cap is None else cap
     def key(x):
         p, pts = x[0], x[1]
-        return (not watched(p, profile), -pts, -(_ts(p.get("published_at") or p.get("first_seen_at"))), p["posting_id"])
+        return (not watched(p, profile), p["posting_id"] not in first, -pts,
+                -(_ts(p.get("published_at") or p.get("first_seen_at"))), p["posting_id"])
     sent, cut = [], []
     for x in sorted(scored, key=key):
         p, pts = x[0], x[1]
         if pts < r["threshold"] and not watched(p, profile):
             cut.append((x, f"below the threshold ({pts} < {r['threshold']})"))
-        elif cap and len(sent) >= cap:
-            cut.append((x, f"over the cap ({cap})"))
+        elif cap < 0 or (cap and len(sent) >= cap):
+            cut.append((x, f"over the cap ({r['max_candidates']} a night)"))
         else:
             sent.append(x)
     return sent, cut

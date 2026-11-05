@@ -86,18 +86,46 @@ def _segments(loc):
     return [" ".join(words(s)) for s in SEPARATORS.split(str(loc or "").lower()) if words(s)]
 
 
+# Countries that end a place name in the sources: a town there is never the US town of that name
+# ("Vienna, Austria" is not Vienna, VA).
+FOREIGN = {"uk", "united kingdom", "england", "scotland", "wales", "canada", "japan", "germany", "australia", "france",
+           "ireland", "south korea", "korea", "india", "netherlands", "the netherlands", "spain", "switzerland", "sweden",
+           "italy", "belgium", "poland", "israel", "singapore", "mexico", "brazil", "argentina", "new zealand", "uae",
+           "united arab emirates", "qatar", "saudi arabia", "china", "taiwan", "hong kong", "austria", "denmark", "norway",
+           "finland", "portugal", "czech republic", "romania", "ukraine", "belarus", "philippines", "ie", "nl", "mx", "ch"}
+
+
+def _city(name):
+    """A city's canonical name: metro names first ("bay area" -> "san francisco"), then without
+    "greater" and a trailing "(metropolitan|metro) area" ("New York City Metropolitan Area" -> new york)."""
+    if name in METROS:
+        return METROS[name]
+    bare = re.sub(r"\s+(metropolitan area|metro area|metro|area)$", "", re.sub(r"^greater\s+", "", name))
+    return METROS.get(bare, bare)
+
+
+def _cities_state(seg_raw):
+    """(cities, state, foreign) for one place: every part that isn't a state, a US word or a
+    country may be the city ("Arlington County, Arlington, VA" -> arlington county, arlington; va).
+    foreign: the place ends in a country outside the US."""
+    parts = [" ".join(words(p)) for p in seg_raw.split(",") if words(p)]
+    cities, state = [], None
+    for i, p in enumerate(parts):
+        if i and len(p) == 2 and p in STATES.values():
+            state = p
+        elif i and p in STATES:
+            state = STATES[p]
+        elif i and (p in US_WORDS or p in FOREIGN):
+            continue
+        else:
+            cities.append(_city(p))
+    return [c for c in cities if c], state, bool(parts) and len(parts) > 1 and parts[-1] in FOREIGN
+
+
 def _city_state(seg_raw):
     """("san francisco", "ca") from "San Francisco, CA, United States"; state None when absent."""
-    parts = [" ".join(words(p)) for p in seg_raw.split(",") if words(p)]
-    if not parts:
-        return None, None
-    city, state = parts[0], None
-    for p in parts[1:]:
-        if len(p) == 2 and p in STATES.values():
-            state = p
-        elif p in STATES:
-            state = STATES[p]
-    return METROS.get(city, city), state
+    cities, state, _ = _cities_state(seg_raw)
+    return (cities[0] if cities else None), state
 
 
 def _places(profile):
@@ -138,9 +166,11 @@ def place_fit(locations, profile, remote_flag=None):
     for loc in locations:
         raws = [s for s in SEPARATORS.split(str(loc).lower()) if words(s)] or [str(loc).lower()]
         for raw in raws:
-            city, state = _city_state(raw)
+            cities, state, foreign = _cities_state(raw)
+            if foreign:
+                continue
             for area, pc, ps in places:
-                if city == pc and (ps is None or state is None or state == ps):
+                if pc in cities and (ps is None or state is None or state == ps):
                     return area, None
         if not remote_ok:
             continue
@@ -349,7 +379,8 @@ def min_years(text):
 
 def check(posting, profile, now, text=None, listed_early=False, skip=()):
     """listed_early: a new-grad list (a "list" family source) carries the job. skip: stages not to
-    check (describe skips "level", since the description it fetches may be what shows it)."""
+    check: "level" (describe skips it, since the description it fetches may be what shows it) and
+    "age" (the catch-up skips it for watchlist companies)."""
     f = profile["filters"]
     d = posting.get("data") or {}
     fit = title_fit(posting["title"], profile)
@@ -361,7 +392,7 @@ def check(posting, profile, now, text=None, listed_early=False, skip=()):
         return Verdict(False, "place", why, facts)
     facts["area"] = area
     when = posting.get("published_at") or posting.get("first_seen_at")
-    if when and datetime.fromisoformat(when.replace("Z", "+00:00")) < now - timedelta(days=f["max_age_days"]):
+    if "age" not in skip and when and datetime.fromisoformat(when.replace("Z", "+00:00")) < now - timedelta(days=f["max_age_days"]):
         return Verdict(False, "age", f"posted {when[:10]}, more than {f['max_age_days']} days ago", facts)
     if f["new_grad_only"] and "level" not in skip:
         sign = new_grad_sign(posting["title"], text, d, listed_early)

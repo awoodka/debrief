@@ -226,13 +226,13 @@ def replay(cfg, run_date, into, log=print, fresh=True):
 
 
 # Live-only tables, not rebuilt from raw: carried over by rebuild() when the old database has them.
-STATE_TABLES = ("source_state", "http_validators", "runs", "fetches", "scores", "daily_list", "meta")
+STATE_TABLES = ("source_state", "http_validators", "runs", "fetches", "scores", "daily_list", "highlighted", "meta")
 
 
 def rebuild(cfg, log=print):
     """Rebuild the state database from every raw day after a parser or matching change, with no
     network. Replays all of raw/ in date and run order into a new database, carries over what
-    replay can't reproduce (ETags, source state, run history, scores, lists), backs up the current database next
+    replay can't reproduce (ETags, source state, run history, scores, lists, what was shown), backs up the current database next
     to it, and copies the rebuilt one over it. Only as complete as the raw store (60 days)."""
     import sqlite3
     live = state_path(cfg)

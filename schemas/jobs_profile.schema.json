@@ -88,7 +88,10 @@
         "max_candidates": {"type": "integer", "minimum": 1, "maximum": 500, "description": "most jobs sent to the scoring call in a night"},
         "top_n": {"type": "integer", "minimum": 1, "maximum": 500, "description": "jobs shown on the day's list"},
         "per_company": {"type": "integer", "minimum": 1, "maximum": 500,
-                        "description": "most jobs from one company on the day's list; the rest are counted under its last one (missing: no limit)"}
+                        "description": "most jobs from one company on the day's list; the rest are counted under its last one (missing: no limit)"},
+        "fresh_bonus": {"type": "object", "additionalProperties": false,
+                        "patternProperties": {"^[1-9][0-9]{0,2}$": {"type": "integer", "minimum": 0, "maximum": 5}},
+                        "description": "added to the model's score when ordering the list, by days since posting: {\"3\": 2, \"7\": 1} is +2 within 3 days, +1 within 7 (missing: no bonus)"}
       }
     }
   },

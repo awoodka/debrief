@@ -186,3 +186,53 @@ def test_level():
 def test_facts():
     v = filters.check(job(title="Software Engineer", locations=["SF"], pay={"summary": "$150k/yr"}), PROFILE, NOW)
     assert v.ok and v.facts["position_type"] == "SWE" and v.facts["area"] == "SF" and v.facts["hourly_top"] == 72.12
+
+
+# ------------------------------------------------------------------- revision 5: the audit fixes
+
+@pytest.mark.parametrize("locations,expected", [
+    (["Arlington County, Arlington, VA"], "ok"),             # the city is the second part
+    (["New York City Metropolitan Area, United States"], "ok"),
+    (["Greater Boston Area"], "place"),                      # read as Boston: still outside the places
+    (["San Francisco Bay Area"], "ok"),
+    (["Arlington, Texas"], "place"),                         # another state
+])
+def test_place_reads_every_part_and_metro_names(locations, expected):
+    assert stage(locations=locations) == expected
+
+
+def test_a_foreign_namesake_never_matches_a_us_town():
+    prof = copy.deepcopy(PROFILE)
+    prof["filters"]["locations"]["places"]["DC"] += ["Vienna, VA", "Hanover, MD"]
+    assert filters.place_fit(["Vienna, VA, United States"], prof)[0] == "DC"
+    assert filters.place_fit(["Vienna, Austria"], prof)[0] is None
+    assert filters.place_fit(["Hanover, Germany"], prof)[0] is None
+    assert filters.place_fit(["Hanover, United States"], prof)[0] == "DC"      # no state given: the name decides
+
+
+def test_skip_age():
+    old = job(published_at="2026-08-01T00:00:00Z")
+    assert filters.check(old, PROFILE, NOW).stage == "age"
+    assert filters.check(old, PROFILE, NOW, skip=("age",)).ok
+
+
+@pytest.mark.parametrize("title,expected", [
+    ("Software Development Engineer", "ok"),
+    ("Software Dev Engineer I, Security Platform", "ok"),
+    ("Engineer, Software", "ok"),
+    ("Software Engineering Full-Time Campus Hire", "ok"),
+    ("Software Engineering Manager", "title"),               # "manager" is excluded
+    ("Full Stack Developer", "ok"),
+    ("Site Reliability Engineer", "ok"),
+    ("Associate Product Manager", "ok"),                     # "manager" is part of the matched type title
+    ("Software Test Engineer", "title"),                     # words out of order aren't a match
+])
+def test_profile_v6_titles(title, expected):
+    prof = copy.deepcopy(PROFILE)
+    prof["position_types"][0]["titles"] += ["software development engineer", "software dev engineer", "engineer software",
+                                            "software engineering", "full stack developer"]
+    prof["position_types"] += [{"name": "DevOps / SRE", "titles": ["devops engineer", "site reliability engineer", "sre"]},
+                               {"name": "Product", "titles": ["associate product manager", "product manager"]}]
+    prof["filters"]["exclude_titles"] = prof["filters"]["exclude_titles"] + ["manager"]
+    v = filters.check(job(title=title), prof, NOW)
+    assert (v.stage if not v.ok else "ok") == expected

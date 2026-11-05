@@ -764,3 +764,50 @@ years ("2–3 years"). The model refused some of these, and the profile's `max_y
   SambaNova Systems is `sambanovasystems` and Blue River Technology is `bluerivertech`; Precisely
   isn't found. `boards.greenhouse.io/embed/` stays off (robots.txt). On 11-05 four jobs that pass
   the filters were in this state.
+
+## Revision 5 (Alex, 2026-11-05): keep up with new postings; one catch-up; no repeats
+The funnel audit (preview copy, profile v5, whole backlog): 8,531 open → title −5,722 → place
+−1,472 → age −999 → level/degree/clearance/blocklist/full-time −118 → 220 → cap −170 → 50 asked →
+46 kept → 20 shown. The hard filters and the model's drops checked out. The losses: 625 open jobs
+passed every filter but the 14-day age limit (504 posted July–October, among them Scale AI's
+"Software Engineer - New Grad", on the watchlist), and none was ever scored; kept jobs below #20
+were never shown again; title wording missed ~29 jobs (81 with no age limit) and the town lists
+~18 (42), plus two place-reading bugs.
+
+Alex's vision: new postings first ("a greater chance they are still looking", and applying early);
+catch the old listings once; eventually each day has no repeats and the system just keeps up.
+Alex's answers:
+- A kept job that isn't highlighted stays an option for later days ("not mandatory"); new
+  postings are still prioritized.
+- Fit orders the list; newness adds a bonus: `ranking.fresh_bonus` {"3": 2, "7": 1}.
+- The catch-up is one separate list, gone through once; it reaches back 30 days, plus watchlist
+  companies at any age.
+- A repost under a new job id counts as new: the job id alone says two listings are the same job.
+  (Already true: no posting has more than one job id, and a listing with another id never merges.)
+- The daily age limit is 30 days. All four audit fixes go in (profile v6): title variants
+  (Software Development Engineer, "Engineer, Software", Software Engineering, Full Stack / Web /
+  Application Developer, Frontend Engineer; "manager" excluded), a DevOps / SRE type, 29 nearby
+  towns, and "Military Spouse Jobs" blocklisted (it reposts other employers' jobs).
+
+Built:
+- **The pool** (`rank.py`, migration 003 `highlighted`): each night looks at every open posting
+  not yet highlighted, not only the new ones. Filters run on all of it; only jobs with no answer
+  for the profile are asked, at most `max_candidates` answers a night, watchlist first, then new
+  tonight, then carried over (one over the cap waits for another night). The list is ordered by
+  score + `fresh_bonus` (ties: score, points, newest). Every job shown, and each copy shown under
+  it, goes in `highlighted` and is never listed again. `--rebuild` carries the table.
+- **The catch-up** (`debrief jobs catchup`): the same pass with no cap, watchlist companies exempt
+  from the age limit (`filters.check(skip=("age",))`, which now honors "age"), and every kept job
+  in one "catchup" section with no top N and no company limit; written to `catchup.txt`;
+  `jobs today --catchup` prints it. It doesn't move the cursor. `save_list` now replaces only its
+  own sections, so the catch-up and a morning list on the same date keep each other's rows.
+- **Places**: every part of a place may be its city ("Arlington County, Arlington, VA"); "greater"
+  and a trailing "metropolitan area" are dropped ("New York City Metropolitan Area"); a place
+  ending in a foreign country never matches a US town ("Vienna, Austria").
+- **The list** shows each job's posted date, and the header says how many are new tonight and how
+  many were carried over.
+
+Tried on a copy with profile v6 and fake answers (no model cost): the catch-up's pool passed 390
+jobs (350 entries once copies fold; Scale AI's Sep 4 role in, Raydar and Military Spouse Jobs out),
+about $0.65 to score. Then a real collect brought 650 new postings, 29 passing the filters; the
+next night asked those 29, showed 20 (all new) and carried 7, with no repeat of the catch-up.

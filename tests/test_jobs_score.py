@@ -7,7 +7,7 @@ import pytest
 from debrief.jobs import build, config as jconfig, prescore, profile, rank, score
 from debrief.jobs.store import JobsStore, state_path
 from debrief.triage.score import ScoringError
-from test_jobs_collect import FakeAdapter, it, rec, src
+from test_jobs_collect import AT, FakeAdapter, it, rec, src
 from test_jobs_profile import BASE
 
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
@@ -107,9 +107,18 @@ def test_score_run_end_to_end(cfg):
     # Re-running the same day asks nothing new and gives the same list.
     rep2 = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
     assert len(r.calls) == 1 and rep2["already_scored"] == 4 and rep2["list"]["new"] == new
-    # The next day, nothing is new.
+    # The next day nothing is new, but the job kept below the top 2 is still an option, and the job
+    # over yesterday's cap is asked today. Nothing shown yesterday comes back.
+    beyond = [c["title"] for c in rep["cuts"] if c["stage"] == "beyond N"]
     rep3 = rank.run(cfg, run_date="2026-11-05", runner=r, now=NOW, log=lambda *a: None)
-    assert rep3["candidates"] == 0 and rep3["list"]["new"] == []
+    assert rep3["new"] == 0 and rep3["carried"] == 5 and rep3["sent"] == 1 and len(r.calls) == 2
+    assert {e["title"] for e in rep3["list"]["new"]} == {beyond[0], "Software Engineer, Platform"}
+    assert {e["posting_id"] for e in rep3["list"]["new"]}.isdisjoint(e["posting_id"] for e in new)
+    assert all(e["new"] is False for e in rep3["list"]["new"])
+    assert "2 shown of 2 kept (0 new tonight, 2 carried over)" in rank.today(cfg)
+    # The day after: only the filtered and the not-kept jobs are left. No call, no list.
+    rep4 = rank.run(cfg, run_date="2026-11-06", runner=r, now=NOW, log=lambda *a: None)
+    assert rep4["list"]["new"] == [] and len(r.calls) == 2 and rep4["not_kept"] == 1
 
 
 def test_score_run_no_cap_and_fallback(cfg):
@@ -218,3 +227,120 @@ def test_score_run_company_limit(tmp_path):
     assert "AI Software Engineer, New Grad" not in out
     assert "AI Software Engineer, New Grad" in rank.today(c, show_all=True)
     assert "also kept at Zed: 1 more" in (c.data_dir / "runs" / "2026-11-04" / f"{rep['run_id']}.md").read_text()
+
+
+# ------------------------------------------------- revision 5: the pool, the bonus, the catch-up
+
+class ByTitle:
+    """A fake claude that keeps every job and scores it by title (default 5)."""
+    def __init__(self, scores=None):
+        self.scores, self.calls = scores or {}, []
+
+    def __call__(self, argv, stdin, timeout):
+        jobs = [json.loads(line) for line in stdin.split("<jobs>\n")[1].split("\n</jobs>")[0].splitlines()]
+        self.calls.append([j["title"] for j in jobs])
+        return 0, claude_stdout([{"id": j["id"], "keep": True, "score": self.scores.get(j["title"], 5),
+                                  "why": f"because {j['title']}", "mismatches": []} for j in jobs]), ""
+
+
+def _cfg(tmp_path, **ranking):
+    c = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
+    prof = copy.deepcopy(BASE)
+    prof["position_types"] = [{"name": "SWE", "titles": ["software engineer", "ai engineer"]}]
+    prof["ranking"] = {"threshold": 0, "max_candidates": 50, "top_n": 20, **ranking}
+    profile.save(c, prof)
+    return c
+
+
+def _add(cfg, listings, at):
+    store = JobsStore(state_path(cfg))
+    with store.transaction():
+        build.apply(store, src(id="simplify-newgrad"), FakeAdapter({0: listings}), [rec("{}", fetched_at=at)], ["r"])
+    store.close()
+
+
+def _day(n):
+    return datetime(2026, 11, 4 + n, 12, 0, tzinfo=timezone.utc)
+
+
+def test_fresh_bonus():
+    prof = {"ranking": {"fresh_bonus": {"3": 2, "7": 1}}}
+    p = lambda days: {"published_at": f"2026-11-{4 - days:02d}T12:00:00Z" if days < 4 else f"2026-10-{31 - (days - 4):02d}T12:00:00Z"}
+    assert [rank.fresh_bonus(p(d), prof, NOW) for d in (1, 3, 5, 7, 10)] == [2, 2, 1, 1, 0]
+    assert rank.fresh_bonus(p(1), {"ranking": {}}, NOW) == 0
+
+
+def test_the_bonus_orders_fit_first_with_newness_added(tmp_path):
+    cfg = _cfg(tmp_path, fresh_bonus={"3": 2, "7": 1})
+    _add(cfg, [it("f", title="Software Engineer, New Grad", company="Fresh", published_at="2026-11-03T12:00:00Z"),
+               it("o", title="Software Engineer I", company="Old", published_at="2026-10-22T12:00:00Z"),
+               it("s", title="AI Engineer, New Grad", company="Seven", published_at="2026-10-22T12:00:00Z")],
+         "2026-11-04T08:00:00Z")
+    r = ByTitle({"Software Engineer, New Grad": 6, "Software Engineer I": 8, "AI Engineer, New Grad": 7})
+    rep = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    # Fresh: 6 + 2 = 8 ties Old's 8 and loses on the score itself; Seven's 7 has no bonus.
+    assert [(e["company"], e["score"], e["bonus"]) for e in rep["list"]["new"]] == \
+        [("Old", 8, 0), ("Fresh", 6, 2), ("Seven", 7, 0)]
+    assert "posted Nov 3" in rank.today(cfg)
+
+
+def test_the_nightly_cap_asks_new_jobs_first_and_carried_ones_later(tmp_path):
+    cfg = _cfg(tmp_path, max_candidates=1, top_n=1)
+    _add(cfg, [it("a", title="Software Engineer, New Grad", company="A"),
+               it("b", title="Software Engineer, New Grad", company="B")], "2026-11-04T08:00:00Z")
+    r = ByTitle()
+    rep = rank.run(cfg, run_date="2026-11-04", runner=r, now=_day(0), log=lambda *a: None)
+    assert len(r.calls) == 1 and len(rep["list"]["new"]) == 1 and rep["stages"]["cap"] == 1
+    first = rep["list"]["new"][0]["company"]
+    # A rerun the same day: the night's budget is spent, so nothing is asked and the list is the same.
+    again = rank.run(cfg, run_date="2026-11-04", runner=r, now=_day(0), log=lambda *a: None)
+    assert len(r.calls) == 1 and again["list"]["new"] == rep["list"]["new"]
+    # The next night a new job arrives with fewer points; it's asked before the one left waiting.
+    _add(cfg, [it("c", title="Software Engineer, Payments", company="C")], "2026-11-05T08:00:00Z")
+    rep2 = rank.run(cfg, run_date="2026-11-05", runner=r, now=_day(1), log=lambda *a: None)
+    assert r.calls[-1] == ["Software Engineer, Payments"] and [e["company"] for e in rep2["list"]["new"]] == ["C"]
+    rep3 = rank.run(cfg, run_date="2026-11-06", runner=r, now=_day(2), log=lambda *a: None)
+    left = ({"A", "B"} - {first}).pop()
+    assert [e["company"] for e in rep3["list"]["new"]] == [left] and rep3["list"]["new"][0]["new"] is False
+
+
+def test_catchup_lists_every_kept_job_once(tmp_path):
+    cfg = _cfg(tmp_path, max_candidates=1, top_n=1)               # the catch-up ignores both
+    _add(cfg, [it("w", title="Software Engineer, New Grad", company="Acme", published_at="2026-09-04T00:00:00Z"),
+               it("x", title="Software Engineer, New Grad", company="Delta", published_at="2026-09-04T00:00:00Z"),
+               it("b", title="Software Engineer I", company="Beta"),
+               it("z1", title="New Grad: Software Engineer", company="Zed"),
+               it("z2", title="Software Engineer, New Grad 2027", company="Zed", locations=("NYC",))],
+         "2026-11-04T08:00:00Z")
+    r = ByTitle()
+    rep = rank.catchup(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    titles = {(e["company"], e["title"]) for e in rep["list"]["catchup"]}
+    assert ("Acme", "Software Engineer, New Grad") in titles                 # watchlist: no age limit
+    assert not any(c == "Delta" for c, _ in titles) and rep["stages"]["age"] == 1
+    assert len(rep["list"]["catchup"]) == 3 and len(r.calls) == 1           # no top_n, no cap
+    zed, = [e for e in rep["list"]["catchup"] if e["company"] == "Zed"]
+    assert len(zed["also"]) == 1                                             # the copy, shown under it
+    out = rank.today(cfg, catchup=True)
+    assert out.startswith("Catch-up for 2026-11-04 · 3 kept jobs") and "posted Sep 4" in out
+    # The morning list the same day: everything kept was shown in the catch-up, copies included.
+    day = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert day["list"]["new"] == [] and day["list"]["watchlist"] == []
+    assert rank.today(cfg, catchup=True) == out                              # the catch-up rows survive
+    # The next night only a new job is listed.
+    _add(cfg, [it("e", title="Software Engineer, New Grad", company="Eps")], "2026-11-05T08:00:00Z")
+    nxt = rank.run(cfg, run_date="2026-11-05", runner=r, now=_day(1), log=lambda *a: None)
+    assert [e["company"] for e in nxt["list"]["new"]] == ["Eps"]
+
+
+def test_save_list_replaces_only_its_sections(tmp_path):
+    s = JobsStore(tmp_path / "j.sqlite")
+    with s.transaction():
+        for n in "123":
+            s.save_posting({"posting_id": f"p:{n}", "company": "A", "title": "SWE", "locations": [], "url": None, "board": None,
+                            "published_at": None, "first_seen_at": AT, "last_seen_at": AT, "closed_at": None, "data": {}})
+        s.save_list("2026-11-04", "c1", [("catchup", 1, "p:1", 7, 50)], sections=("catchup",))
+        s.save_list("2026-11-04", "s1", [("new", 1, "p:2", 6, 40)])
+        s.save_list("2026-11-04", "s2", [("new", 1, "p:3", 6, 40)])
+    assert sorted((r["section"], r["posting_id"]) for r in s.q("SELECT * FROM daily_list")) == \
+        [("catchup", "p:1"), ("new", "p:3")]
+    s.close()

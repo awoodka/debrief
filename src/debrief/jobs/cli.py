@@ -11,7 +11,8 @@
                                    the watchlist (each change is a new profile version)
   debrief jobs posting QUERY [--all]                  one posting, its listings and keys
   debrief jobs score [--date D] [--no-cap] [--dry-run] filters, points, the scoring call, the morning list (M2)
-  debrief jobs today [--date D] [--all]               print the morning list
+  debrief jobs today [--date D] [--all] [--catchup]   print the morning list (or the catch-up list)
+  debrief jobs catchup [--date D] [--dry-run]         once: every kept job in the pool, to catchup.txt
   debrief jobs calibrate                              compare the pipeline's decisions with Alex's labels
 """
 import sys
@@ -144,8 +145,8 @@ def _score(args):
     from . import config, rank
     cfg = config.load()
     r = rank.run(cfg, run_date=args.date, no_cap=args.no_cap, dry_run=args.dry_run)
-    print(f"jobs score {r['run_id']}: {r['status']} · {r['candidates']} new · {r['passed_filters']} passed the filters · "
-          f"{r['sent']} sent · {r['kept']} kept · list of {len(r['list']['new'])}"
+    print(f"jobs score {r['run_id']}: {r['status']} · pool {r['candidates']} ({r['new']} new) · {r['passed_filters']} "
+          f"passed the filters · {r['sent']} asked · {r['kept']} kept · list of {len(r['list']['new'])}"
           + ("" if args.dry_run else f" · report in jobs/runs/{r['run_date']}/{r['run_id']}.md"))
     if args.dry_run:
         for e in r["list"]["new"]:
@@ -155,8 +156,29 @@ def _score(args):
 
 def _today(args):
     from . import config, rank
-    print(rank.today(config.load(), list_date=args.date, show_all=args.all))
+    print(rank.today(config.load(), list_date=args.date, show_all=args.all, catchup=args.catchup))
     return 0
+
+
+def _catchup(args):
+    """The one-time catch-up (docs/jobs/PLAN.md, "Revision 5"): every kept job in today's pool,
+    written to <data>/jobs/catchup.txt."""
+    from . import config, rank
+    cfg = config.load()
+    r = rank.catchup(cfg, run_date=args.date, dry_run=args.dry_run)
+    print(f"jobs catchup {r['run_id']}: {r['status']} · pool {r['candidates']} · {r['passed_filters']} passed the "
+          f"filters · {r['sent']} asked · {r['kept']} kept · list of {len(r['list']['catchup'])}"
+          + ("" if args.dry_run else f" · report in jobs/runs/{r['run_date']}/{r['run_id']}.md"))
+    if args.dry_run:
+        for e in r["list"]["catchup"][:60]:
+            print(f"  {e['points']:3} pts  posted {e['posted']}  {e['title'][:60]} — {e['company']}")
+        return 0
+    path = cfg.data_dir / "catchup.txt"
+    tmp = path.with_suffix(".txt.tmp")
+    tmp.write_text(rank.today(cfg, list_date=r["run_date"], catchup=True) + "\n")
+    tmp.replace(path)
+    print(f"written to {path}")
+    return 0 if r["status"] == "ok" else 2
 
 
 def register(sub):
@@ -225,7 +247,12 @@ def _register_m2(jsub):
     jp = jsub.add_parser("today", help="print the morning list")
     jp.add_argument("--date", help="a past list (default: the latest)")
     jp.add_argument("--all", action="store_true", help="also every kept job below the top N")
+    jp.add_argument("--catchup", action="store_true", help="the catch-up list instead of the morning list")
     jp.set_defaults(func=lambda args, _cfg: _run(_today, args))
+    jp = jsub.add_parser("catchup", help="once: score today's whole pool with no cap and list every kept job (catchup.txt)")
+    jp.add_argument("--date", help="the list's date (default: today)")
+    jp.add_argument("--dry-run", action="store_true", help="filters and points only: no call, nothing saved")
+    jp.set_defaults(func=lambda args, _cfg: _run(_catchup, args))
     jp = jsub.add_parser("calibrate", help="compare the pipeline's decisions with Alex's labels (calibration/labels.jsonl)")
     jp.set_defaults(func=lambda args, _cfg: _run(_calibrate, args))
 

@@ -478,8 +478,13 @@ def test_rebuild_reproduces_the_live_tables(tmp_path, monkeypatch):
     simplify = [{"id": "s1", "title": "SWE", "company_name": "Acme", "url": "https://x.test/1", "active": True}]
     collect.run(cfg, client=SiteClient({cfg.source("simplify-newgrad").url: simplify}), run_date="2026-11-04", env={},
                 log=lambda *a, **k: None)
+    s = JobsStore(state_path(cfg))
+    with s.transaction():                                   # a job already shown must stay shown
+        s.save_highlighted("2026-11-04", "score-1", [(s.q("SELECT posting_id FROM postings")[0][0], "new")], ("new",))
+    s.close()
     con = sqlite3.connect(state_path(cfg))
     before = {t: con.execute(f"SELECT * FROM {t} ORDER BY 1, 2").fetchall() for t in collect.TABLES + collect.STATE_TABLES}
+    assert len(before["highlighted"]) == 1
     con.close()
     out = collect.rebuild(cfg, log=lambda *a: None)
     assert out["dates"] == ["2026-11-04"] and (state_path(cfg).parent / out["backup"]).exists()

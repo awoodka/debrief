@@ -98,11 +98,36 @@ class JobsStore(Store):
                  (posting_id, profile_id, run_id, at, answer["score"], int(answer["keep"]), answer["why"],
                   dumps(answer["mismatches"]), model, prompt_version))
 
-    def save_list(self, list_date, run_id, rows):
-        """rows: [(section, rank, posting_id, score, points)]; replaces that date's list."""
-        self.run("DELETE FROM daily_list WHERE list_date=?", (list_date,))
+    def save_list(self, list_date, run_id, rows, sections=("new", "watchlist")):
+        """rows: [(section, rank, posting_id, score, points)]; replaces that date's rows for these
+        sections only, so the catch-up and a morning list on the same date keep each other's."""
+        marks = ",".join("?" * len(sections))
+        self.run(f"DELETE FROM daily_list WHERE list_date=? AND section IN ({marks})", (list_date, *sections))
         for section, rank, pid, score, pts in rows:
             self.run("INSERT INTO daily_list VALUES (?,?,?,?,?,?,?)", (list_date, run_id, section, rank, pid, score, pts))
+
+    # --------------------------------------------------------------- highlighted (revision 5)
+    def pool(self, list_date, sections):
+        """Open postings never highlighted, except by these sections on this date (a rerun
+        replaces them): posting_id, first_seen_at."""
+        marks = ",".join("?" * len(sections))
+        return self.q(f"""SELECT posting_id, first_seen_at FROM postings WHERE closed_at IS NULL
+                          AND posting_id NOT IN (SELECT posting_id FROM highlighted
+                                                 WHERE NOT (list_date = ? AND section IN ({marks})))
+                          ORDER BY posting_id""", (list_date, *sections))
+
+    def save_highlighted(self, list_date, run_id, rows, sections):
+        """rows: [(posting_id, section)]; replaces this date's rows for these sections. A posting
+        already highlighted elsewhere keeps its first showing."""
+        marks = ",".join("?" * len(sections))
+        self.run(f"DELETE FROM highlighted WHERE list_date=? AND section IN ({marks})", (list_date, *sections))
+        for pid, section in rows:
+            self.run("INSERT OR IGNORE INTO highlighted VALUES (?,?,?,?)", (pid, list_date, run_id, section))
+
+    def answered_on(self, run_date, profile_id, kind="score"):
+        """How many answers this profile got from `kind` runs dated run_date (the nightly budget)."""
+        return self.one("""SELECT COUNT(*) FROM scores s JOIN runs r ON r.run_id = s.run_id
+                           WHERE r.run_date=? AND r.kind=? AND s.profile_id=?""", (run_date, kind, profile_id))[0]
 
     def texts_for(self, posting_id):
         """The longest description any source gave, or None."""
