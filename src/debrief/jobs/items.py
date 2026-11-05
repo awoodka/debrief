@@ -34,10 +34,13 @@ class JobItem:
     pay: dict | None = None           # {min, max, currency, period}
     text: str | None = None           # description, when the source gives one
     extra: dict = field(default_factory=dict)
+    target: str | None = None         # the posting this listing is known to be (the board finder's match)
 
     def as_dict(self):
         d = asdict(self)
         d["locations"] = list(self.locations)
+        if d["target"] is None:
+            del d["target"]          # only the board finder's listings carry one; every other hash stays as it was
         return d
 
 
@@ -77,15 +80,24 @@ def title_norm(title):
     return " ".join(toks)
 
 
+# Metro names some sources use instead of a city, and the city they stand for: the
+# location filter's areas (filters.py) and the merge's place overlap use the same names.
+METROS = {"sf": "san francisco", "sf bay area": "san francisco", "bay area": "san francisco",
+          "san francisco bay area": "san francisco", "silicon valley": "san jose", "nyc": "new york",
+          "new york city": "new york", "new york metropolitan area": "new york", "greater new york": "new york",
+          "washington dc": "washington", "washington d c": "washington", "dc": "washington",
+          "washington dc baltimore area": "washington", "dmv": "washington", "northern virginia": "arlington"}
+
+
 def place_tokens(locations):
-    """City-level tokens of a location list, for the overlap test: "San Francisco, CA" -> "san francisco"."""
+    """City-level tokens of a location list, for the overlap test: "San Francisco, CA" and "SF" -> "san francisco"."""
     out = set()
     for loc in locations or ():
         for part in re.split(r"[;/|]| or ", _fold(loc)):
             city = part.split(",")[0].strip()
-            city = re.sub(r"[^a-z ]+", " ", city).strip()
+            city = " ".join(re.sub(r"[^a-z ]+", " ", city).split())
             if city:
-                out.add(" ".join(city.split()))
+                out.add(METROS.get(city, city))                # "SF" is San Francisco, "NYC" New York
     return out
 
 
@@ -108,14 +120,14 @@ def _remote(tokens):
 # Words that mark a role as early-career; the core title ignores them, plus class years and a
 # trailing level "I", so "New Grad 2027: AI Engineer" and "AI Engineer - New Grad" share a core.
 _EARLY = {"grad", "grads", "graduate", "graduates", "college", "university", "entry", "junior", "jr"}
-_CORE_IGNORE = _EARLY | {"new", "early", "career", "level", "i", "start"}           # "(2027 Start)"
+_CORE_IGNORE = _EARLY | {"new", "early", "career", "careers", "level", "i", "start"}  # "(2027 Start)", "Early Careers"
 _YEAR = re.compile(r"^20[2-3]\d$")
 
 
 def early_career(title):
     toks = title_norm(title).split()
     return (bool(_EARLY & set(toks)) or any(_YEAR.match(t) for t in toks) or toks[-1:] == ["i"]
-            or "early career" in " ".join(toks))
+            or re.search(r"\bearly careers?\b", " ".join(toks)) is not None)
 
 
 def core_title(title):

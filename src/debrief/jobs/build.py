@@ -5,8 +5,11 @@ same raw files rebuilds the same rows.
 
   - A listing (item) seen for the first time joins a posting by job key, then by fuzzy key
     (items.py), then by the early-career second chance (early_match), or starts a new posting. An inactive listing never seen before is skipped: it's a
-    job that closed before we started watching.
+    job that closed before we started watching. A board-finder listing (JobItem.target) that no
+    job key places joins the posting it was found for.
   - A posting closes when every listing of it is inactive, and reopens when one is active again.
+    Board-finder listings (FOLLOWERS) don't count: the finder reads a board once, not every night,
+    so the sources that found the job still decide when it's gone.
   - A posting's link is chosen from all its listings (link_rank): the company's own listing of the
     job first, an aggregator's page only when nothing better exists.
   - "full" snapshot sources: a listing missing from a complete response for its scope (every
@@ -37,6 +40,8 @@ AGGREGATOR_HOSTS = ("jobright.ai", "go.vansh.nyc", "simplify.jobs", "himalayas.a
                     "linkedin.com", "indeed.com", "glassdoor.com", "wellfound.com", "joinhandshake.com",
                     "dice.com", "builtin.com", "ziprecruiter.com")
 WATCHLIST = "watchlist"
+FINDER = "board-finder"
+FOLLOWERS = (FINDER,)      # sources whose listings never keep a posting open by themselves
 
 
 def _aggregator(url):
@@ -106,6 +111,10 @@ def resolve(store, source, it, at, early_sources=frozenset()):
         pid = store.find_key(jk)
         if pid:
             return pid, "merged"
+    if it.target and store.posting(it.target) is not None:      # the board finder's match
+        if jk:
+            store.add_key(jk, it.target)
+        return it.target, "merged"
     if fk:
         pid = store.find_key(fk)
         if pid:
@@ -164,7 +173,7 @@ def refresh_posting(store, pid, at):
     """Its link and open/closed state, from its listings as they stand now."""
     p = store.posting(pid)
     link = best_link(store, pid)
-    active = store.any_active(pid)
+    active = store.any_active(pid, ignore=FOLLOWERS)
     change = None
     if active and p["closed_at"]:
         p["closed_at"], change = None, "reopened"

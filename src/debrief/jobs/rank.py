@@ -280,6 +280,8 @@ def today(cfg, list_date=None, show_all=False):
                      + (f" · {where}" if where else "") + (f" · {pay}" if pay else ""))
             if e.get("why"):
                 L.append(f"       {e['why']}")
+            if p and not store.texts_for(e["posting_id"]):
+                L.append("       (no description: scored on the title alone)")
             if e.get("mismatches"):
                 L.append(f"       ! {'; '.join(e['mismatches'])}")
             if e.get("url"):

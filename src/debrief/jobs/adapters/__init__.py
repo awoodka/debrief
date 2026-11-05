@@ -19,8 +19,9 @@ class Ctx:
     """What fetch() may use. Records and validators are proposals: collect keeps them once the
     source's items are stored."""
 
-    def __init__(self, client, store, env, run_id, profile, contact, settings, log=print):
+    def __init__(self, client, store, env, run_id, profile, contact, settings, log=print, early_sources=frozenset()):
         self.client, self.store, self.env = client, store, env
+        self.early_sources = early_sources          # the new-grad lists' source ids (collect.early_sources)
         self.run_id, self.profile, self.contact = run_id, profile, contact
         self.settings, self.log = settings, log
         self.records, self.validators, self.warnings = [], [], []
@@ -100,9 +101,9 @@ class Adapter:
 
 
 def _registry():
-    from . import apis, boards_watch, describe, hn, lists
+    from . import apis, boards_watch, describe, finder, hn, lists
     out = {}
-    for mod in (lists, apis, hn, boards_watch, describe):
+    for mod in (lists, apis, hn, boards_watch, finder, describe):
         for a in mod.ADAPTERS:
             out[a.name] = a
     return out

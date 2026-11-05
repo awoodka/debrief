@@ -79,7 +79,7 @@ def classify(records, counts, crash, quiet_ok=False, tolerate=()):
 
 def collect_source(cfg, store, client, source, run_id, run_date, now, prof, env, log):
     adapter = REGISTRY[source.adapter]
-    ctx = Ctx(client, store, env, run_id, prof, cfg.contact, cfg.settings, log)
+    ctx = Ctx(client, store, env, run_id, prof, cfg.contact, cfg.settings, log, early_sources=early_sources(cfg))
     crash = None
     try:
         adapter.fetch(ctx, source)

@@ -63,7 +63,7 @@ class SimplifyJSON(Adapter):
 # ------------------------------------------------------------------------------ markdown tables
 
 SEPARATOR = re.compile(r"^\|[\s:|-]*-[\s:|-]*$")
-LINK_MD = re.compile(r"\[([^\]]*)\]\((https?://[^)\s]+)\)")
+LINK_MD = re.compile(r"\[((?:[^\[\]]|\[[^\[\]]*\])*)\]\((https?://[^)\s]+)\)")    # text may hold "[2027]"
 LINK_HTML = re.compile(r"""<a\s[^>]*href=["'](https?://[^"']+)["']""", re.I)
 COLUMNS = {
     "company": ("company",),
@@ -79,7 +79,33 @@ MONTH_DAY = re.compile(r"^([A-Z][a-z]{2})\s+(\d{1,2})$")
 
 
 def _cells(row):
-    return [c.strip() for c in row.strip().strip("|").split("|")]
+    """A table row's cells. A pipe inside brackets (a link's text: "[ISS | Institutional Shareholder
+    Services](url)") or escaped ("\\|") belongs to its cell; with unbalanced brackets, every pipe splits."""
+    s = row.strip()
+    s = s[1:] if s.startswith("|") else s
+    s = s[:-1] if s.endswith("|") and not s.endswith("\\|") else s
+    out, cur, depth, i = [], [], 0, 0
+    while i < len(s):
+        ch = s[i]
+        if ch == "\\" and s[i + 1:i + 2] == "|":
+            cur.append("|")
+            i += 2
+            continue
+        if ch == "[":
+            depth += 1
+        elif ch == "]" and depth:
+            depth -= 1
+        elif ch == "|" and depth == 0:
+            out.append("".join(cur).strip())
+            cur = []
+            i += 1
+            continue
+        cur.append(ch)
+        i += 1
+    out.append("".join(cur).strip())
+    if depth:
+        return [c.strip() for c in s.split("|")]
+    return out
 
 
 def _text(cell):

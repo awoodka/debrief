@@ -87,7 +87,7 @@ def profile_view(profile):
 
 def job_view(jid, posting, text, sources, early_sources, max_chars):
     d = posting.get("data") or {}
-    origin = sorted({"a new-grad list" if s in early_sources else "the company's board" if s == "watchlist"
+    origin = sorted({"a new-grad list" if s in early_sources else "the company's board" if s in ("watchlist", "board-finder")
                      else "Hacker News" if s.startswith("hn-") else "a job site" for s in sources})
     out = {"id": jid, "title": sanitize.text(no_pay(posting["title"]), 200), "company": sanitize.text(posting["company"], 120),
            "locations": [sanitize.text(x, 80) for x in posting.get("locations") or []][:6],

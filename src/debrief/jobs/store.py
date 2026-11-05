@@ -75,8 +75,11 @@ class JobsStore(Store):
     def posting_sources(self, posting_id):
         return {r[0] for r in self.q("SELECT DISTINCT source_id FROM items WHERE posting_id=?", (posting_id,))}
 
-    def any_active(self, posting_id):
-        return self.one("SELECT 1 FROM items WHERE posting_id=? AND active=1 LIMIT 1", (posting_id,)) is not None
+    def any_active(self, posting_id, ignore=()):
+        """Whether any listing of the posting is open, not counting the sources in `ignore`."""
+        skip = f" AND source_id NOT IN ({','.join('?' * len(ignore))})" if ignore else ""
+        return self.one(f"SELECT 1 FROM items WHERE posting_id=? AND active=1{skip} LIMIT 1",
+                        (posting_id, *ignore)) is not None
 
     def save_text(self, posting_id, source_id, text, at):
         self.run("INSERT OR REPLACE INTO posting_text VALUES (?,?,?,?)", (posting_id, source_id, text, at))

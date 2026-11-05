@@ -714,3 +714,32 @@ Money amounts in titles and descriptions now reach the model as "[pay]" (HN titl
 answers were re-asked; final: 267 kept, and the top 20 are all new-grad roles. The re-score cost
 about $0.55 at list price, plus $0.05 for the re-asks. One question is open: a minimum of exactly 2
 years ("2–3 years"). The model refused some of these, and the profile's `max_years` of 2 allows them.
+
+## The daily run (Alex, 2026-11-04: "lets just get it working"; calibration set aside for now)
+- `deploy/run.sh daily` runs the jobs steps after Debrief's (collect, triage, brief, site), so a
+  jobs failure can't hold up the brief: `jobs collect`, `jobs score`, then `jobs today` written to
+  `$DATA/jobs/today.txt`. A jobs failure marks the run failed (exit 1) without stopping anything.
+  `run.sh jobs` reruns just these steps.
+- Secrets split as for Debrief: collect gets `.env` (source keys, contact), score gets the Claude
+  token, and `today` runs with no network.
+- Tried by hand 2026-11-04 with the run image and sandbox: collect 68 s (14 sources ok), score 8 s
+  (6 new jobs sent, list price $0.03), list of 20 written.
+- Profile limits unchanged: `max_years` stays 2 ("more than 2 years I cannot compete for").
+  Watchlist jobs keep their own section.
+- Calibration labels (M2) and the site (M4) come later.
+
+## The board finder (Alex, 2026-11-04: "build that out")
+- The gap: 184 of 284 scored jobs had no description and no job-board id (jobright blocks ClaudeBot
+  from /jobs/; go.vansh.nyc disallows everything), so the model kept nearly all of them unseen.
+- `board-finder` (family detail, runs just before describe) looks up the company in the board
+  directory only (guessing board names found 2 of 103 jobs), lists that board (Workday: searched by
+  title), and matches by the merge rule: same core title, overlapping place, exactly one job. Ties:
+  case-variant Workday sites count once; the new-grad twin of a role wins. Never SmartRecruiters.
+- A finder listing never keeps a posting open by itself. Also: "SF"/"NYC" now overlap their city
+  names, "careers" is an ignored core word, and jobright titles with [brackets] or a pipe in the
+  company no longer come through as markdown links. No-description jobs are marked in the list.
+- Tried on a copy: of 196 jobs scored without a description, 11 gained one and 24 were revealed as
+  old reposts (cut by the 14-day age filter). Top 20 with descriptions: 7 -> 9.
+- Going live needs one `jobs collect --rebuild` on live data so the new merges apply.
+- Open: Raydar (966 near-identical Workable postings) twice in the top 20; 6 old reposts left there
+  (no board known); SambaNova has a gh_jid but no description.

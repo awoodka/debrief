@@ -353,6 +353,20 @@
   notes: each company's whole board, every night; Workday boards page 20 at a time (max_pages caps it at 2,000 jobs)
 
 # ------------------------------------------------- descriptions for jobs that may be scored (M2)
+- id: board-finder
+  name: The company's own board, for jobs that came without a job-board id
+  family: detail
+  adapter: board_finder
+  options:
+    max_requests: 150
+    retry_days: 14
+    dead_days: 30
+    exclude_companies: [Amazon, Google, Meta]
+  notes: "runs just before describe. Only companies already in the board directory (guessing board names found 2 of
+    103 jobs in the 2026-11-04 check); lists Greenhouse, Lever, Ashby, Workable and Recruitee boards, searches
+    Workday by title; never SmartRecruiters (robots.txt). Amazon, Google and Meta stay OFF here too. The match is the
+    merge rule's: same core title, overlapping place, exactly one job (src/debrief/jobs/adapters/finder.py)."
+
 - id: describe
   name: Job descriptions from job-board APIs
   family: detail

@@ -25,7 +25,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from .items import company_norm, early_career
+from .items import METROS, company_norm, early_career
 
 
 @dataclass
@@ -77,12 +77,6 @@ STATES = {"alabama": "al", "alaska": "ak", "arizona": "az", "arkansas": "ar", "c
           "oregon": "or", "pennsylvania": "pa", "rhode island": "ri", "south carolina": "sc", "south dakota": "sd",
           "tennessee": "tn", "texas": "tx", "utah": "ut", "vermont": "vt", "virginia": "va", "washington": "wa",
           "west virginia": "wv", "wisconsin": "wi", "wyoming": "wy"}
-# Metro names some sources use instead of a city, and the profile area name words they belong to.
-METROS = {"sf": "san francisco", "sf bay area": "san francisco", "bay area": "san francisco",
-          "san francisco bay area": "san francisco", "silicon valley": "san jose", "nyc": "new york",
-          "new york city": "new york", "new york metropolitan area": "new york", "greater new york": "new york",
-          "washington dc": "washington", "washington d c": "washington", "dc": "washington",
-          "washington dc baltimore area": "washington", "dmv": "washington", "northern virginia": "arlington"}
 US_WORDS = {"us", "usa", "u s", "united states", "united states of america", "america", "north america",
             "anywhere", "worldwide", "global", "earth"}
 SEPARATORS = re.compile(r";|/|\||\bor\b|\s[-–—•·]\s|\(|\)")

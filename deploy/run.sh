@@ -4,12 +4,16 @@
 #   run.sh daily    03:00 ET   collect every source, triage with the scoring call, write the brief
 #                              (the skill's Claude Code session), and publish the site. The scoring
 #                              call and the brief are the steps that use the Claude plan, so they run
-#                              when the plan is least likely to be in use.
+#                              when the plan is least likely to be in use. Then the jobs steps (below).
 #   run.sh poll     09:00, 15:00, 21:00 ET   collect --cadence 6h: Hacker News, LessWrong, the
 #                              Alignment Forum and their comments. No Claude, no arXiv.
 #   run.sh triage   triage today again (after a failed scoring call), without collecting
 #   run.sh brief    write today's brief again (after `run.sh triage`, say), then publish the site
 #   run.sh site     rebuild the site from every brief.json and publish it
+#   run.sh jobs     the jobs steps again (docs/jobs/PLAN.md): collect every job source, filter and
+#                              score the new postings with one scoring call, and write the morning
+#                              list to $DATA/jobs/today.txt. They run after Debrief's steps, and a
+#                              jobs failure never stops those: it only marks the run failed.
 #
 # The site is static files in $WWW (/srv/www/debrief), which Caddy serves as debrief.alexwoodka.com:
 # each publish is a new releases/<stamp>/, `current` is swapped to it atomically, and the newest 5
@@ -26,7 +30,7 @@
 set -Eeuo pipefail
 
 MODE=${1:-}
-case "$MODE" in daily|poll|triage|brief|site) ;; *) echo "usage: run.sh daily|poll|triage|brief|site" >&2; exit 2 ;; esac
+case "$MODE" in daily|poll|triage|brief|site|jobs) ;; *) echo "usage: run.sh daily|poll|triage|brief|site|jobs" >&2; exit 2 ;; esac
 
 APP=${DEBRIEF_APP:-/srv/apps/debrief-v2}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -147,12 +151,41 @@ site() {
   log "site: published, current -> releases/$stamp"
 }
 
+# The jobs steps. In the daily run the Claude token was checked by triage and the brief already.
+# A failed collect still scores what earlier collects found; a failed scoring call still writes a
+# list, ranked by code points (the score step exits 2).
+jobs() {
+  run_step "jobs collect" timeout 60m docker run "${BASE[@]}" --env-file "$APP/.env" --memory 2g "$IMAGE" \
+    python -m debrief jobs collect --date "$TODAY"
+  case $CODE in
+    0) log "jobs collect: ok" ;;
+    3) log "WARN: jobs collect finished degraded (its report is in $DATA/jobs/runs/$TODAY)" ;;
+    *) log "FAIL: jobs collect exited $CODE (rerun: run.sh jobs)"; FAILED=1 ;;
+  esac
+  run_step "jobs score" timeout 30m docker run "${BASE[@]}" --env-file "$CLAUDE_ENV" \
+    -e CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 --memory 2g "$IMAGE" python -m debrief jobs score --date "$TODAY"
+  case $CODE in
+    0) log "jobs score: ok" ;;
+    2) log "FAIL: the jobs scoring call failed; today's list is ranked by points (rerun: run.sh jobs)"; FAILED=1 ;;
+    *) log "FAIL: jobs score exited $CODE (rerun: run.sh jobs)"; FAILED=1; return ;;
+  esac
+  run_step "jobs today" timeout 5m docker run "${BASE[@]}" --network none --memory 1g "$IMAGE" \
+    python -m debrief jobs today --date "$TODAY"
+  if [ "$CODE" = 0 ]; then
+    cp "$LAST" "$DATA/jobs/today.txt.tmp" && mv "$DATA/jobs/today.txt.tmp" "$DATA/jobs/today.txt"
+    log "jobs: the morning list is in $DATA/jobs/today.txt"
+  else
+    log "FAIL: jobs today exited $CODE"; FAILED=1
+  fi
+}
+
 case "$MODE" in
-  daily)  collect; triage; brief; site ;;
+  daily)  collect; triage; brief; site; jobs ;;
   poll)   collect 6h ;;
   triage) triage ;;
   brief)  brief; site ;;
   site)   site ;;
+  jobs)   claude_ready; jobs ;;
 esac
 
 log "=== done$([ "$FAILED" = 0 ] || echo ', with failures') ==="
