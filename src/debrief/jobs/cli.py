@@ -10,6 +10,9 @@
   debrief jobs watch add NAME [--url URL] | remove NAME | list
                                    the watchlist (each change is a new profile version)
   debrief jobs posting QUERY [--all]                  one posting, its listings and keys
+  debrief jobs score [--date D] [--no-cap] [--dry-run] filters, points, the scoring call, the morning list (M2)
+  debrief jobs today [--date D] [--all]               print the morning list
+  debrief jobs calibrate                              compare the pipeline's decisions with Alex's labels
 """
 import sys
 
@@ -137,6 +140,25 @@ def _posting(args):
     return 0
 
 
+def _score(args):
+    from . import config, rank
+    cfg = config.load()
+    r = rank.run(cfg, run_date=args.date, no_cap=args.no_cap, dry_run=args.dry_run)
+    print(f"jobs score {r['run_id']}: {r['status']} · {r['candidates']} new · {r['passed_filters']} passed the filters · "
+          f"{r['sent']} sent · {r['kept']} kept · list of {len(r['list']['new'])}"
+          + ("" if args.dry_run else f" · report in jobs/runs/{r['run_date']}/{r['run_id']}.md"))
+    if args.dry_run:
+        for e in r["list"]["new"]:
+            print(f"  {e['points']:3} pts  {e['title'][:70]} — {e['company']}")
+    return 0 if r["status"] in ("ok", "dry_run") else 2
+
+
+def _today(args):
+    from . import config, rank
+    print(rank.today(config.load(), list_date=args.date, show_all=args.all))
+    return 0
+
+
 def register(sub):
     p = sub.add_parser("jobs", help="the job-listing collector (docs/jobs)")
     jsub = p.add_subparsers(dest="jobs_cmd", required=True)
@@ -184,6 +206,28 @@ def register(sub):
     jp.add_argument("query", help="a posting id, or part of a title or company")
     jp.add_argument("--all", action="store_true", help="print every match in full")
     jp.set_defaults(func=lambda args, _cfg: _run(_posting, args))
+    _register_m2(jsub)
+
+
+def _calibrate(args):
+    from . import calibrate, config
+    out = calibrate.run(config.load())
+    print(out["text"] + f"(written to {out['path']})")
+    return 0
+
+
+def _register_m2(jsub):
+    jp = jsub.add_parser("score", help="filters, points, the scoring call and the morning list (M2)")
+    jp.add_argument("--date", help="the list's date (default: today)")
+    jp.add_argument("--no-cap", action="store_true", help="send every job past the threshold (night one's backlog)")
+    jp.add_argument("--dry-run", action="store_true", help="filters and points only: no call, nothing saved")
+    jp.set_defaults(func=lambda args, _cfg: _run(_score, args))
+    jp = jsub.add_parser("today", help="print the morning list")
+    jp.add_argument("--date", help="a past list (default: the latest)")
+    jp.add_argument("--all", action="store_true", help="also every kept job below the top N")
+    jp.set_defaults(func=lambda args, _cfg: _run(_today, args))
+    jp = jsub.add_parser("calibrate", help="compare the pipeline's decisions with Alex's labels (calibration/labels.jsonl)")
+    jp.set_defaults(func=lambda args, _cfg: _run(_calibrate, args))
 
 
 def _run(fn, args):

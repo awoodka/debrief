@@ -80,6 +80,7 @@ class Adapter:
     snapshot = "window"
     weekly = False            # fetched at most once every 7 days (the board directory)
     quiet_ok = False          # nothing new is a normal answer (HN job posts: only unseen ids are requested)
+    tolerate = ()             # HTTP statuses that are a normal answer, not a failure (describe: a job page refused or gone)
 
     def fetch(self, ctx, source):
         raise NotImplementedError
@@ -92,11 +93,16 @@ class Adapter:
         """[(board, company name)] this record tells us about, for the board directory."""
         return []
 
+    def texts(self, record, source):
+        """[(job key "system:id", description, facts {employment, pay})] for postings this record
+        describes (the describe step)."""
+        return []
+
 
 def _registry():
-    from . import apis, boards_watch, hn, lists
+    from . import apis, boards_watch, describe, hn, lists
     out = {}
-    for mod in (lists, apis, hn, boards_watch):
+    for mod in (lists, apis, hn, boards_watch, describe):
         for a in mod.ADAPTERS:
             out[a.name] = a
     return out

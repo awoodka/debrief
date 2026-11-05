@@ -108,7 +108,7 @@ def _remote(tokens):
 # Words that mark a role as early-career; the core title ignores them, plus class years and a
 # trailing level "I", so "New Grad 2027: AI Engineer" and "AI Engineer - New Grad" share a core.
 _EARLY = {"grad", "grads", "graduate", "graduates", "college", "university", "entry", "junior", "jr"}
-_CORE_IGNORE = _EARLY | {"new", "early", "career", "level", "i"}
+_CORE_IGNORE = _EARLY | {"new", "early", "career", "level", "i", "start"}           # "(2027 Start)"
 _YEAR = re.compile(r"^20[2-3]\d$")
 
 

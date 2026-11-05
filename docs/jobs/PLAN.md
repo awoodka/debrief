@@ -541,3 +541,176 @@ Tests: 299.
 - `debrief jobs posting QUERY`.
 
 Tests: 293.
+
+---
+
+## Revision 3 (Alex, 2026-11-04): M2's decisions
+
+Alex, answering the M2 questions:
+1. **Night one:** the whole backlog (about 400 jobs from the last 14 days) is scored once.
+2. **Clearance:** jobs that need an *active* clearance are dropped; "able to obtain" stays.
+3. **Caps:** "keep the stuff in the morning capped to 20 but I am less concerned about before the
+   model (max 50)". So `ranking.top_n` = 20 and `ranking.max_candidates` = 50. Night one's backlog
+   is the one exception.
+4. **Keep:** "anything that I can apply to (that is full time and above 25/hr) should be kept".
+
+This changes Revision 2's step 4: **keep** is no longer a matter of taste. A job is kept when all
+of these hold:
+- Alex could apply: level, years, degree, location, work authorization and clearance all fit;
+- it's full-time;
+- it pays more than $25 an hour (about $52,000 a year), or its pay isn't stated.
+
+The 1–10 **score** is relevance to Alex's wants, skills and projects. It orders the kept jobs, and
+the top 20 make the morning list. The rest are kept and stay visible (`jobs today --all`, later
+the site).
+
+## M2 design
+
+The nightly path is: collect → descriptions → filters → points and cutoff → the scoring call →
+the list. Every job cut on the way is logged with its stage and reason.
+
+- **Filters (code, `jobs/filters.py`).** The profile drives every check:
+  - position type, by title;
+  - excluded title words, checked on what's left of the title after the matched type is removed;
+  - place: the profile's areas, or remote in the US;
+  - posting age: `max_age_days`;
+  - PhD only;
+  - the blocklist;
+  - **full-time:** a source's employment type, or title words such as part-time, contract or
+    temporary;
+  - **pay:** dropped only when clearly below `min_hourly_pay`. Sources mislabel periods, so a
+    "yearly" figure under $15,000 counts as unclear and stays;
+  - **active clearance required:** from the title, and the description when we have one;
+  - **more years than `max_years`:** "N+ years of experience", only when we have the description.
+- **Descriptions (a collect step, `describe`).** Some open jobs pass every check that doesn't need a
+  description but have no description yet. Their text is fetched through the job board's public
+  API:
+  - Greenhouse and Lever: a per-job request;
+  - Workday: the job's cxs page;
+  - Ashby, Workable and Recruitee: the board's list.
+
+  Every request is robots-checked and saved raw, so replay rebuilds it. Company sites and
+  aggregators are never fetched. About 110 jobs on night one, then about 10–20 a night.
+- **Points (code, `jobs/prescore.py`), 0–100.** They're built from:
+  - title fit;
+  - early-career evidence (the title, or a new-grad list);
+  - the profile's skills, coursework and interests found in the description (a job without one
+    gets neutral points, not zero);
+  - freshness.
+
+  Below `ranking.threshold` a job isn't sent. Watchlist companies skip the cutoff and go first. At
+  most `max_candidates` are sent; the rest are logged as "over the cap".
+- **The scoring call (`jobs/score.py`, `prompts/jobs_score_v1.md`).** It's Debrief's triage call
+  pattern: Sonnet 5.5 through `claude -p`, no tools, an empty directory, retried once, and code
+  ranks the list if it fails. It sees the profile and each job: title, company, places, pay,
+  employment type, posted date, and about 600 characters of qualifications. For each job it
+  returns:
+  - `score` 1–10, on a written rubric;
+  - `keep`, by the rule above;
+  - `why`, one line;
+  - `mismatches`.
+
+  Answers are stored per job and profile version (a `scores` table), so nothing is scored twice.
+  Only jobs first seen since the last scoring run are candidates, and a profile change applies
+  from the next night. A large batch (night one) is split into calls of at most 150.
+- **The list.** `jobs today` shows the kept jobs that are new since the last list, ordered by score
+  (ties: points, then newest), top 20, plus a Watchlist section. Each run writes
+  `runs/<date>/score-<run>.json` and `.md` with every cut.
+- **Calibration.** Alex labels a sample (yes or no under the keep rule) in chat. `jobs calibrate`
+  compares the model's keep with the labels.
+- **Profile v3:** `top_n` 20, `max_candidates` 50, and two new filters: `full_time_only` and
+  `min_hourly_pay` (25).
+
+## M2 results (2026-11-04)
+
+Built: `jobs/filters.py`, `jobs/prescore.py`, `jobs/score.py`, `jobs/rank.py`, `jobs/calibrate.py`,
+`jobs/adapters/describe.py`, `prompts/jobs_score_v1.md`, migration `002_m2.sql` (`scores`,
+`daily_list`). Commands: `jobs score [--no-cap] [--dry-run]`, `jobs today [--all]`, `jobs calibrate`.
+Profile v3 saved: top_n 20, max_candidates 50, full_time_only, min_hourly_pay 25. Debrief's
+`triage.score.argv_for` gained an optional `schema` argument (its behavior is unchanged).
+
+**Descriptions (first live run):** 70 requests, 103 descriptions (Ashby board lists cover several
+jobs per request). Four Workday job pages answered 403 with either spelling of the site name.
+Those count as normal answers (`tolerate`) and aren't asked again.
+
+**Filters on the live data (8,211 open postings):**
+
+| Stage | Cut |
+|---|---|
+| title | 5,404 |
+| place | 1,443 |
+| age | 995 |
+| degree | 22 |
+| clearance | 16 |
+| years | 7 |
+| employment | 5 |
+| **Passed** | **319** |
+
+Every cut made from description text was checked by hand. That check led to these fixes:
+- an upper bound ("up to 5 years", "between 0 and 3 years") isn't a minimum;
+- a preference ("Preferred qualifications: 5+ years", "Active Public Trust … preferred") isn't a
+  requirement;
+- a "Post-Start" polygraph is obtainable;
+- "Staff+" is the word "staff";
+- a remote job named by a US city ("Remote - Cleveland, OH", or a source's remote flag) is remote
+  US.
+
+**Night one (`--no-cap`):** 343 jobs in three calls of at most 150. That's 66k tokens in and 34k out,
+about 3.5 minutes, and $0.59 at list price (on the Max plan). 306 kept.
+
+Review of the answers led to more fixes:
+- titles that ask for a Master's are now cut in code (15 of the model's 37 "not kept");
+- the model now sees a source's remote flag. 14 answers were re-asked, and 9 became kept;
+- "(2027 Start)" is ignored when matching titles (92 more listings merged, all checked: speedyapply's
+  TikTok titles);
+- the list shows repeats of the same job (same company and core title) once, with the other
+  links.
+
+**After the fixes:** 319 passed the filters, 314 were sent, 302 kept, 272 once repeats are
+collapsed. The top 20 are new-grad roles at AI-agent, inference and data startups, plus Databricks,
+Palantir and ByteDance AI infrastructure.
+
+**A normal night:** 50 jobs or fewer in one call, about 10k tokens in and 5k out, about $0.10 at
+list price.
+
+Answers from before the prompt fix still list "only title known" as a mismatch. New answers don't.
+
+Tests: 361.
+
+## Revision 4 (Alex, 2026-11-04): new-grad roles only; pay is not a scoring factor
+
+Alex: "I would like it to require New grad, something with more than 2 years of experience I cannot
+compete for. So like these founding engineer roles would be really hard for me to compete for I
+think. Unless you think something else. I would not like the pay to be included in the scoring
+factor."
+
+- **New grad only (code, profile `filters.new_grad_only`, profile v4).** A job needs a sign it's
+  for new grads, or the `level` filter cuts it before the model:
+  - the title: new grad, entry, junior, associate, "I", early career, a class year;
+  - a new-grad list carries it;
+  - the source's own level field ("Entry Level");
+  - the description: "new grads", "recent graduates", "0–2 years", "entry-level", "new graduate
+    level".
+
+  `describe` skips this check when choosing what to fetch, since the description may be what shows
+  it. On the live data it cut 45 jobs, all for experienced people: OpenAI and Anthropic mid-level
+  roles, HN startup posts, founding roles that don't mention new grads.
+- **Founding roles.** Claude agreed they're long shots: most expect engineers who have shipped
+  products. One is kept only when the listing itself welcomes new graduates (the title, or the
+  qualifications); being on a new-grad list isn't enough for these. The keep rule also refuses
+  more than 2 years required, even inside a range ("2–4 years").
+- **The score** weighs fit with what Alex wants *and* how realistically a new graduate could get the
+  job, so a strong-fit long shot scores 5–6.
+- **Pay** is never shown to the model, so it can't move the score or the reason. The $25/hr floor
+  stays a code filter, and the list still shows pay for information.
+
+**Revision 4 results (2026-11-04):** with profile v4, 278 passed the filters (the `level` check cut
+45), and the re-score kept 259. Two prompt fixes came out of the review:
+- years are judged by the *minimum* a listing requires ("0–3", "1–3" are fine and only lower the
+  score);
+- the model now sees each area's city list (it had rejected Jersey City as "outside New York").
+
+Money amounts in titles and descriptions now reach the model as "[pay]" (HN titles carry pay). 21
+answers were re-asked; final: 267 kept, and the top 20 are all new-grad roles. The re-score cost
+about $0.55 at list price, plus $0.05 for the re-asks. One question is open: a minimum of exactly 2
+years ("2–3 years"). The model refused some of these, and the profile's `max_years` of 2 allows them.

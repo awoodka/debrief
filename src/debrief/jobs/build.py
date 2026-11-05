@@ -15,6 +15,8 @@ same raw files rebuilds the same rows.
     change looks exactly like that).
   - Every item that names a board, and every directory row an adapter gives, goes in the board
     directory.
+  - A description an adapter gives (texts(): the describe step) is stored for the posting with that
+    job key, and its facts (employment type, pay) fill the posting's data where it has none.
 """
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -181,6 +183,18 @@ def apply(store, source, adapter, records, refs, warn=None, early_sources=frozen
     seen = defaultdict(set)
     for rec, ref in zip(records, refs):
         at = rec["fetched_at"]
+        for key, text, facts in adapter.texts(rec, source):
+            pid = store.find_key(f"job:{key}")
+            if not pid:
+                continue
+            if text:
+                store.save_text(pid, source.id, text, at)
+                counts["texts"] += 1
+            p = store.posting(pid)
+            new = {k: v for k, v in (facts or {}).items() if v not in (None, "", []) and k not in p["data"]}
+            if new:
+                p["data"].update(new)
+                store.save_posting(p)
         for board, name in adapter.directory(rec, source):
             store.save_directory(board, name, company_norm(name), source.id, at)
             counts["directory"] += 1

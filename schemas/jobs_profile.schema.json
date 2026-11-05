@@ -53,7 +53,8 @@
     "wants": {"type": "string", "minLength": 1, "description": "In Alex's words: what to look for and what not. The scorer's definition of relevant."},
     "filters": {
       "type": "object", "additionalProperties": false,
-      "required": ["locations", "max_years", "max_age_days", "work_authorization", "clearance", "exclude_titles", "blocklist"],
+      "required": ["locations", "max_years", "max_age_days", "work_authorization", "clearance", "exclude_titles", "blocklist",
+                   "full_time_only", "min_hourly_pay", "new_grad_only"],
       "properties": {
         "locations": {
           "type": "object", "additionalProperties": false, "required": ["remote_us", "places"],
@@ -73,7 +74,11 @@
                          "eligible": {"type": "boolean", "description": "could obtain one (keeps 'ability to obtain' jobs)"}}
         },
         "exclude_titles": {"$ref": "#/$defs/words", "description": "whole words or phrases; any match drops the job. Checked against what is left of the title after its matched position-type title is taken out, so 'member of technical staff' isn't dropped by 'staff', but 'staff software engineer' and 'senior member of technical staff' are."},
-        "blocklist": {"$ref": "#/$defs/words", "description": "company names never shown"}
+        "blocklist": {"$ref": "#/$defs/words", "description": "company names never shown"},
+        "full_time_only": {"type": "boolean", "description": "drop jobs a source marks part-time, contract, temporary or internship"},
+        "new_grad_only": {"type": "boolean", "description": "keep only jobs with a sign they're for new grads: the title, a new-grad list, the source's level, or the description"},
+        "min_hourly_pay": {"type": "number", "minimum": 0, "maximum": 500,
+                           "description": "USD an hour; a job whose stated pay is clearly below it is dropped (a year is 2,080 hours). Unstated or unclear pay stays."}
       }
     },
     "ranking": {

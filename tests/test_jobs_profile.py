@@ -14,7 +14,8 @@ BASE = {
     "wants": "Entry-level engineering.",
     "filters": {"locations": {"remote_us": True, "places": {"NYC": ["New York, NY"]}}, "max_years": 2,
                 "max_age_days": 14, "work_authorization": "us_citizen", "clearance": {"has": "none", "eligible": True},
-                "exclude_titles": ["senior"], "blocklist": []},
+                "exclude_titles": ["senior"], "blocklist": [], "full_time_only": True, "min_hourly_pay": 25,
+                "new_grad_only": True},
     "ranking": {"threshold": 40, "max_candidates": 150, "top_n": 30},
 }
 

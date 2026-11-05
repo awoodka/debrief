@@ -558,8 +558,8 @@ def run(cfg, only=None, skip=(), env=os.environ, universe=True, sample=None, log
                                   status="disabled", notes=src.notes, terms=src.terms))
             log("disabled (not requested)")
             continue
-        if src.family == "watchlist":
-            log("collected from the profile's companies (not probed)")
+        if src.family in ("watchlist", "detail"):
+            log("works from the profile and stored postings (not probed)")
             continue
         r = probe_source(client, src, env=env, now=now, bodies=bodies, contact=cfg.contact)
         log(r.status + (f" ({r.summary})" if r.summary else ""))

@@ -64,7 +64,8 @@ class Watchlist(Adapter):
             out.append(JobItem(
                 item_key=key, title=j["title"].strip(), company=company, locations=tuple(j.get("locations") or ()),
                 url=j.get("url") or boards.workday_job_url(board, j.get("path")) or "", board=board, job_key=f"job:{key}",
-                published_at=published, scope=board, remote=j.get("remote"), pay=j.get("pay"), text=j.get("text")))
+                published_at=published, scope=board, remote=j.get("remote"), pay=j.get("pay"), text=j.get("text"),
+                extra={"employment": j["employment"]} if j.get("employment") else {}))
         return out
 
     def directory(self, record, source):

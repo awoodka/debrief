@@ -81,6 +81,39 @@ class JobsStore(Store):
     def save_text(self, posting_id, source_id, text, at):
         self.run("INSERT OR REPLACE INTO posting_text VALUES (?,?,?,?)", (posting_id, source_id, text, at))
 
+    # --------------------------------------------------------------------- scores (M2)
+    def score_for(self, posting_id, profile_id):
+        row = self.one("SELECT * FROM scores WHERE posting_id=? AND profile_id=?", (posting_id, profile_id))
+        if row is None:
+            return None
+        d = dict(row)
+        d["mismatches"], d["keep"] = loads(d["mismatches"], []), bool(d["keep"])
+        return d
+
+    def save_score(self, posting_id, profile_id, run_id, at, answer, model, prompt_version):
+        self.run("INSERT OR REPLACE INTO scores VALUES (?,?,?,?,?,?,?,?,?,?)",
+                 (posting_id, profile_id, run_id, at, answer["score"], int(answer["keep"]), answer["why"],
+                  dumps(answer["mismatches"]), model, prompt_version))
+
+    def save_list(self, list_date, run_id, rows):
+        """rows: [(section, rank, posting_id, score, points)]; replaces that date's list."""
+        self.run("DELETE FROM daily_list WHERE list_date=?", (list_date,))
+        for section, rank, pid, score, pts in rows:
+            self.run("INSERT INTO daily_list VALUES (?,?,?,?,?,?,?)", (list_date, run_id, section, rank, pid, score, pts))
+
+    def texts_for(self, posting_id):
+        """The longest description any source gave, or None."""
+        row = self.one("SELECT text FROM posting_text WHERE posting_id=? ORDER BY length(text) DESC, source_id LIMIT 1",
+                       (posting_id,))
+        return row[0] if row else None
+
+    def get_meta(self, key):
+        row = self.one("SELECT value FROM meta WHERE key=?", (key,))
+        return row[0] if row else None
+
+    def set_meta(self, key, value):
+        self.run("INSERT OR REPLACE INTO meta VALUES (?,?)", (key, value))
+
     # ------------------------------------------------------------------------ directory
     def save_directory(self, board, name, name_norm, source_id, at):
         self.run("INSERT OR REPLACE INTO directory VALUES (?,?,?,?,?)", (board, name, name_norm, source_id, at))

@@ -19,6 +19,8 @@ from . import Adapter
 from .lists import clean_url
 
 TAGS = re.compile(r"<[^>]+>")
+PERIODS = {"annual": "year", "annually": "year", "yearly": "year", "year": "year", "monthly": "month", "month": "month",
+           "weekly": "week", "week": "week", "daily": "day", "day": "day", "hourly": "hour", "hour": "hour"}
 
 
 def _plain(s):
@@ -141,10 +143,11 @@ class Himalayas(Paged):
                 item_key=str(j.get("guid") or link), title=j.get("title") or "", company=j.get("companyName") or "",
                 locations=tuple(j.get("locationRestrictions") or ()), url=clean_url(link), board=boards.board_from_url(link),
                 published_at=boards.when(j.get("pubDate")), remote=True,
-                pay=({"min": j.get("minSalary"), "max": j.get("maxSalary"), "currency": j.get("currency"), "period": "year"}
+                pay=({"min": j.get("minSalary"), "max": j.get("maxSalary"), "currency": j.get("currency"),
+                      "period": PERIODS.get(str(j.get("salaryPeriod") or "").lower(), "year")}
                      if j.get("minSalary") or j.get("maxSalary") else None),
                 text=boards.html_text(j.get("description")) or j.get("excerpt"),
-                extra={"seniority": j.get("seniority"), "via": "Himalayas"}))
+                extra={"seniority": j.get("seniority"), "employment": j.get("employmentType"), "via": "Himalayas"}))
         return out
 
 
@@ -209,7 +212,8 @@ class Jobicy(Adapter):
                 published_at=boards.when(j.get("pubDate")), remote=True,
                 pay=({"min": lo, "max": hi, "currency": j.get("salaryCurrency"), "period": j.get("salaryPeriod")} if lo or hi else None),
                 text=boards.html_text(j.get("jobDescription")) or j.get("jobExcerpt"),
-                extra={"level": j.get("jobLevel"), "type": j.get("jobType"), "via": "Jobicy"}))
+                extra={"level": j.get("jobLevel"), "employment": ", ".join(j["jobType"]) if isinstance(j.get("jobType"), list)
+                       else j.get("jobType"), "via": "Jobicy"}))
         return out
 
 

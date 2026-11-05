@@ -32,6 +32,18 @@ http:
 collect:
   raw_retention_days: 60
 
+# The nightly scoring call (docs/jobs/PLAN.md, "M2 design"): Debrief's triage call pattern, through
+# Claude Code on the Max plan, no tools. Debrief's calibration chose Sonnet 5.5.
+score:
+  model: claude-sonnet-5-5
+  effort: null                    # Claude Code's --effort; null leaves the model's default
+  prompt: prompts/jobs_score_v1.md
+  timeout_s: 900
+  text_max_chars: 600             # the qualifications excerpt per job
+  why_max_chars: 240
+  mismatch_max: 5                 # mismatches kept per job, each cut to 120 characters
+  chunk_size: 150                 # jobs per call; only a large batch (night one) needs more than one
+
 probe:
   # The board-universe timing test: this many boards per job-board system, picked at random (fixed
   # seed, so a rerun samples the same boards), each listed once.

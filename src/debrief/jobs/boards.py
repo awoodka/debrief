@@ -119,7 +119,8 @@ def parse_list(system, data):
 
     Each job: id (the system's id for it), title, published (ISO UTC or None), age_days (Workday's
     relative dates), location (one line), locations (list), url, path (Workday's externalPath),
-    text (description, when the list carries one), pay, remote."""
+    text (description, when the list carries one), pay, remote, employment (the system's own words
+    for full-time, part-time, contract ..., when it gives them)."""
     total = None
     if system == "greenhouse":
         jobs = []
@@ -148,7 +149,8 @@ def parse_list(system, data):
                          "locations": list(cat.get("allLocations") or ([cat["location"]] if cat.get("location") else [])),
                          "url": j.get("hostedUrl"), "text": (text or None) and text[:20000],
                          "pay": _pay(sr.get("min"), sr.get("max"), sr.get("currency"), sr.get("interval")),
-                         "remote": (j.get("workplaceType") == "remote") if j.get("workplaceType") else None})
+                         "remote": (j.get("workplaceType") == "remote") if j.get("workplaceType") else None,
+                         "employment": cat.get("commitment")})
     elif system == "ashby":
         jobs = []
         for j in data["jobs"]:
@@ -160,7 +162,7 @@ def parse_list(system, data):
                          "locations": locs, "url": j.get("jobUrl"),
                          "text": (j.get("descriptionPlain") or html_text(j.get("descriptionHtml")) or None),
                          "pay": ({"summary": comp["compensationTierSummary"]} if comp.get("compensationTierSummary") else None),
-                         "remote": j.get("isRemote")})
+                         "remote": j.get("isRemote"), "employment": j.get("employmentType")})
     elif system == "workable":
         jobs = []
         for j in data["jobs"]:
@@ -170,7 +172,7 @@ def parse_list(system, data):
                          "published": when(j.get("published_on") or j.get("created_at")),
                          "location": loc + (" (remote)" if j.get("telecommuting") else ""), "locations": locs,
                          "url": j.get("url") or j.get("shortlink"), "text": html_text(j.get("description")),
-                         "pay": None, "remote": bool(j.get("telecommuting"))})
+                         "pay": None, "remote": bool(j.get("telecommuting")), "employment": j.get("employment_type")})
     elif system == "smartrecruiters":
         total = data.get("totalFound")
         jobs = []

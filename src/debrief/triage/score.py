@@ -141,9 +141,10 @@ def run_claude(argv, stdin, timeout):
     return p.returncode, p.stdout, p.stderr
 
 
-def argv_for(model, system, effort):
+def argv_for(model, system, effort, schema=None):
+    """schema: the answer's JSON schema (default: triage's; jobs passes its own)."""
     argv = ["claude", "-p", "--model", model, "--tools", "", "--system-prompt", system,
-            "--json-schema", json.dumps(SCHEMA), "--output-format", "json", "--setting-sources", "",
+            "--json-schema", json.dumps(schema or SCHEMA), "--output-format", "json", "--setting-sources", "",
             "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"]
     return argv + (["--effort", effort] if effort else [])
 

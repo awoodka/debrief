@@ -27,7 +27,7 @@ from . import build, profile as profiles
 from .adapters import REGISTRY, Ctx
 from .store import JobsStore, state_path
 
-ORDER = ("watchlist", "list", "api", "discussion", "universe")
+ORDER = ("watchlist", "list", "api", "discussion", "universe", "detail")
 LATER = {"email": "M3", "check": "M3"}
 
 
@@ -59,15 +59,19 @@ def eligibility(source, store, env, now):
     return None
 
 
-def classify(records, counts, crash, quiet_ok=False):
-    failed = [r for r in records if not raw.ok(r) and r.get("status") != 304]
+def _failed(r, tolerate=()):
+    return not raw.ok(r) and r.get("status") != 304 and r.get("status") not in tolerate
+
+
+def classify(records, counts, crash, quiet_ok=False, tolerate=()):
+    failed = [r for r in records if _failed(r, tolerate)]
     if not records:
-        return "failed" if crash else "empty"
+        return "failed" if crash else ("ok" if quiet_ok else "empty")
     if len(failed) == len(records):
         return "failed"
     if failed or crash:
         return "partial"
-    if (counts.get("items", 0) == 0 and counts.get("directory", 0) == 0 and not quiet_ok
+    if (counts.get("items", 0) == 0 and counts.get("directory", 0) == 0 and counts.get("texts", 0) == 0 and not quiet_ok
             and not all(r.get("status") == 304 for r in records)):
         return "empty"
     return "ok"
@@ -88,7 +92,7 @@ def collect_source(cfg, store, client, source, run_id, run_date, now, prof, env,
         with store.transaction():
             counts = build.apply(store, source, adapter, ctx.records, refs, warn=ctx.warn,
                                  early_sources=early_sources(cfg))
-            status = classify(ctx.records, counts, crash, quiet_ok=adapter.quiet_ok)
+            status = classify(ctx.records, counts, crash, quiet_ok=adapter.quiet_ok, tolerate=adapter.tolerate)
             for rec, ref in zip(ctx.records, refs):
                 store.record_fetch(run_id, source.id, rec["seq"], rec["url"], rec["fetched_at"], rec.get("status", 0),
                                    len(raw.body(rec)), rec.get("error") or None, ref)
@@ -96,7 +100,7 @@ def collect_source(cfg, store, client, source, run_id, run_date, now, prof, env,
                 for url, etag, last_modified in ctx.validators:
                     store.save_validators(url, etag, last_modified, stamp)
             errors = ([crash] if crash else []) + [f"{r['url']}: {r.get('error') or r.get('status')}" for r in ctx.records
-                                                    if not raw.ok(r) and r.get("status") != 304]
+                                                    if _failed(r, adapter.tolerate)]
             store.save_source_state(source.id, run_id, status, "; ".join(errors)[:500] or None, stamp)
     except Exception as e:  # noqa: BLE001 — a build crash rolls back this source only
         status, errors = "failed", [f"build crashed: {type(e).__name__}: {e}"[:300]]
@@ -140,6 +144,7 @@ def run(cfg, only=None, run_date=None, client=None, env=os.environ, log=print):
         c = entry["counts"]
         log(f"{entry['status']}: {entry['requests']} req, {c.get('items', 0)} items, {c.get('new', 0)} new "
             f"({c.get('postings_new', 0)} new postings, {c.get('merged', 0)} merged), {c.get('closed', 0)} closed"
+            + (f", {c['texts']} descriptions" if c.get("texts") else "")
             + (f" — {entry['errors'][0]}" if entry["errors"] else ""))
         report["sources"].append(entry)
     removed = raw.prune(cfg.data_dir, cfg.settings["collect"]["raw_retention_days"], run_date)
@@ -220,13 +225,14 @@ def replay(cfg, run_date, into, log=print, fresh=True):
     return {"runs": list(runs), "totals": dict(totals), "into": str(into)}
 
 
-STATE_TABLES = ("source_state", "http_validators", "runs", "fetches")    # live-only: not rebuilt from raw
+# Live-only tables, not rebuilt from raw: carried over by rebuild() when the old database has them.
+STATE_TABLES = ("source_state", "http_validators", "runs", "fetches", "scores", "daily_list", "meta")
 
 
 def rebuild(cfg, log=print):
     """Rebuild the state database from every raw day after a parser or matching change, with no
     network. Replays all of raw/ in date and run order into a new database, carries over what
-    replay can't reproduce (ETags, source state, run history), backs up the current database next
+    replay can't reproduce (ETags, source state, run history, scores, lists), backs up the current database next
     to it, and copies the rebuilt one over it. Only as complete as the raw store (60 days)."""
     import sqlite3
     live = state_path(cfg)
@@ -244,9 +250,13 @@ def rebuild(cfg, log=print):
     backup_name = None
     if live.exists():
         new.execute("ATTACH DATABASE ? AS old", (str(live),))
+        old_tables = {r[0] for r in new.execute("SELECT name FROM old.sqlite_master WHERE type='table'")}
         for name in STATE_TABLES:
-            new.execute(f"DELETE FROM main.{name}")
-            new.execute(f"INSERT INTO main.{name} SELECT * FROM old.{name}")
+            if name not in old_tables:
+                continue
+            keep_version = " WHERE key != 'schema_version'" if name == "meta" else ""   # the new file's own version stays
+            new.execute(f"DELETE FROM main.{name}{keep_version}")
+            new.execute(f"INSERT INTO main.{name} SELECT * FROM old.{name}{keep_version}")
         new.commit()
         new.execute("DETACH DATABASE old")
         backup_name = f"jobs.before-rebuild-{stamp}.sqlite"

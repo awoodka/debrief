@@ -182,6 +182,9 @@ class FakeAdapter:
     def directory(self, record, source):
         return []
 
+    def texts(self, record, source):
+        return []
+
 
 @pytest.fixture
 def store(tmp_path):
@@ -484,3 +487,54 @@ def test_rebuild_reproduces_the_live_tables(tmp_path, monkeypatch):
     after = {t: con.execute(f"SELECT * FROM {t} ORDER BY 1, 2").fetchall() for t in collect.TABLES + collect.STATE_TABLES}
     con.close()
     assert after == before
+
+
+# ----------------------------------------------------------------------------- describe (M2)
+
+from debrief.jobs.adapters import describe as describe_mod  # noqa: E402
+
+
+def test_describe_texts_per_system():
+    d = REGISTRY["describe"]
+    gh = rec({"id": 123, "title": "SWE", "content": "&lt;p&gt;Build things. 1+ year of experience.&lt;/p&gt;",
+              "pay_input_ranges": [{"min_cents": 10000000, "max_cents": 12000000, "currency_type": "USD"}]},
+             meta={"system": "greenhouse", "board": "greenhouse:acme", "wanted": ["greenhouse:123"]})
+    (key, text, facts), = d.texts(gh, src(id="describe"))
+    assert key == "greenhouse:123" and "Build things" in text and facts["pay"]["max"] == 120000
+    u = "0f1e2d3c-1111-2222-3333-444455556666"
+    ashby = rec({"jobs": [{"id": u, "title": "SWE", "descriptionPlain": "Python", "employmentType": "FullTime"},
+                          {"id": "9f1e2d3c-1111-2222-3333-444455556666", "title": "Other", "descriptionPlain": "x"}]},
+                meta={"system": "ashby", "board": "ashby:acme", "wanted": [f"ashby:{u}"]})
+    out = d.texts(ashby, src(id="describe"))
+    assert out == [(f"ashby:{u}", "Python", {"employment": "FullTime", "pay": None})]       # only the wanted job
+    wd = rec({"jobPostingInfo": {"jobDescription": "<p>Design chips</p>", "timeType": "Full time"}},
+             meta={"system": "workday", "board": "workday:acme|wd1|Ext", "wanted": ["workday:acme/R1"]})
+    assert d.texts(wd, src(id="describe")) == [("workday:acme/R1", "Design chips", {"employment": "Full time"})]
+    assert d.texts(rec("", status=404, meta={"system": "lever"}), src(id="describe")) == []
+
+
+def test_describe_workday_path():
+    assert describe_mod._workday_path(["https://jobright.ai/x", "https://acme.wd1.myworkdayjobs.com/en-US/Ext/job/US-NY/SWE_R1"]) \
+        == "/job/US-NY/SWE_R1"
+
+
+def test_describe_targets_and_store(store, tmp_path):
+    import copy
+    prof = copy.deepcopy(BASE)
+    gh = "https://job-boards.greenhouse.io/acme/jobs/{}"
+    apply(store, "simplify", [it("s1", title="Software Engineer", url=gh.format(1), job_key="job:greenhouse:1",
+                                 board="greenhouse:acme"),
+                              it("s2", title="Senior Software Engineer", url=gh.format(2), job_key="job:greenhouse:2",
+                                 board="greenhouse:acme"),                                   # filtered out: senior
+                              it("s3", title="Software Engineer", company="Beta", url="https://beta.com/jobs/9")])  # no id
+    from datetime import datetime, timezone
+    found = describe_mod.targets(store, prof, datetime(2026, 11, 4, 12, tzinfo=timezone.utc))
+    assert [(s, b, k) for s, b, k, _ in found] == [("greenhouse", "greenhouse:acme", "greenhouse:1")]
+    r = rec({"id": 1, "title": "Software Engineer", "content": "Python and SQL"},
+            meta={"system": "greenhouse", "board": "greenhouse:acme", "wanted": ["greenhouse:1"]})
+    with store.transaction():
+        c = build.apply(store, src(id="describe", family="detail", url=None), REGISTRY["describe"], [r], ["ref#0"])
+    assert c["texts"] == 1
+    pid = store.find_key("job:greenhouse:1")
+    assert store.one("SELECT text FROM posting_text WHERE posting_id=?", (pid,))[0] == "Python and SQL"
+    assert describe_mod.targets(store, prof, datetime(2026, 11, 4, 12, tzinfo=timezone.utc)) == []    # described now

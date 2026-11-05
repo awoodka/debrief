@@ -352,6 +352,15 @@
   options: {max_pages: 100}
   notes: each company's whole board, every night; Workday boards page 20 at a time (max_pages caps it at 2,000 jobs)
 
+# ------------------------------------------------- descriptions for jobs that may be scored (M2)
+- id: describe
+  name: Job descriptions from job-board APIs
+  family: detail
+  adapter: describe
+  options: {max_requests: 300}
+  notes: runs last; only open jobs that pass the profile's filters and have no description; Greenhouse, Lever and
+    Workday per job, Ashby, Workable and Recruitee per board; never company sites or aggregators
+
 # ----------------------------------------------------------------------- the alert inbox (Gmail)
 - id: alert-inbox
   name: Job-alert inbox (Gmail IMAP)
