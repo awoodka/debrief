@@ -11,8 +11,9 @@
 #   run.sh brief    write today's brief again (after `run.sh triage`, say), then publish the site
 #   run.sh site     rebuild the site from every brief.json and publish it
 #   run.sh jobs     the jobs steps again (docs/jobs/PLAN.md): collect every job source, filter and
-#                              score the new postings with one scoring call, and write the morning
-#                              list to $DATA/jobs/today.txt. They run after Debrief's steps, and a
+#                              score the new postings with one scoring call, check coverage against
+#                              the Google and alert samples, and write the morning list to
+#                              $DATA/jobs/today.txt. They run after Debrief's steps, and a
 #                              jobs failure never stops those: it only marks the run failed.
 #
 # The site is static files in $WWW (/srv/www/debrief), which Caddy serves as debrief.alexwoodka.com:
@@ -169,6 +170,9 @@ jobs() {
     2) log "FAIL: the jobs scoring call failed; today's list is ranked by points (rerun: run.sh jobs)"; FAILED=1 ;;
     *) log "FAIL: jobs score exited $CODE (rerun: run.sh jobs)"; FAILED=1; return ;;
   esac
+  run_step "jobs coverage" timeout 10m docker run "${BASE[@]}" --network none --memory 1g "$IMAGE" \
+    python -m debrief jobs coverage --date "$TODAY"
+  if [ "$CODE" = 0 ]; then log "jobs coverage: ok"; else log "WARN: jobs coverage exited $CODE (the list is still written)"; fi
   run_step "jobs today" timeout 5m docker run "${BASE[@]}" --network none --memory 1g "$IMAGE" \
     python -m debrief jobs today --date "$TODAY"
   if [ "$CODE" = 0 ]; then

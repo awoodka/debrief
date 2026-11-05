@@ -226,12 +226,19 @@ class Adzuna(Paged):
     name = "adzuna"
 
     def requests(self, ctx, source):
+        """One search per role type and place: the role in the title (title_only), any of
+        options.early_words anywhere (what_or), and "remote" for the remote search."""
         out = []
+        words = source.options.get("early_words")
         for phrase, place in searches(ctx.profile, source):
-            p = {"what": phrase + ("" if place else " remote"), "max_days_old": source.options.get("max_days_old", 2),
+            p = {"title_only": phrase, "max_days_old": source.options.get("max_days_old", 2),
                  "results_per_page": 50, "content-type": "application/json"}
+            if words:
+                p["what_or"] = words
             if place:
                 p["where"] = place
+            else:
+                p["what"] = "remote"
             out.append((endpoint(source), p, {"each": f"{phrase} @ {place or 'remote'}"}))
         return out
 
@@ -264,14 +271,27 @@ class Adzuna(Paged):
 class USAJobs(Adapter):
     name = "usajobs"
 
+    def requests(self, profile, source):
+        """[(params, each)]: one search per role type and place, plus, for each of
+        options.hiring_paths ("graduates": the Recent Graduates path), one search per place with no
+        keyword, since every job on that path is meant for new graduates."""
+        out = []
+        days = source.options.get("date_posted", 3)
+        for phrase, place in searches(profile, source):
+            p = {"Keyword": phrase, "DatePosted": days, "ResultsPerPage": 100}
+            p.update({"LocationName": place} if place else {"RemoteIndicator": "True"})
+            out.append((p, f"{phrase} @ {place or 'remote'}"))
+        places = sorted({pl for _, pl in searches(profile, source)}, key=lambda x: (x is None, x or ""))
+        for path in source.options.get("hiring_paths") or []:
+            for place in places:
+                p = {"HiringPath": path, "DatePosted": days, "ResultsPerPage": 100}
+                p.update({"LocationName": place} if place else {"RemoteIndicator": "True"})
+                out.append((p, f"path {path} @ {place or 'remote'}"))
+        return out
+
     def fetch(self, ctx, source):
-        for phrase, place in searches(ctx.profile, source):
-            p = {"Keyword": phrase, "DatePosted": source.options.get("date_posted", 3), "ResultsPerPage": 100}
-            if place:
-                p["LocationName"] = place
-            else:
-                p["RemoteIndicator"] = "True"
-            ctx.get(source, endpoint(source), params=p, each=f"{phrase} @ {place or 'remote'}", conditional=False)
+        for p, each in self.requests(ctx.profile, source):
+            ctx.get(source, endpoint(source), params=p, each=each, conditional=False)
 
     def parse(self, record, source):
         d = _json(record) or {}

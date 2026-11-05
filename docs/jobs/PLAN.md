@@ -844,10 +844,39 @@ were still unbuilt or without keys. Alex's answers:
   descriptions and found 3 roles gone on their boards (two CoStar roles on Workday, one Twilio
   role on Greenhouse); the older catch-up would list 29 roles from 30 scored.
 
-### Part 2 (next): coverage
-Alert inbox (IMAP, read-only, parsers built from real samples), Adzuna and USAJobs with keys, the
-SerpAPI sample and `jobs coverage` with a cause for every miss. Plan:
-`~/.claude/plans/now-create-a-plan-precious-aho.md`, sections 2.0–2.4.
+Part 1 ran on live data on 2026-11-05: the same 3 roles marked gone, and `older.txt` lists 29
+roles (30 scored in one call, $0.08 list price), led by Fireworks AI's Member of Technical Staff New
+Grad (10) and Brain Co.'s AI Platform Engineer New Grad (9). Seen there: a Blackstone London role
+also carries "Berkeley, CA" (from speedyapply's row); fixed below (F1).
+
+### Part 2 (built; waiting on Alex's accounts and keys)
+- **The alert inbox** (`adapters/alerts.py`, source `alert-inbox`): IMAP to the jobs-only Gmail,
+  INBOX opened read-only, messages fetched with BODY.PEEK[] (nothing marked read or moved), the
+  last 4 days, each message once (its UID URL is in the fetch history), at most 300 a night, kept
+  raw with no username in its URL; the sender's site is recognized from the From domain (a
+  forwarded Handshake alert keeps it). Parsers per site come from real sample emails; until a site
+  has one, its emails are kept and counted, not parsed. Items never carry a site's listing id as a
+  job key, so a LinkedIn copy merges into the job the lists have (tested). The source counts as
+  new-grad (`options.early`), since every alert uses the site's Entry-level filter.
+- **The Google sample** (`adapters/serpapi.py`, source `serpapi-google-jobs`): reads the account
+  first (free), spends at most 8 searches a night and never more than an even share of the month's
+  remainder, rotating through role types x New York, Washington DC, San Francisco and remote.
+  Never a source of jobs; the key is redacted from the raw records.
+- **`jobs coverage`** (`coverage.py`, migration 004 `coverage_samples`): samples from the raw
+  store; eligibility by the profile's filters (ineligible ones keep their stage and stay out of
+  the recall); matching by job id, then same company + core title + place, then "near" (a similar
+  company name and 60% of the core title words: found, but listed as a possible dedupe gap); an
+  unmatched sample waits for three runs, then is a miss with its cause (not watched, company site
+  only, closed site only, broken source) and a suggestion (`jobs watch add ... --url ...`, an alert
+  search). The alert sample counts the alert jobs no other source had. Report in
+  `runs/<date>/coverage-*.md`; its summary is the morning list's second line. `run.sh` runs it
+  after `jobs score` (no network, no Claude; a failure only warns).
+- **Adzuna**: the role in the title (`title_only`) and any of "graduate grad junior entry
+  associate" (`what_or`); "remote" for the remote search. **USAJobs**: the role searches plus the
+  Recent Graduates hiring path (`HiringPath=graduates`) for DC and remote. Both start with their
+  keys; their queries get tuned on the first real responses.
+- Waiting on Alex: the Gmail account and app password, the alerts on the seven sites, and the
+  Adzuna, USAJobs and SerpAPI keys (`scripts/set-env`, which writes both env files).
 
 ## Fixes before Part 2 (Alex, 2026-11-05: "make the fixes … ensure … the proposed fixes do not break the system or alter the end product behavior")
 - **F1, the board decides the country.** speedyapply listed Blackstone's London analyst role as

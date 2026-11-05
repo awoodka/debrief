@@ -426,6 +426,10 @@ def today(cfg, list_date=None, show_all=False, catchup=None):
         fresh = sum(1 for e in shown if e.get("new", True))
         L = [f"Jobs for {list_date} · {len(shown)} shown of {report.get('kept_distinct', report.get('kept', '?'))} kept "
              f"({fresh} new tonight, {len(shown) - fresh} carried over) · {tail}"]
+        from .coverage import summary_line
+        line = summary_line(store, list_date)
+        if line:
+            L.append(line)
         sections = [("new", "New"), ("watchlist", "Watchlist")]
     if show_all and not catchup:
         allkept = [c for c in report.get("cuts", []) if c["stage"] in ("beyond N", "company limit")]

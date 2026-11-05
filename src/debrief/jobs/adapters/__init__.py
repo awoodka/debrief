@@ -72,6 +72,11 @@ class Ctx:
         fetched = self._refused(url) or self.client.post(url, json_body=json_body, headers=hdrs or None)
         return self._record(source, fetched, secrets, each, {**(meta or {}), "body": json_body})
 
+    def record(self, source, fetched, *, each=None, meta=None, secrets=()):
+        """Keep a response that didn't come through get() or post() (the IMAP inbox): the same raw
+        record, with `secrets` redacted from its URL and error."""
+        return self._record(source, fetched, list(secrets), each, meta)
+
     def warn(self, message):
         self.warnings.append(message)
 
@@ -106,9 +111,9 @@ class Adapter:
 
 
 def _registry():
-    from . import apis, boards_watch, describe, finder, hn, lists
+    from . import alerts, apis, boards_watch, describe, finder, hn, lists, serpapi
     out = {}
-    for mod in (lists, apis, hn, boards_watch, finder, describe):
+    for mod in (lists, apis, hn, boards_watch, finder, describe, alerts, serpapi):
         for a in mod.ADAPTERS:
             out[a.name] = a
     return out

@@ -11,8 +11,8 @@ config/jobs/sources.yml order. For each source:
 
 Statuses: ok, partial (some requests failed), failed, empty (responses, but no jobs at all),
 needs_key (its key isn't set; nothing requested), not_due (the weekly directory), disabled,
-probe_only (no collector: example boards, big-company APIs that aren't on the watchlist), and
-not_built (the alert inbox and the miss-check, which arrive in M3).
+and probe_only (no collector: example boards, big-company APIs that aren't on the watchlist, the
+SerpAPI account check).
 
 `--replay DATE` rebuilds that day's runs from the raw files into a new database, with no network.
 """
@@ -27,8 +27,7 @@ from . import build, profile as profiles
 from .adapters import REGISTRY, Ctx
 from .store import JobsStore, state_path
 
-ORDER = ("watchlist", "list", "api", "discussion", "universe", "detail")
-LATER = {"email": "M3", "check": "M3"}
+ORDER = ("watchlist", "list", "api", "discussion", "email", "universe", "detail", "check")
 
 
 def ordered(sources):
@@ -37,15 +36,14 @@ def ordered(sources):
 
 def early_sources(cfg):
     """The community lists (family "list"): every one is a new-grad list, so all their listings are
-    early-career."""
-    return frozenset(s.id for s in cfg.sources if s.family == "list")
+    early-career. Also any source with options.early (the alert inbox: every saved search uses the
+    site's Entry-level filter)."""
+    return frozenset(s.id for s in cfg.sources if s.family == "list" or (s.options or {}).get("early"))
 
 
 def eligibility(source, store, env, now):
     if not source.enabled:
         return "disabled"
-    if source.family in LATER:
-        return "not_built"
     if not source.adapter:
         return "probe_only"
     if source.adapter not in REGISTRY:
@@ -242,7 +240,8 @@ def replay(cfg, run_date, into, log=print, fresh=True):
 
 
 # Live-only tables, not rebuilt from raw: carried over by rebuild() when the old database has them.
-STATE_TABLES = ("source_state", "http_validators", "runs", "fetches", "scores", "daily_list", "highlighted", "meta")
+STATE_TABLES = ("source_state", "http_validators", "runs", "fetches", "scores", "daily_list", "highlighted",
+                "coverage_samples", "meta")
 
 
 def remap_carried(con):

@@ -12,6 +12,7 @@
   debrief jobs posting QUERY [--all]                  one posting, its listings and keys
   debrief jobs score [--date D] [--no-cap] [--dry-run] filters, points, the scoring call, the morning list (M2)
   debrief jobs today [--date D] [--all] [--catchup]   print the morning list (or the catch-up list)
+  debrief jobs coverage [--date D]                    the coverage check: samples matched, misses with causes (M3)
   debrief jobs catchup [--date D] [--dry-run] [--since D] [--name N]   once: every kept job in the pool, to N.txt
   debrief jobs calibrate                              compare the pipeline's decisions with Alex's labels
 """
@@ -161,6 +162,14 @@ def _today(args):
     return 0
 
 
+def _coverage(args):
+    """The coverage check (docs/jobs/PLAN.md, "Revision 6"): the Google and alert samples."""
+    from . import config, coverage
+    r = coverage.run(config.load(), run_date=args.date, log=lambda *a: None)
+    print(f"jobs coverage {r['run_id']}: {r['summary']} · report in jobs/runs/{r['run_date']}/{r['run_id']}.md")
+    return 0
+
+
 def _catchup(args):
     """The one-time catch-up (docs/jobs/PLAN.md, "Revision 5"): every kept job in today's pool,
     written to <data>/jobs/catchup.txt."""
@@ -253,6 +262,9 @@ def _register_m2(jsub):
     jp.add_argument("--catchup", nargs="?", const="catchup", metavar="NAME",
                     help="a catch-up list instead of the morning list (default name: catchup; e.g. older)")
     jp.set_defaults(func=lambda args, _cfg: _run(_today, args))
+    jp = jsub.add_parser("coverage", help="the coverage check: Google's job results and the alert emails against what we collected")
+    jp.add_argument("--date", help="the run date (default: today)")
+    jp.set_defaults(func=lambda args, _cfg: _run(_coverage, args))
     jp = jsub.add_parser("catchup", help="once: score today's whole pool with no cap and list every kept job (catchup.txt)")
     jp.add_argument("--date", help="the list's date (default: today)")
     jp.add_argument("--dry-run", action="store_true", help="filters and points only: no call, nothing saved")

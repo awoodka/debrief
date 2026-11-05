@@ -445,7 +445,7 @@ def test_skipped_sources_are_reported(tmp_path, monkeypatch):
     cfg = _cfg(tmp_path, monkeypatch, {"adzuna", "alert-inbox", "board-greenhouse", "remotive"})
     r = collect.run(cfg, client=SiteClient({}), run_date="2026-11-04", env={}, log=lambda *a, **k: None)
     assert {s["id"]: s["status"] for s in r["sources"]} == {
-        "adzuna": "needs_key", "alert-inbox": "not_built", "board-greenhouse": "probe_only", "remotive": "disabled"}
+        "adzuna": "needs_key", "alert-inbox": "needs_key", "board-greenhouse": "probe_only", "remotive": "disabled"}
 
 
 # ---------------------------------------------------------------------------------- watchlist
@@ -668,3 +668,20 @@ def test_the_same_title_in_two_cities_is_not_ambiguous(store):
     c = _put(store, "speedyapply-ai", [it("a1", title=t + " - 2027 Start", company="TikTok", locations=("San Jose, CA",)),
                                        it("a2", title=t + " - 2027 Start", company="TikTok", locations=("Seattle, WA",))])
     assert c["merged"] == 2 and c.get("postings_new", 0) == 0
+
+
+def test_adzuna_and_usajobs_requests(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path, monkeypatch, {"adzuna", "usajobs"})
+    prof = json.loads(json.dumps(BASE))
+    ctx = type("C", (), {"profile": prof})()
+    reqs = REGISTRY["adzuna"].requests(ctx, cfg.source("adzuna"))
+    params = [p for _, p, _ in reqs]
+    assert {p.get("where") for p in params} == {"New York, NY", None}
+    assert all(p["title_only"] == "software engineer" and p["what_or"] == "graduate grad junior entry associate" for p in params)
+    assert next(p for p in params if p.get("where") is None)["what"] == "remote"
+    usa = REGISTRY["usajobs"].requests(prof, cfg.source("usajobs"))
+    eaches = [e for _, e in usa]
+    assert eaches == ["software engineer @ Washington, DC", "software engineer @ remote",
+                      "path graduates @ Washington, DC", "path graduates @ remote"]
+    graduates = [p for p, e in usa if e.startswith("path")]
+    assert all(p["HiringPath"] == "graduates" and "Keyword" not in p for p in graduates)

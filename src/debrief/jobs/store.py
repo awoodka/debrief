@@ -92,6 +92,12 @@ class JobsStore(Store):
                                                  "locations": r["locations"], "company": r["key"][3:].split("|", 1)[0]})
         return list(out.values())
 
+    def postings_at(self, company_norm):
+        """Every posting, open or closed, whose fuzzy key names this company (the coverage check)."""
+        return self.q("""SELECT DISTINCT p.posting_id, p.title, p.locations, p.closed_at FROM posting_keys k
+                         JOIN postings p USING (posting_id) WHERE k.key >= ? AND k.key < ? ORDER BY p.posting_id""",
+                      (f"fz:{company_norm}|", f"fz:{company_norm}}}"))
+
     def posting_sources(self, posting_id):
         return {r[0] for r in self.q("SELECT DISTINCT source_id FROM items WHERE posting_id=?", (posting_id,))}
 

@@ -222,7 +222,8 @@
   name: Adzuna (US)
   family: api
   adapter: adzuna
-  options: {endpoint: "https://api.adzuna.com/v1/api/jobs/us/search/{page}", max_pages: 2, max_days_old: 2}
+  options: {endpoint: "https://api.adzuna.com/v1/api/jobs/us/search/{page}", max_pages: 2, max_days_old: 2,
+            early_words: "graduate grad junior entry associate"}
   url: https://api.adzuna.com/v1/api/jobs/us/search/1?results_per_page=50&what=software%20engineer&max_days_old=1&content-type=application/json
   auth: {params: {app_id: ADZUNA_APP_ID, app_key: ADZUNA_APP_KEY}}
   probe:
@@ -240,7 +241,8 @@
   family: api
   adapter: usajobs
   headers: {User-Agent: "{contact}"}
-  options: {endpoint: "https://data.usajobs.gov/api/search", places: ["Washington, DC"], date_posted: 3}
+  options: {endpoint: "https://data.usajobs.gov/api/search", places: ["Washington, DC"], date_posted: 3,
+            hiring_paths: [graduates]}
   url: https://data.usajobs.gov/api/search?Keyword=software&DatePosted=1&ResultsPerPage=100
   auth: {headers: {Authorization-Key: USAJOBS_API_KEY}}
   probe:
@@ -381,13 +383,19 @@
 - id: alert-inbox
   name: Job-alert inbox (Gmail IMAP)
   family: email
+  adapter: alert_inbox
   url: imaps://imap.gmail.com:993
   auth: {env: [JOBS_IMAP_USER, JOBS_IMAP_PASSWORD]}
+  options: {early: true, days: 4, max_messages: 300}
   probe:
     kind: imap
     senders: {linkedin: linkedin.com, indeed: indeed.com, glassdoor: glassdoor.com, wellfound: wellfound.com,
               handshake: joinhandshake.com, dice: dice.com, builtin: builtin.com}
-  notes: logs in and counts alert emails per sender; reads no message bodies
+  notes: "a Gmail account used only for saved-search alerts (LinkedIn, Indeed, Handshake forwarded from the school
+    address, Wellfound, Glassdoor, Dice, Built In; every search with the site's Entry-level filter, so the source
+    counts as new-grad: options.early). Read-only: INBOX opened read-only, BODY.PEEK, nothing marked read or moved.
+    The probe logs in and counts alert emails per sender, reading no bodies. Parsers per sender come from real
+    samples (PLAN.md Revision 6); until then emails are kept and counted."
 
 # --------------------------------------------------------- the miss-check sample (Google's job results)
 - id: serpapi-account
@@ -399,10 +407,24 @@
           fields: {searches_left: total_searches_left, per_month: searches_per_month}}
 
 - id: serpapi-google-jobs
-  name: SerpAPI google_jobs (uses 1 of the 250 free monthly searches)
+  name: SerpAPI google_jobs (the coverage check's Google sample; the probe uses 1 free search)
   family: check
+  adapter: serpapi_sample
   url: https://serpapi.com/search.json?engine=google_jobs&q=software%20engineer%20new%20grad&location=New%20York%2C%20New%20York%2C%20United%20States&hl=en&gl=us
   auth: {params: {api_key: SERPAPI_KEY}}
+  options:
+    endpoint: https://serpapi.com/search.json
+    account_url: https://serpapi.com/account.json
+    per_day: 8
+    suffix: new grad
+    locations:
+      - {google: "New York, New York, United States"}
+      - {google: "Washington, District of Columbia, United States"}
+      - {google: "San Francisco, California, United States"}
+      - {google: "United States", remote: true}
+  notes: "never a source of jobs: `jobs coverage` reads these results back from the raw store. At most per_day
+    searches, and never more than an even share of the month's searches left (read from account.json first,
+    which doesn't use a search)."
   probe:
     kind: json
     items: jobs_results
