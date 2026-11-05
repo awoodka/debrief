@@ -94,6 +94,11 @@ class Adapter:
         """[(board, company name)] this record tells us about, for the board directory."""
         return []
 
+    def gone(self, record, source):
+        """{job key "system:id": True if the job's own board says it's gone (closed), False if the
+        board shows it open} from this record (the describe step)."""
+        return {}
+
     def texts(self, record, source):
         """[(job key "system:id", description, facts {employment, pay})] for postings this record
         describes (the describe step)."""

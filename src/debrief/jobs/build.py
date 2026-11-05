@@ -20,6 +20,8 @@ same raw files rebuilds the same rows.
     directory.
   - A description an adapter gives (texts(): the describe step) is stored for the posting with that
     job key, and its facts (employment type, pay) fill the posting's data where it has none.
+  - A job its own board says is closed (gone(): the describe step) gets data["gone"] = {at,
+    status, url}, which the filters' "gone" stage cuts; the board showing it open again clears it.
 """
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -203,6 +205,19 @@ def apply(store, source, adapter, records, refs, warn=None, early_sources=frozen
             new = {k: v for k, v in (facts or {}).items() if v not in (None, "", []) and k not in p["data"]}
             if new:
                 p["data"].update(new)
+                store.save_posting(p)
+        gone = getattr(adapter, "gone", None)
+        for key, closed in (gone(rec, source) if gone else {}).items():
+            pid = store.find_key(f"job:{key}")
+            if not pid:
+                continue
+            p = store.posting(pid)
+            if closed and not p["data"].get("gone"):
+                p["data"]["gone"] = {"at": at, "status": rec.get("status"), "url": rec.get("url")}
+                store.save_posting(p)
+                counts["gone_on_board"] += 1
+            elif not closed and p["data"].get("gone"):
+                del p["data"]["gone"]
                 store.save_posting(p)
         for board, name in adapter.directory(rec, source):
             store.save_directory(board, name, company_norm(name), source.id, at)

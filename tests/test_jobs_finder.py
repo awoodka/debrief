@@ -303,3 +303,56 @@ def test_a_known_board_beats_a_greenhouse_guess(tmp_path):
     found = describe.targets(s, json.loads(json.dumps(BASE)), datetime.now(timezone.utc))
     assert [(sy, b, k) for sy, b, k, _ in found] == [("greenhouse", "greenhouse:acme", "greenhouse:5")]
     s.close()
+
+
+# ------------------------------------------- revision 6: a job its own board says is gone
+
+def test_describe_gone_per_job_and_per_board():
+    from debrief.jobs.adapters import REGISTRY
+    d, s = REGISTRY["describe"], src(id="describe")
+    meta = {"system": "greenhouse", "board": "greenhouse:acme", "wanted": ["greenhouse:1"]}
+    assert d.gone(rec("", status=404, meta=meta), s) == {"greenhouse:1": True}
+    assert d.gone(rec({"id": 1, "title": "SWE", "content": "x"}, meta=meta), s) == {"greenhouse:1": False}
+    assert d.gone(rec("", status=404, meta={**meta, "guessed": True}), s) == {}          # a wrong board-name guess
+    assert d.gone(rec("", status=500, meta=meta), s) == {}                               # an error proves nothing
+    ash = {"system": "ashby", "board": "ashby:acme", "wanted": [f"ashby:{U1}", f"ashby:{U2}"]}
+    listing = {"jobs": [{"id": U1, "title": "SWE", "location": "New York, NY", "jobUrl": "u"}]}
+    assert d.gone(rec(listing, meta=ash), s) == {f"ashby:{U1}": False, f"ashby:{U2}": True}
+    assert d.gone(rec({"jobs": []}, meta=ash), s) == {}                                  # empty: maybe a format change
+    assert d.gone(rec("", status=503, meta=ash), s) == {}
+
+
+def test_a_gone_job_is_cut_and_a_reopened_one_comes_back(tmp_path):
+    import copy as _copy
+    from debrief.jobs import filters
+    from debrief.jobs.adapters import REGISTRY
+    from test_jobs_collect import BASE
+    s = JobsStore(tmp_path / "j.sqlite")
+    now = datetime.now(timezone.utc)
+    _list(s, [it("s1", title="Software Engineer", url="https://job-boards.greenhouse.io/acme/jobs/1", job_key="job:greenhouse:1",
+                 board="greenhouse:acme")], _iso(now), source_id="simplify-newgrad", snapshot="window")
+    pid = s.find_key("job:greenhouse:1")
+    meta = {"system": "greenhouse", "board": "greenhouse:acme", "wanted": ["greenhouse:1"]}
+    with s.transaction():
+        c = build.apply(s, src(id="describe", family="detail", url=None), REGISTRY["describe"],
+                        [rec("", status=404, meta=meta, fetched_at=_iso(now))], ["ref#0"])
+    assert c["gone_on_board"] == 1 and s.posting(pid)["data"]["gone"]["status"] == 404
+    prof = _copy.deepcopy(BASE)
+    v = filters.check(s.posting(pid), prof, now)
+    assert v.stage == "gone"
+    assert s.posting(pid)["closed_at"] is None                    # the list still says open; the board outranks it
+    with s.transaction():
+        build.apply(s, src(id="describe", family="detail", url=None), REGISTRY["describe"],
+                    [rec({"id": 1, "title": "Software Engineer", "content": "Python"}, meta=meta, fetched_at=_iso(now))],
+                    ["ref#1"])
+    assert "gone" not in s.posting(pid)["data"] and filters.check(s.posting(pid), prof, now, listed_early=True).ok
+    s.close()
+
+
+def test_collect_since_widens_only_the_detail_steps():
+    from debrief.jobs.adapters import describe
+    from test_jobs_collect import BASE
+    prof = json.loads(json.dumps(BASE))
+    wide = collect.widened(prof, "2026-10-01", datetime(2026, 11, 5, 12, tzinfo=timezone.utc))
+    assert wide["filters"]["max_age_days"] == 36 and prof["filters"]["max_age_days"] == 14
+    assert collect.widened(prof, "2026-11-01", datetime(2026, 11, 5, tzinfo=timezone.utc))["filters"]["max_age_days"] == 14

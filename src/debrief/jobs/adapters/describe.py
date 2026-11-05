@@ -12,6 +12,11 @@ aggregators are never fetched. Every request goes through the context, so robots
 and the response is kept raw; texts() reads a record back with no network, so replay rebuilds
 the same descriptions.
 
+The board's answer also says whether a job is still open (gone()): a per-job request (Greenhouse,
+Lever, Workday) answering 404 or 410, or a complete board list (Ashby, Workable, Recruitee: one
+response, ok and not empty) without the job, means it closed on the company's own board. A
+request made while guessing a Greenhouse board name never counts: its 404 means a wrong guess.
+
 A Greenhouse id from a company page ("sambanova.ai/...?gh_jid=6240725004") names the job but not
 its board. For those, up to 4 board names (boards.greenhouse_guesses) are tried against the board
 API's page for that exact job, stopping at the first that answers: Greenhouse job ids are global,
@@ -164,6 +169,27 @@ class Describe(Adapter):
 
     def parse(self, record, source):
         return []
+
+    def gone(self, record, source):
+        meta = record.get("meta") or {}
+        wanted, system = set(meta.get("wanted") or ()), meta.get("system")
+        if not wanted or meta.get("guessed") or not system:
+            return {}
+        status = record.get("status")
+        if system in PER_JOB:
+            if status in (404, 410):
+                return {k: True for k in wanted}
+            return {k: False for k in wanted} if raw.ok(record) else {}
+        if not raw.ok(record):
+            return {}
+        try:
+            jobs, _ = boards.parse_list(system, json.loads(raw.body(record)))
+        except ValueError:
+            return {}
+        if not jobs:
+            return {}                               # an empty list may be a format change: conclude nothing
+        have = {boards.job_key(meta["board"], j["id"]) for j in jobs if j.get("id")}
+        return {k: k not in have for k in wanted}
 
     def directory(self, record, source):
         """A Greenhouse board found by guessing, under the company's name."""

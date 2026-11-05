@@ -19,10 +19,12 @@
    every copy shown under it, is highlighted. Saved in daily_list; the report,
    runs/<date>/score-<run>.json and .md, has the cuts with their stage and reason.
 
-The catch-up (mode "catchup") is the same pass over the same pool with no cap, watchlist
-companies exempt from the age limit, and every kept job listed in one "catchup" section, with no
-top_n and no company limit. It doesn't move the cursor.
+The catch-up (mode "catchup") is the same pass over the same pool with no cap and no threshold,
+watchlist companies exempt from the age limit, and every kept job listed in one section named after
+it ("catchup", or a name such as "older"), with no top_n and no company limit. since replaces the
+age limit with "posted on or after this date" (the older-roles catch-up). It doesn't move the cursor.
 """
+import re
 import json
 from collections import Counter
 from datetime import datetime, timezone
@@ -36,7 +38,8 @@ from .store import JobsStore, state_path
 
 BIG_STAGES = ("title", "place", "age")       # counted in the .md report; listed in full only in the .json
 LIST_STAGES = ("not kept", "beyond N", "company limit", "same job")
-SECTIONS = {"daily": ("new", "watchlist"), "catchup": ("catchup",)}
+DAILY = ("new", "watchlist")
+NAME = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 
 
 def _iso(dt):
@@ -71,12 +74,15 @@ def run(cfg, run_date=None, no_cap=False, dry_run=False, runner=run_claude, now=
     return _pass(cfg, "daily", run_date, no_cap, dry_run, runner, now, log)
 
 
-def catchup(cfg, run_date=None, dry_run=False, runner=run_claude, now=None, log=print):
-    """The one-time catch-up list: every kept job in today's pool."""
-    return _pass(cfg, "catchup", run_date, True, dry_run, runner, now, log)
+def catchup(cfg, run_date=None, dry_run=False, runner=run_claude, now=None, log=print, since=None, name="catchup"):
+    """A one-time catch-up list: every kept job in today's pool, in its own section `name`. since (a
+    date): jobs posted on or after it, instead of the profile's age limit."""
+    if not NAME.match(name or "") or name in DAILY:
+        raise SystemExit(f"a catch-up name is a short lowercase word, not {DAILY}: {name!r}")
+    return _pass(cfg, "catchup", run_date, True, dry_run, runner, now, log, since=since, name=name)
 
 
-def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log):
+def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log, since=None, name="catchup"):
     started = now or datetime.now(timezone.utc)
     run_date = run_date or started.astimezone().date().isoformat()
     version, prof = profiles.latest(cfg)
@@ -86,7 +92,9 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log):
     s = cfg.settings["score"]
     daily = mode == "daily"
     kind = "score" if daily else "catchup"
-    sections = SECTIONS[mode]
+    sections = DAILY if daily else (name,)
+    posted_since = since                                   # `since` is the nightly cursor below
+    since_at = f"{posted_since}T00:00:00Z" if posted_since else None
     store = JobsStore(state_path(cfg))
     run_id = _new_run_id(store, started, kind)
     E = early_sources(cfg)
@@ -99,7 +107,8 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log):
     rows = store.pool(run_date, sections)
     new_ids = {r["posting_id"] for r in rows if not since or r["first_seen_at"] > since}
     newest_seen = max([since or ""] + [r["first_seen_at"] for r in rows if r["posting_id"] in new_ids]) or None
-    report = {"kind": kind, "run_id": run_id, "run_date": run_date, "started_at": _iso(started),
+    report = {"kind": kind, "name": None if daily else name, "posted_since": posted_since, "run_id": run_id,
+              "run_date": run_date, "started_at": _iso(started),
               "profile": {"version": version, "id": pid}, "since": since, "candidates": len(rows),
               "new": len(new_ids), "carried": len(rows) - len(new_ids),
               "no_cap": no_cap, "dry_run": dry_run, "cuts": [], "calls": []}
@@ -119,10 +128,14 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log):
         p = store.posting(r["posting_id"])
         text = store.texts_for(p["posting_id"])
         srcs = store.posting_sources(p["posting_id"])
-        skip = ("age",) if not daily and prescore.watched(p, prof) else ()
+        watched = not daily and prescore.watched(p, prof)
+        skip = ("age",) if watched or since_at else ()
         v = filters.check(p, prof, started, text=text, listed_early=bool(srcs & E), skip=skip)
         if not v.ok:
             cut(p, v.stage, v.reason)
+            continue
+        if since_at and not watched and (posted(p) or "") < since_at:
+            cut(p, "age", f"posted {(posted(p) or '?')[:10]}, before {posted_since}")
             continue
         pts, parts = prescore.points(p, prof, started, text=text, facts=v.facts, sources=srcs, early_sources=E)
         passed.append((p, pts, parts, text, srcs, v.facts))
@@ -133,7 +146,7 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log):
     else:
         left = prof["ranking"]["max_candidates"] - store.answered_on(run_date, pid)
         cap = left if left > 0 else -1
-    sent, over = prescore.select(unanswered, prof, cap=cap, first=new_ids)
+    sent, over = prescore.select(unanswered, prof, cap=cap, first=new_ids, threshold=daily)
     for (p, pts, *_), why in over:
         cut(p, "threshold" if why.startswith("below") else "cap", why, pts)
     report["passed_filters"], report["sent"] = len(passed), len(sent)
@@ -200,7 +213,7 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log):
         watch = [g for g in groups if prescore.watched(g[0][0], prof)]
         report["list"] = {"new": entries(shown, limits=True), "watchlist": entries(watch)}
     else:
-        report["list"] = {"catchup": entries(shown)}
+        report["list"] = {name: entries(shown)}
     report["status"] = status
     report["stages"] = dict(stages)
     report["finished_at"] = _iso(datetime.now(timezone.utc))
@@ -313,7 +326,7 @@ def _entry(rank, p, pts, a, also=(), more=0, new=True, bonus=0):
 
 # ------------------------------------------------------------------------------------- reports
 
-TITLES = {"new": "The list", "watchlist": "Watchlist", "catchup": "Catch-up"}
+TITLES = {"new": "The list", "watchlist": "Watchlist", "catchup": "Catch-up", "older": "Older roles"}
 
 
 def _day(iso):
@@ -364,17 +377,20 @@ def render_report(r):
     return "\n".join(L) + "\n"
 
 
-def today(cfg, list_date=None, show_all=False, catchup=False):
-    """The morning list (or, with catchup, the catch-up list) as terminal text."""
+def today(cfg, list_date=None, show_all=False, catchup=None):
+    """The morning list, or with catchup (True for "catchup", or a catch-up's name such as
+    "older") that catch-up list, as terminal text."""
     store = JobsStore(state_path(cfg))
-    wanted = SECTIONS["catchup" if catchup else "daily"]
+    if catchup is True:
+        catchup = "catchup"
+    wanted = (catchup,) if catchup else DAILY
     marks = ",".join("?" * len(wanted))
     if list_date is None:
         row = store.one(f"SELECT MAX(list_date) FROM daily_list WHERE section IN ({marks})", wanted)
         list_date = row[0] if row else None
     if not list_date:
         store.close()
-        return "no catch-up list yet (debrief jobs catchup)" if catchup else "no list yet (debrief jobs score)"
+        return f"no {catchup} list yet (debrief jobs catchup)" if catchup else "no list yet (debrief jobs score)"
     rows = store.q(f"SELECT * FROM daily_list WHERE list_date=? AND section IN ({marks}) ORDER BY section, rank",
                    (list_date, *wanted))
     run_id = rows[0]["run_id"] if rows else None
@@ -383,8 +399,10 @@ def today(cfg, list_date=None, show_all=False, catchup=False):
     entries = report.get("list", {})
     tail = f"profile v{report.get('profile', {}).get('version', '?')} · {report.get('status', '?')}"
     if catchup:
-        L = [f"Catch-up for {list_date} · {len(entries.get('catchup') or [])} kept jobs, best first · {tail}"]
-        sections = [("catchup", "Catch-up")]
+        title = TITLES.get(catchup, f"Catch-up: {catchup}")
+        since = f" · posted since {_day(report['posted_since'])}" if report.get("posted_since") else ""
+        L = [f"{title} for {list_date} · {len(entries.get(catchup) or [])} kept jobs, best first{since} · {tail}"]
+        sections = [(catchup, title)]
     else:
         shown = entries.get("new") or []
         fresh = sum(1 for e in shown if e.get("new", True))

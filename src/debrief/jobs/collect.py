@@ -118,7 +118,20 @@ def _new_run_id(store, started):
     return run_id
 
 
-def run(cfg, only=None, run_date=None, client=None, env=os.environ, log=print):
+def widened(prof, since, now):
+    """The profile with max_age_days reaching back to `since` (a date), for the detail steps of a
+    one-time look at older jobs (collect --since); every other source and step keeps the profile."""
+    from copy import deepcopy
+    from datetime import date
+    out = deepcopy(prof)
+    days = (now.date() - date.fromisoformat(str(since))).days + 1
+    out["filters"]["max_age_days"] = max(out["filters"]["max_age_days"], days)
+    return out
+
+
+def run(cfg, only=None, run_date=None, client=None, env=os.environ, log=print, since=None):
+    """since: a date; for this run only, the board finder and describe target jobs posted back to
+    it (the older-roles catch-up, docs/jobs/PLAN.md "Revision 6")."""
     started = datetime.now(timezone.utc)
     local = started.astimezone()
     run_date = run_date or local.date().isoformat()
@@ -129,7 +142,9 @@ def run(cfg, only=None, run_date=None, client=None, env=os.environ, log=print):
     version, prof = profiles.latest(cfg)
     report = {"kind": "collect", "run_id": run_id, "run_date": run_date,
               "started_at": started.strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "profile": {"version": version, "id": profiles.profile_id(prof) if prof else None}, "sources": []}
+              "profile": {"version": version, "id": profiles.profile_id(prof) if prof else None}, "sources": [],
+              "since": since}
+    wide = widened(prof, since, started) if since and prof else prof
     if prof is None:
         log("no profile saved: the watchlist and the profile-driven searches (Adzuna, USAJobs) have nothing to do")
     for source in ordered(cfg.sources):
@@ -140,7 +155,8 @@ def run(cfg, only=None, run_date=None, client=None, env=os.environ, log=print):
             report["sources"].append({"id": source.id, "status": why})
             continue
         log(f"[{source.id}]", end=" ", flush=True)
-        entry = collect_source(cfg, store, client, source, run_id, run_date, started, prof, env, log)
+        entry = collect_source(cfg, store, client, source, run_id, run_date, started,
+                               wide if source.family == "detail" else prof, env, log)
         c = entry["counts"]
         log(f"{entry['status']}: {entry['requests']} req, {c.get('items', 0)} items, {c.get('new', 0)} new "
             f"({c.get('postings_new', 0)} new postings, {c.get('merged', 0)} merged), {c.get('closed', 0)} closed"

@@ -3,18 +3,28 @@
 #
 #   scripts/set-env ADZUNA_APP_KEY        prompts for the value, then adds or replaces the line
 #
+# The line goes in both env files: the dev repo's .env (scripts/dev) and the server's
+# /srv/apps/debrief-v2/.env (deploy/run.sh, the nightly run), when that folder exists.
 # It needs a real terminal: run it in your own SSH session, not through Claude Code's `!` prefix.
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 ENV_FILE=${ENV_FILE:-$REPO/.env}
+PROD_ENV_FILE=${PROD_ENV_FILE:-${DEBRIEF_APP:-/srv/apps/debrief-v2}/.env}
 name=${1:?usage: scripts/set-env NAME}
 [[ $name =~ ^[A-Z][A-Z0-9_]*$ ]] || { echo "set-env: '$name' isn't an env var name" >&2; exit 2; }
 [ -t 0 ] || { echo "set-env: needs a terminal (run it in your own SSH session)" >&2; exit 2; }
 read -rsp "$name: " value; echo
 [ -n "$value" ] || { echo "set-env: empty, nothing changed" >&2; exit 1; }
-touch "$ENV_FILE"; chmod 600 "$ENV_FILE"
-tmp=$(mktemp "$ENV_FILE.XXXXXX"); chmod 600 "$tmp"
-grep -v "^$name=" "$ENV_FILE" > "$tmp" || true
-printf '%s=%s\n' "$name" "$value" >> "$tmp"
-mv "$tmp" "$ENV_FILE"
-echo "set-env: $name saved in $ENV_FILE (mode 600)"
+save() {   # save FILE: add or replace the line, mode 600
+  local file=$1 tmp
+  touch "$file"; chmod 600 "$file"
+  tmp=$(mktemp "$file.XXXXXX"); chmod 600 "$tmp"
+  grep -v "^$name=" "$file" > "$tmp" || true
+  printf '%s=%s\n' "$name" "$value" >> "$tmp"
+  mv "$tmp" "$file"
+  echo "set-env: $name saved in $file (mode 600)"
+}
+save "$ENV_FILE"
+if [ "$PROD_ENV_FILE" != "$ENV_FILE" ] && [ -d "$(dirname "$PROD_ENV_FILE")" ]; then
+  save "$PROD_ENV_FILE"
+fi

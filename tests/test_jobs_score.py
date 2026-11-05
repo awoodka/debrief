@@ -344,3 +344,32 @@ def test_save_list_replaces_only_its_sections(tmp_path):
     assert sorted((r["section"], r["posting_id"]) for r in s.q("SELECT * FROM daily_list")) == \
         [("catchup", "p:1"), ("new", "p:3")]
     s.close()
+
+
+# ------------------------------------------------ revision 6: a named catch-up ("older roles")
+
+def test_named_catchup_since_a_date_keeps_the_first_catchup(tmp_path):
+    cfg = _cfg(tmp_path, threshold=100)                           # the catch-up skips the threshold
+    _add(cfg, [it("n", title="Software Engineer, New Grad", company="Nu", published_at="2026-11-03T00:00:00Z")],
+         "2026-11-04T08:00:00Z")
+    r = ByTitle()
+    first = rank.catchup(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert [e["company"] for e in first["list"]["catchup"]] == ["Nu"]
+    _add(cfg, [it("o", title="Software Engineer, New Grad", company="Oct", published_at="2026-10-02T00:00:00Z"),
+               it("s", title="Software Engineer, New Grad", company="Sep", published_at="2026-09-20T00:00:00Z"),
+               it("w", title="Software Engineer, New Grad", company="Acme", published_at="2026-08-01T00:00:00Z")],
+         "2026-11-04T09:00:00Z")
+    older = rank.catchup(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None, since="2026-10-01", name="older")
+    assert {e["company"] for e in older["list"]["older"]} == {"Oct", "Acme"}       # Sep is before Oct 1; Acme is watched
+    assert any(c["company"] == "Sep" and "before 2026-10-01" in c["reason"] for c in older["cuts"])
+    # The first catch-up's rows and marks are untouched, and nothing it listed is listed again.
+    out = rank.today(cfg, catchup=True)
+    assert "Catch-up for 2026-11-04 · 1 kept jobs" in out and "— Nu" in out
+    old = rank.today(cfg, catchup="older")
+    assert old.startswith("Older roles for 2026-11-04 · 2 kept jobs, best first · posted since Oct 1")
+    store = JobsStore(state_path(cfg))
+    marks = dict(store.q("SELECT section, COUNT(*) FROM highlighted GROUP BY section"))
+    store.close()
+    assert marks == {"catchup": 1, "older": 2}
+    with pytest.raises(SystemExit):
+        rank.catchup(cfg, name="new")

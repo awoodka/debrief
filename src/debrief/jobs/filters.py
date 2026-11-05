@@ -6,6 +6,7 @@ check(posting, profile, now, text=None) -> Verdict. The checks run in this order
 that fails names the stage:
   title       a position type's title appears in the job title (the longest match wins), and no
               excluded word is in what's left of the title once that match is taken out
+  gone        not closed on its own job board (the describe step's check)
   place       one of the profile's areas, remote in the US, or just "United States" (no location
               at all passes too: the model sees it)
   age         published (or, failing that, first seen) within max_age_days
@@ -387,6 +388,10 @@ def check(posting, profile, now, text=None, listed_early=False, skip=()):
     if fit[0] is None:
         return Verdict(False, "title", fit[1])
     facts = {"position_type": fit[0], "matched": fit[1]}
+    gone = d.get("gone")
+    if gone:
+        return Verdict(False, "gone", f"closed on its own job board (HTTP {gone.get('status')} or missing from "
+                                      f"its list, {str(gone.get('at') or '')[:10]})", facts)
     area, why = place_fit(posting.get("locations") or [], profile, d.get("remote"))
     if area is None:
         return Verdict(False, "place", why, facts)

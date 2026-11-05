@@ -811,3 +811,40 @@ Tried on a copy with profile v6 and fake answers (no model cost): the catch-up's
 jobs (350 entries once copies fold; Scale AI's Sep 4 role in, Raydar and Military Spouse Jobs out),
 about $0.65 to score. Then a real collect brought 650 new postings, 29 passing the filters; the
 next night asked those 29, showed 20 (all new) and carried 7, with no repeat of the catch-up.
+
+## Revision 6 (Alex, 2026-11-05): older roles once; coverage (M3)
+Two gaps from Alex's review of the live system: 579 open roles that fit every filter but the
+30-day limit had never been shown (445 posted July 1–Oct 6), and the closed sites (LinkedIn,
+Indeed, Handshake, Wellfound, Glassdoor, Dice, Built In) plus Adzuna, USAJobs and the miss-check
+were still unbuilt or without keys. Alex's answers:
+- Older roles: "Everything from October 1st and on, that's it." The first catch-up reached Oct 6,
+  so this is Oct 1–5; July–September stays unshown by choice.
+- Alerts on all seven sites; Handshake's go to the school address and are forwarded.
+- USAJobs: include (DC, remote, and the Recent Graduates hiring path).
+- A site's own listing id (LinkedIn, Indeed) is not the employer's job id: copies merge by
+  company, title and place; employer job ids stay the rule for "the exact same job".
+
+### Part 1 (built)
+- **Gone on its board.** describe's answers now also say whether a job is still open (adapter
+  hook `gone()`): a per-job request (Greenhouse, Lever, Workday) answering 404 or 410, or a
+  complete board list (Ashby, Workable, Recruitee: one response, ok and not empty) without the job.
+  A request made while guessing a Greenhouse board name never counts. `build.apply` keeps the mark
+  in the posting's data (`gone`: at, status, url) and clears it when the board shows the job
+  again; the filters' new stage "gone" (right after the title) cuts it, since the board outranks a
+  list that still says active. It works every night, not only for older roles.
+- **`jobs collect --since D`**: for that run only, the board finder and describe target jobs
+  posted back to D (the profile is widened for the detail steps only).
+- **Named catch-ups**: `jobs catchup --since D --name older` lists every kept job posted on or
+  after D (watchlist companies at any age) in its own section, `older.txt` and
+  `jobs today --catchup older`; catch-ups skip the points threshold as well as the cap. A
+  different name keeps a second catch-up on the same date from replacing the first one's rows.
+- `scripts/set-env NAME` now saves the key in both the dev `.env` and the server's
+  `/srv/apps/debrief-v2/.env`.
+- Tried on a copy of the live data: the detail steps back to Oct 1 made 37 requests, gave 19
+  descriptions and found 3 roles gone on their boards (two CoStar roles on Workday, one Twilio
+  role on Greenhouse); the older catch-up would list 29 roles from 30 scored.
+
+### Part 2 (next): coverage
+Alert inbox (IMAP, read-only, parsers built from real samples), Adzuna and USAJobs with keys, the
+SerpAPI sample and `jobs coverage` with a cause for every miss. Plan:
+`~/.claude/plans/now-create-a-plan-precious-aho.md`, sections 2.0–2.4.
