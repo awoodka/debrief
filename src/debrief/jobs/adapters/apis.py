@@ -222,6 +222,23 @@ def unescape_text(s):
     return unescape(str(s or "")).strip()
 
 
+def adzuna_places(location):
+    """Adzuna's place as "Town, ST" names from its structured area (["US", "Virginia", "Fairfax County",
+    "Jefferson Manor"] -> "Jefferson Manor, VA", "Fairfax County, VA"), most specific first, so the
+    state is always known ("Oakland, Allegheny County" is Pittsburgh's Oakland, not California's). A
+    country- or state-only area keeps Adzuna's own display name, as before."""
+    from ..filters import STATES
+    loc = location or {}
+    area, shown = [str(x).strip() for x in loc.get("area") or [] if str(x).strip()], loc.get("display_name")
+    if len(area) >= 2 and area[0] == "US":
+        if area[1].replace(".", "").replace(",", "").lower() in ("washington dc", "district of columbia"):
+            return ("Washington, DC",) + tuple(f"{x}, DC" for x in reversed(area[2:]))
+        code = STATES.get(area[1].lower())
+        if code and len(area) >= 3:
+            return tuple(f"{x}, {code.upper()}" for x in reversed(area[2:]))
+    return (shown,) if shown else ()
+
+
 class Adzuna(Paged):
     name = "adzuna"
 
@@ -255,10 +272,9 @@ class Adzuna(Paged):
         d = _json(record) or {}
         out = []
         for j in d.get("results") or []:
-            loc = (j.get("location") or {}).get("display_name")
             out.append(JobItem(
                 item_key=str(j.get("id")), title=_plain(j.get("title")), company=_plain((j.get("company") or {}).get("display_name")),
-                locations=tuple(x for x in [loc] if x), url=j.get("redirect_url") or "",
+                locations=adzuna_places(j.get("location")), url=j.get("redirect_url") or "",
                 published_at=boards.when(j.get("created")),
                 pay=({"min": j.get("salary_min"), "max": j.get("salary_max"), "currency": "USD", "period": "year",
                       "predicted": j.get("salary_is_predicted") in ("1", 1, True)} if j.get("salary_min") or j.get("salary_max") else None),

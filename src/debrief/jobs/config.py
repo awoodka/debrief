@@ -34,6 +34,9 @@ class JobSource:
     headers: dict = field(default_factory=dict)     # extra headers; "{contact}" is DEBRIEF_CONTACT
     terms: str = ""
     notes: str = ""
+    # Alex's one exception to the robots rule (docs/jobs/PLAN.md, "Revision 7"): an official API
+    # that issued us a key for this use, on its own hosts only. {hosts: [...], terms: "...", decided: "..."}
+    robots_exception: dict = field(default_factory=dict)
 
     def auth_env(self):
         """Every env var this source's auth needs."""
@@ -41,6 +44,17 @@ class JobSource:
         names = list(a.get("env") or [])
         names += list((a.get("headers") or {}).values()) + list((a.get("params") or {}).values())
         return names
+
+    def robots_waived(self, url, env):
+        """True when robots.txt doesn't apply to this request: the source has Alex's exception
+        (an official keyed API whose terms allow our use), its keys are set, and the URL is on one
+        of the exception's hosts. Everything else keeps the robots rule."""
+        ex = self.robots_exception or {}
+        if not ex or not self.auth_env() or self.missing_keys(env):
+            return False
+        from urllib.parse import urlsplit
+        host = (urlsplit(url or "").hostname or "").lower()
+        return any(host == h or host.endswith("." + h) for h in ex.get("hosts") or ())
 
     def missing_keys(self, env):
         return [n for n in self.auth_env() if not (env.get(n) or "").strip()]
@@ -90,6 +104,12 @@ def _source(raw, seen):
     if raw.get("enabled", True) and raw.get("adapter") and raw["family"] not in DERIVED and not (
             raw.get("url") or (raw.get("options") or {}).get("endpoint")):
         raise ConfigError(f"{where}: its collector needs a url (or options.endpoint); candidates are for the probe only")
+    ex = raw.get("robots_exception")
+    if ex:
+        if not isinstance(ex, dict) or not ex.get("hosts") or not ex.get("terms") or not ex.get("decided"):
+            raise ConfigError(f"{where}: robots_exception needs hosts, terms and decided")
+        if not raw.get("auth"):
+            raise ConfigError(f"{where}: robots_exception is only for keyed APIs (this source has no auth)")
     method = raw.get("method", "GET").upper()
     if method not in ("GET", "POST"):
         raise ConfigError(f"{where}: method must be GET or POST")

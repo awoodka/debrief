@@ -198,12 +198,14 @@ def board_links(texts):
 # ------------------------------------------------------------------------------- one request
 
 def probe_url(client, url, spec, *, method="GET", body=None, headers=None, params=None, each=None,
-              secrets=(), now=None, conditional=True):
+              secrets=(), now=None, conditional=True, robots_waived=False):
     now = now or datetime.now(timezone.utc)
     kind = spec.get("kind", "json")
     att = Attempt(url=url, kind=kind, each=each)
     att.robots = client.robots_allowed(url)
-    if att.robots is not True:
+    if att.robots is not True and robots_waived:
+        att.extra["robots_exception"] = True         # disallowed, but the source's keyed-API exception applies
+    elif att.robots is not True:
         att.status = "blocked"
         att.error = ("robots.txt disallows this URL for our User-Agent" if att.robots is False
                      else "robots.txt unreachable (RFC 9309: treat as disallowed)")
@@ -344,7 +346,7 @@ def probe_source(client, src, env=os.environ, now=None, bodies=None, contact="")
         for spec, u, e in group:
             att, content = probe_url(client, u, spec, method=src.method, body=src.body, headers=headers or None,
                                      params=params or None, each=e, secrets=secrets, now=now,
-                                     conditional=conditional)
+                                     conditional=conditional, robots_waived=src.robots_waived(u, env))
             atts.append(att)
             if bodies is not None and content is not None and src.family in ("list", "universe"):
                 bodies.setdefault(src.id, {})[e] = content

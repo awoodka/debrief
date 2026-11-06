@@ -3,6 +3,7 @@ import sqlite3
 
 import pytest
 
+from debrief.config import ConfigError
 from debrief.http import Fetched
 from debrief.jobs import build, collect, config as jconfig, items, profile, watch
 from debrief.jobs.adapters import REGISTRY, Ctx
@@ -685,3 +686,63 @@ def test_adzuna_and_usajobs_requests(tmp_path, monkeypatch):
                       "path graduates @ Washington, DC", "path graduates @ remote"]
     graduates = [p for p, e in usa if e.startswith("path")]
     assert all(p["HiringPath"] == "graduates" and "Keyword" not in p for p in graduates)
+
+
+# ------------------------------- Revision 7 (11-05): the robots exception for official keyed APIs
+
+class NoRobots:
+    """Every URL is disallowed by robots.txt; records what was requested."""
+    user_agent = "t"
+
+    def __init__(self):
+        self.requested = []
+
+    def robots_allowed(self, url):
+        return False
+
+    def get(self, url, params=None, headers=None, etag=None, last_modified=None):
+        self.requested.append(url)
+        return Fetched(url=url, final_url=url, status=200, headers={}, content=b"{}")
+
+
+def test_the_robots_exception_is_narrow(tmp_path):
+    from debrief.jobs.adapters import Ctx
+    cfg = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
+    adzuna, remoteok = cfg.source("adzuna"), cfg.source("remoteok")
+    keys = {"ADZUNA_APP_ID": "id", "ADZUNA_APP_KEY": "key"}
+    client, s = NoRobots(), JobsStore(tmp_path / "j.sqlite")
+    ctx = Ctx(client, s, keys, "run", None, "me@example.com", cfg.settings)
+    ctx.get(adzuna, "https://api.adzuna.com/v1/api/jobs/us/search/1")              # its own host, keys set: allowed
+    ctx.get(adzuna, "https://www.adzuna.com/details/123")                          # another host: refused
+    ctx.get(remoteok, "https://remoteok.com/api")                                  # no exception: refused
+    assert client.requested == ["https://api.adzuna.com/v1/api/jobs/us/search/1"] and ctx.robots_waived == 1
+    ctx2 = Ctx(NoRobots(), s, {}, "run", None, "me@example.com", cfg.settings)
+    ctx2.get(adzuna, "https://api.adzuna.com/v1/api/jobs/us/search/1")              # no keys: the rule applies
+    assert ctx2.client.requested == []
+    s.close()
+    with_ex = {s_.id for s_ in cfg.sources if s_.robots_exception}
+    assert with_ex == {"adzuna", "usajobs", "serpapi-google-jobs"}
+
+
+def test_a_robots_exception_needs_terms_and_a_key():
+    base = {"id": "x", "name": "X", "family": "api", "url": "https://api.x.test/"}
+    with pytest.raises(ConfigError, match="hosts, terms and decided"):
+        jconfig._source({**base, "auth": {"params": {"k": "K"}}, "robots_exception": {"hosts": ["api.x.test"]}}, set())
+    with pytest.raises(ConfigError, match="only for keyed APIs"):
+        jconfig._source({**base, "robots_exception": {"hosts": ["api.x.test"], "terms": "t", "decided": "d"}}, set())
+
+
+def test_adzuna_places_come_from_its_structured_area():
+    from debrief.jobs.adapters.apis import adzuna_places
+    assert adzuna_places({"area": ["US", "Virginia", "Fairfax County", "Jefferson Manor"],
+                          "display_name": "Jefferson Manor, Fairfax County"}) == ("Jefferson Manor, VA", "Fairfax County, VA")
+    assert adzuna_places({"area": ["US", "Pennsylvania", "Allegheny County", "Pittsburgh", "Oakland"]})[0] == "Oakland, PA"
+    assert adzuna_places({"area": ["US", "New York", "New York City", "Manhattan", "Grand Central"]}) == \
+        ("Grand Central, NY", "Manhattan, NY", "New York City, NY")
+    assert adzuna_places({"area": ["US", "Washington, D.C."], "display_name": "Washington, D.C., US"}) == ("Washington, DC",)
+    assert adzuna_places({"area": ["US", "California"], "display_name": "California, US"}) == ("California, US",)   # as before
+    assert adzuna_places({"area": ["US"], "display_name": "US"}) == ("US",)                                       # as before
+    from debrief.jobs import filters
+    prof = json.loads(json.dumps(BASE)); prof["filters"]["locations"]["places"] = {"SF": ["Oakland, CA", "San Francisco, CA"]}
+    assert filters.place_fit(list(adzuna_places({"area": ["US", "Pennsylvania", "Allegheny County", "Pittsburgh", "Oakland"]})), prof)[0] is None
+    assert filters.place_fit(list(adzuna_places({"area": ["US", "California", "San Francisco", "Hayes Valley"]})), prof)[0] == "SF"

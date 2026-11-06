@@ -910,3 +910,56 @@ also carries "Berkeley, CA" (from speedyapply's row); fixed below (F1).
   identical. A requirements audit passed 13 of 13 (profile v6 values, new-grad only, the bonus,
   2 per company, the blocklist, one call a night, pay never sent to the model, the job-id rule, the
   catch-up lists, no repeats). 420 tests pass.
+
+## Setup and two decisions (Alex, 2026-11-05 evening)
+- **The jobs Gmail works**: login checked from the saved app password; the reader ran once on
+  live data and kept the inbox's messages without marking any read. The first saved password held
+  two up-arrow key codes typed at the hidden prompt; `scripts/set-env` now drops terminal key codes
+  and other control characters before saving.
+- **Alert sites for now: LinkedIn, Indeed, Handshake and Wellfound.** Glassdoor, Dice and Built In
+  wait until the coverage check shows misses only they would catch. LinkedIn: one boolean search
+  per area, Entry level, daily. Indeed rejects OR queries, so one plain search per role and city
+  ("entry level software engineer" …). Handshake offers no search alerts here, so its
+  recommended-jobs emails come instead, with the jobs Gmail as Handshake's primary address.
+  Wellfound signs in with the jobs Google account. LinkedIn's alerts are forwarded from
+  alexwoodka@startupshell.org by a Gmail filter.
+- **Profile v7: Boston and Austin added** ("Boston area": Boston, Cambridge, Somerville, Waltham,
+  Lexington, Burlington…; "Austin area": Austin, Round Rock, Cedar Park…), since Alex set alerts
+  there. 29 unshown jobs from the last 30 days pass with them (15 Boston, 14 Austin); they enter
+  the daily pool and are asked within the nightly cap of 50, new postings first. The Google sample
+  rotates through Boston and Austin too.
+
+## Revision 7 (Alex, 2026-11-05): one exception to the robots rule, for official keyed APIs
+The three keyed services all disallow their API paths in robots.txt: api.adzuna.com and
+data.usajobs.gov (`Disallow: /`), and serpapi.com (`/search.json`; `account.json` is allowed). This
+was missed at M0, which skipped both APIs for lack of keys. The rule stays: never fetch a
+disallowed path. Alex chose one narrow exception (option 2): an **official API that issued us a key
+for this use, whose terms allow it**, on that API's own hosts only, and only while its key is set.
+- `robots_exception` in a source's entry needs `hosts`, `terms` and `decided`, and is refused for a
+  source with no key (`config._source`). `JobSource.robots_waived(url, env)` decides per request;
+  `Ctx` skips the check only then, and each collect report counts the requests made under it. The
+  probe marks them `robots_exception` instead of blocked.
+- Granted: `adzuna` (api.adzuna.com), `usajobs` (data.usajobs.gov), `serpapi-google-jobs`
+  (serpapi.com). Everything public and keyless keeps the rule: SmartRecruiters, Remotive, LinkedIn,
+  Indeed and every page fetch stay as they were.
+- Before the exception, three test requests (1 Adzuna, 2 USAJobs) went out without the robots check;
+  nothing else did.
+
+First real responses:
+- **Adzuna** (25 a minute, 250 a day; the collector already spaces requests 2.5 s): 44 requests a
+  night (7 role types x 5 areas + remote), about 300 postings, nearly all found nowhere else, about 12
+  past the filters (many from staffing firms; the model's keep rule and the blocklist handle those).
+  Its place is now read from its structured area ("Jefferson Manor, VA", "Fairfax County, VA"), so
+  the state is always known: "Oakland, Allegheny County" is Pittsburgh's, not California's. An
+  occasional Adzuna 503 leaves the source "partial" for the night.
+- **USAJobs**: the first saved key lacked its final "=" (a double-click selection stops before it);
+  with it, the API answers (28 software jobs in DC).
+- **SerpAPI**: Free Plan, 250 searches a month, all left; the Google sample starts with the nightly run.
+- **USAJobs fixed** (Alex re-saved the key with its "="): the API answers.
+- **Profile v8: counties** (Alex: "make inferences based on the city list"). Each area gains the
+  counties that contain its listed cities, and only those: DC (Arlington, Fairfax, Loudoun, Prince
+  William, Montgomery, Prince George's, Howard, Anne Arundel), New York (New York, Kings, Queens,
+  Bronx, Richmond, Hudson NJ, Essex NJ), the Bay Area (San Francisco, San Mateo, Alameda, Santa
+  Clara), Boston (Suffolk, Middlesex, Norfolk), Austin (Travis, Williamson). It lets Adzuna's
+  neighborhood-named jobs match ("Rosslyn, VA" with "Arlington County, VA"); no open posting from
+  another source changed place result.

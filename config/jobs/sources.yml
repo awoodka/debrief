@@ -235,6 +235,11 @@
     fields: {company: company.display_name, location: location.display_name, pay_min: salary_min, created: created,
              url: redirect_url}
   terms: personal job search is a permitted use; attribution ("Jobs by Adzuna") required
+  robots_exception:
+    hosts: [api.adzuna.com]
+    terms: "Adzuna's developer terms (developer.adzuna.com): a registered app key for its search API; personal
+      job search is a permitted use; attribution required. robots.txt on api.adzuna.com is Disallow: /"
+    decided: "Alex, 2026-11-05 (option 2: official keyed APIs whose terms allow our use)"
 
 - id: usajobs
   name: USAJobs (federal)
@@ -254,6 +259,11 @@
     fields: {org: MatchedObjectDescriptor.OrganizationName, location: MatchedObjectDescriptor.PositionLocationDisplay,
              pay: MatchedObjectDescriptor.PositionRemuneration, url: MatchedObjectDescriptor.PositionURI}
   terms: User-Agent must be the email the key was registered with (DEBRIEF_CONTACT; sent by the collector)
+  robots_exception:
+    hosts: [data.usajobs.gov]
+    terms: "USAJOBS developer API (developer.usajobs.gov): the federal government's published search API, used
+      with the Authorization-Key issued to DEBRIEF_CONTACT. robots.txt on data.usajobs.gov is Disallow: /"
+    decided: "Alex, 2026-11-05 (option 2: official keyed APIs whose terms allow our use)"
 
 - id: themuse
   name: The Muse
@@ -421,10 +431,17 @@
       - {google: "New York, New York, United States"}
       - {google: "Washington, District of Columbia, United States"}
       - {google: "San Francisco, California, United States"}
+      - {google: "Boston, Massachusetts, United States"}
+      - {google: "Austin, Texas, United States"}
       - {google: "United States", remote: true}
   notes: "never a source of jobs: `jobs coverage` reads these results back from the raw store. At most per_day
     searches, and never more than an even share of the month's searches left (read from account.json first,
     which doesn't use a search)."
+  robots_exception:
+    hosts: [serpapi.com]
+    terms: "SerpAPI's API (serpapi.com/legal): a paid-or-free customer account calling its own search endpoint
+      with our key. robots.txt disallows /search.json (account.json is allowed)"
+    decided: "Alex, 2026-11-05 (option 2: official keyed APIs whose terms allow our use)"
   probe:
     kind: json
     items: jobs_results

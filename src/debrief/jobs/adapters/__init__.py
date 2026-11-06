@@ -25,6 +25,7 @@ class Ctx:
         self.run_id, self.profile, self.contact = run_id, profile, contact
         self.settings, self.log = settings, log
         self.records, self.validators, self.warnings = [], [], []
+        self.robots_waived = 0              # requests made under the source's robots exception
 
     @property
     def fetched_at(self):
@@ -46,8 +47,12 @@ class Ctx:
         self.records.append(rec)
         return rec
 
-    def _refused(self, url):
-        """A robots.txt refusal, recorded like a failed fetch (status 0): never requested."""
+    def _refused(self, url, source=None):
+        """A robots.txt refusal, recorded like a failed fetch (status 0): never requested. A
+        source's robots exception (an official keyed API, on its own hosts) skips the check."""
+        if source is not None and source.robots_waived(url, self.env):
+            self.robots_waived += 1
+            return None
         allowed = self.client.robots_allowed(url)
         if allowed is True:
             return None
@@ -56,7 +61,7 @@ class Ctx:
 
     def get(self, source, url, *, each=None, meta=None, params=None, headers=None, conditional=True):
         hdrs, auth_params, secrets = self._auth(source, headers)
-        refused = self._refused(url)
+        refused = self._refused(url, source)
         if refused:
             return self._record(source, refused, secrets, each, meta)
         etag, last_modified = self.store.validators(url) if conditional else (None, None)
@@ -69,7 +74,7 @@ class Ctx:
 
     def post(self, source, url, json_body, *, each=None, meta=None, headers=None):
         hdrs, _, secrets = self._auth(source, headers)
-        fetched = self._refused(url) or self.client.post(url, json_body=json_body, headers=hdrs or None)
+        fetched = self._refused(url, source) or self.client.post(url, json_body=json_body, headers=hdrs or None)
         return self._record(source, fetched, secrets, each, {**(meta or {}), "body": json_body})
 
     def record(self, source, fetched, *, each=None, meta=None, secrets=()):

@@ -103,8 +103,11 @@ def collect_source(cfg, store, client, source, run_id, run_date, now, prof, env,
     except Exception as e:  # noqa: BLE001 — a build crash rolls back this source only
         status, errors = "failed", [f"build crashed: {type(e).__name__}: {e}"[:300]]
         store.save_source_state(source.id, run_id, status, errors[0], stamp)
-    return {"id": source.id, "status": status, "requests": len(ctx.records), "counts": dict(counts),
-            "errors": errors[:10], "warnings": ctx.warnings}
+    out = {"id": source.id, "status": status, "requests": len(ctx.records), "counts": dict(counts),
+           "errors": errors[:10], "warnings": ctx.warnings}
+    if ctx.robots_waived:
+        out["robots_exception"] = ctx.robots_waived          # requests under Alex's keyed-API exception
+    return out
 
 
 def _new_run_id(store, started):

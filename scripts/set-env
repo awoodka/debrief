@@ -14,6 +14,10 @@ name=${1:?usage: scripts/set-env NAME}
 [[ $name =~ ^[A-Z][A-Z0-9_]*$ ]] || { echo "set-env: '$name' isn't an env var name" >&2; exit 2; }
 [ -t 0 ] || { echo "set-env: needs a terminal (run it in your own SSH session)" >&2; exit 2; }
 read -rsp "$name: " value; echo
+# Keys pressed at the hidden prompt arrive as terminal codes (the up arrow is ESC [ A) and would be
+# saved as part of the value: drop them, any other control character, and outer spaces.
+value=$(printf '%s' "$value" | sed -E $'s/\x1b\[[0-9;]*[A-Za-z~]//g; s/\x1bO[A-Za-z]//g' | tr -d '\000-\037\177')
+value="${value#"${value%%[![:space:]]*}"}"; value="${value%"${value##*[![:space:]]}"}"
 [ -n "$value" ] || { echo "set-env: empty, nothing changed" >&2; exit 1; }
 save() {   # save FILE: add or replace the line, mode 600
   local file=$1 tmp
