@@ -403,6 +403,45 @@ def test_a_closed_section_still_posts(site):
     assert "skills" in browser_submit(page, "/profile")
 
 
+def test_a_profile_saved_before_a_setting_became_required_can_be_fixed_here(site):
+    cfg, client, _ = site
+    profile.save(cfg, doc(), note="seed")
+    n, older = profile.latest(cfg)
+    del older["filters"]["min_hourly_pay"]
+    dict(profile.versions(cfg))[n].write_text(json.dumps(older))
+    page = client.get("/profile")
+    assert page.status_code == 200 and "Press Check to see what" in page.text
+    r = _post(client, _form(client), action="save")
+    assert r.status_code == 400 and profile.latest(cfg)[0] == n
+    assert '<a href="#i-filters-min_hourly_pay">Minimum pay</a>: Can&#39;t be blank.' in r.text
+    watch_page = client.get("/watchlist").text
+    r = client.post("/watchlist/edit", data={**browser_submit(watch_page, "/watchlist/edit"), "action": "save"},
+                    headers={"Origin": ORIGIN}, follow_redirects=False)
+    assert r.status_code == 400 and profile.latest(cfg)[0] == n
+    assert r.text.count("Press Check on the Profile page") == 1 and "Can&#39;t be blank." not in r.text
+    r = _post(client, _form(client) | {"filters.min_hourly_pay": "25"}, action="save")
+    assert r.status_code == 303 and profile.latest(cfg)[1]["filters"]["min_hourly_pay"] == 25
+
+
+def test_a_new_project_needs_only_a_name_and_summary(site):
+    cfg, client, _ = site
+    profile.save(cfg, doc(), note="seed")
+    n, before = profile.latest(cfg)
+    spare = len(before["projects"])
+    r = _post(client, _form(client) | {f"projects.{spare}.name": "New one", f"projects.{spare}.summary": "It does a thing."}, action="save")
+    assert r.status_code == 303, r.text
+    added = profile.latest(cfg)[1]["projects"][-1]
+    assert added == {"name": "New one", "summary": "It does a thing.", "skills": []}
+
+
+def test_a_new_kind_of_role_still_needs_a_title(site):
+    cfg, client, _ = site
+    profile.save(cfg, doc(), note="seed")
+    spare = len(profile.latest(cfg)[1]["position_types"])
+    r = _post(client, _form(client) | {f"position_types.{spare}.name": "Founding"}, action="save")
+    assert r.status_code == 400 and "Add at least one title." in r.text
+
+
 def test_a_first_profile_can_be_made_from_blank(tmp_path):
     cfg = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
     app = create_app(cfg=cfg, verifier=AccessVerifier(TEAM, AUD, EMAILS, fetch=Certs([JWK])), origin=ORIGIN, env={})

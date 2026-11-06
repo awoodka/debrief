@@ -219,6 +219,9 @@ class Field:
     def extras(self, typed):
         return {}
 
+    def blank_in_new_row(self):
+        return MISSING
+
     def view(self, form, at, ref):
         typed = form.raw.get(at, "")
         return FieldView(self.widget, at, _input_id(at), self.label, self.help, typed, tuple(form.errors.get(at, ())),
@@ -273,6 +276,9 @@ class Lines(_MultiLine, Field):
 
     def text(self, value):
         return NOT_SET if value is MISSING else " · ".join(value) or "None"
+
+    def blank_in_new_row(self):
+        return []
 
     def say(self, old, new, row=""):
         old, new = [] if old is MISSING else old, [] if new is MISSING else new
@@ -411,6 +417,8 @@ class Rows(Field):
             stored, row = self.stored_row(pool, rd.raw, at, n), {}
             for s in self.fields:
                 value = s.read(rd, f"{at}.{n}.{s.key}", path + (len(out), s.key), stored.get(s.key, MISSING))
+                if value is MISSING and not stored:
+                    value = s.blank_in_new_row()
                 if value is not MISSING:
                     row[s.key] = value
             out.append(row)
@@ -799,6 +807,14 @@ def _input_id(at):
     return "i-" + at.replace(".", "-")
 
 
+def _summary(group, doc):
+    """A saved profile can predate a newly required setting, and this page is where it gets fixed."""
+    try:
+        return group.summary(doc)
+    except (KeyError, TypeError):
+        return "Something here needs filling in. Press Check to see what."
+
+
 def _banner(views):
     for v in views:
         for message in v.errors:
@@ -822,7 +838,7 @@ class Form:
         doc = saved if saved is not None else blank_doc()
         groups = []
         for g in table:
-            summary = g.summary(doc) if saved is not None else "Not set yet"
+            summary = _summary(g, doc) if saved is not None else "Not set yet"
             if g.link:
                 groups.append(GroupView(g.id, g.title, g.part, summary, link=g.link))
                 continue
@@ -991,6 +1007,8 @@ CROSS_WORDING = {
     "nowhere": "Turn this on or add an area. With neither, every job is filtered out.",
 }
 
+ELSEWHERE = "A setting on another page needs fixing before this can be saved. Press Check on the Profile page to see it."
+
 # The other side of a rule that spans the two pages, for the page that can't edit where it points.
 OTHER_SIDE = {"company_blocked": ("filters", "blocklist")}
 
@@ -1011,6 +1029,9 @@ def _plain(issues, rd):
         if at in rd.failed:
             continue
         field = rd.fields.get(at)
-        wording = (field.messages.get(i.rule) if field else None) or CROSS_WORDING.get(i.rule) or KEYWORD_WORDING[i.rule]
-        out[at].append(wording.format(limit=i.limit, value=i.value))
+        wording = (field.messages.get(i.rule) if field else None) or CROSS_WORDING.get(i.rule)
+        wording = wording or (ELSEWHERE if not field and i.rule == "required" else KEYWORD_WORDING[i.rule])
+        message = wording.format(limit=i.limit, value=i.value)
+        if message not in out[at]:
+            out[at].append(message)
     return out
