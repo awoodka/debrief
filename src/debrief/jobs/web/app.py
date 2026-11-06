@@ -26,7 +26,7 @@ from starlette.routing import Route
 from .. import config as jconfig, profile as profiles, watch
 from ..collect import rebuilding_marker
 from ..store import JobsStore, state_path
-from . import data
+from . import data, profile_form as pf
 from .auth import AccessVerifier
 
 SECURITY_HEADERS = {
@@ -163,33 +163,29 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
         return RedirectResponse("/watchlist?msg=" + _q(msg), status_code=303)
 
     # ------------------------------------------------------------------------------ profile
-    def profile_page(request, text=None, errors=None, note="", status=200, message=None):
-        version, prof = profiles.latest(cfg)
-        if text is None:
-            text = json.dumps(prof, indent=2, ensure_ascii=False) if prof else "{}"
-        return page(request, "profile.html", status=status, version=version, text=text, errors=errors or [],
-                    note=note, history=data.profile_history(cfg), message=message or request.query_params.get("msg"))
+    def show(request, form, *, note="", status=200, message=None, notice=None, checking=False):
+        """The one way the settings page is drawn: GET, every failure, Check and the 503."""
+        return page(request, "profile.html", status=status, form=form.view(profiles.version(cfg, form.base)), note=note,
+                    message=message or request.query_params.get("msg"), notice=notice, checking=checking,
+                    history=data.profile_history(cfg))
 
     def profile_get(request):
-        return profile_page(request)
+        return show(request, pf.open_form(*profiles.latest(cfg)))
 
     async def profile_post(request):
-        form = await request.form()
-        text, note, action = str(form.get("profile") or ""), str(form.get("note") or "").strip(), form.get("action")
-        try:
-            doc = json.loads(text)
-        except ValueError as e:
-            return profile_page(request, text, [f"Not valid JSON: {e}"], note, status=400)
-        errors = profiles.problems(doc) if isinstance(doc, dict) else ["The profile must be a JSON object."]
-        if errors:
-            return profile_page(request, text, errors, note, status=400)
-        if action != "save":
-            return profile_page(request, text, [], note, message="No problems found. Nothing is saved until you press Save.")
+        posted = await request.form()
+        note, checking = str(posted.get("note") or "").strip(), posted.get("action") != "save"
+        sub = pf.submit(posted, profiles.latest(cfg), lambda n: profiles.version(cfg, n))
+        if sub.form.errors:
+            return show(request, sub.form, note=note, status=400, checking=checking)
+        if checking:
+            return show(request, sub.form, note=note, message=sub.check_message, checking=True)
         if rebuilding():
-            return busy(request)
-        version, saved = await run_in_threadpool(profiles.save, cfg, doc, note or "edited on the site")
-        msg = f"Saved as version {version}." if saved else f"No change: it's the same as version {version}."
-        return RedirectResponse("/profile?msg=" + _q(msg), status_code=303)
+            return show(request, sub.form, note=note, status=503,
+                        notice="The job data is being rebuilt, so nothing was saved. Your changes are still here. "
+                               "Press Save again in a minute.")
+        version, saved = await run_in_threadpool(profiles.save, cfg, sub.doc, note or "edited on the site")
+        return RedirectResponse("/profile?msg=" + _q(sub.saved_message(version, saved)), status_code=303)
 
     def profile_version(request):
         n = request.path_params["n"]

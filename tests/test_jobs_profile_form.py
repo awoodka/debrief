@@ -4,9 +4,14 @@ import json
 
 import pytest
 
-from debrief.jobs import profile
+from browser_form import browser_submit
+from debrief.jobs import collect, config as jconfig, profile
 from debrief.jobs.web import profile_form as pf
+from debrief.jobs.web.app import SECURITY_HEADERS, create_app
+from debrief.jobs.web.auth import AccessVerifier
+from starlette.testclient import TestClient
 from test_jobs_profile import doc
+from test_jobs_web import AUD, EMAILS, ORIGIN, TEAM, Certs, JWK, site, token  # noqa: F401
 
 
 def _schema():
@@ -240,3 +245,183 @@ def test_a_blank_first_profile_is_complete_apart_from_what_only_a_person_can_say
     missing = {i.path for i in profile.issues(pf.blank_doc()) if i.rule == "required"}
     assert ("degree", "level") in missing and ("ranking", "top_n") in missing and ("filters", "max_years") in missing
     assert ("skills",) not in missing and ("companies",) not in missing and ("ranking", "per_company") not in missing
+
+
+# -------------------------------------------------------------------------- through the real page
+
+def _post(client, form, **extra):
+    return client.post("/profile", data={**form, **extra}, headers={"Origin": ORIGIN}, follow_redirects=False)
+
+
+def _form(client):
+    return browser_submit(client.get("/profile").text, "/profile")
+
+
+@pytest.mark.parametrize("changes", [{}, NASTY, BONUS], ids=["base", "nasty", "bonus"])
+def test_an_untouched_page_saves_nothing(site, changes):
+    cfg, client, _ = site
+    profile.save(cfg, doc(**changes), note="seed")
+    v, before = profile.latest(cfg)
+    r = _post(client, _form(client), action="save")
+    assert r.status_code == 303 and "No%20change" in r.headers["location"]
+    n, after = profile.latest(cfg)
+    assert n == v and profile.canonical(after) == profile.canonical(before)
+
+
+def test_one_edit_changes_only_that_setting(site):
+    cfg, client, _ = site
+    v, before = profile.latest(cfg)
+    r = _post(client, {**_form(client), "skills": "Python\r\nRust"}, action="save", note="learned rust")
+    assert r.status_code == 303 and "Saved%20as%20version" in r.headers["location"]
+    n, after = profile.latest(cfg)
+    assert n == v + 1 and after == {**before, "skills": ["Python", "Rust"]}
+
+
+def test_every_problem_is_listed_on_its_field_in_plain_words_with_typing_kept(site):
+    cfg, client, _ = site
+    v, _ = profile.latest(cfg)
+    r = _post(client, _form(client) | {"filters.max_age_days": "120", "filters.min_hourly_pay": "twenty", "degree.graduation": "May 2027",
+                                       "ranking.top_n": "", "wants": "", "note": "tighter"}, action="save")
+    assert r.status_code == 400 and profile.latest(cfg)[0] == v
+    page = r.text
+    assert "Not saved. 5 things to fix" in page
+    for words in ("Must be 90 or less.", "Enter a number, like 25.", "Use year and month, like 2027-05.", "Can&#39;t be blank.",
+                  "Say what you&#39;re looking for."):
+        assert words in page
+    assert 'value="120"' in page and 'value="twenty"' in page and 'value="May 2027"' in page and 'value="tighter"' in page
+    for schema_words in ("filters/", "ranking:", "is greater than", "does not match", "is not of type", "required property"):
+        assert schema_words not in page
+
+
+def test_a_field_error_sits_inside_that_fields_markup_and_opens_its_section(site):
+    _, client, _ = site
+    page = _post(client, {**_form(client), "filters.max_age_days": "120"}, action="save").text
+    field = page.split('<label for="i-filters-max_age_days">')[1].split('class="hint"')[0]
+    assert "Must be 90 or less." in field
+    assert 'id="keep">\n    <details open>' in page
+    assert 'id="where">\n    <details>' in page
+
+
+def test_cross_field_rules_land_on_the_right_input(site):
+    cfg, client, _ = site
+    page = _post(client, {**_form(client), "filters.exclude_titles": "senior\r\nsoftware engineer"}, action="save").text
+    titles = page.split('name="position_types.0.titles"')[1].split('class="hint"')[0]
+    assert "“software engineer” is also in Words that rule out a title" in titles
+    page = _post(client, {**_form(client), "filters.blocklist": "Acme"}, action="save").text
+    blocklist = page.split('name="filters.blocklist"')[1].split('class="hint"')[0]
+    assert "Acme is on both your Watchlist and Companies to hide" in blocklist
+    max_candidates = profile.latest(cfg)[1]["ranking"]["max_candidates"]
+    page = _post(client, {**_form(client), "ranking.top_n": "400"}, action="save").text
+    assert f"Can&#39;t be more than Most jobs the model reads ({max_candidates})" in page.split('name="ranking.top_n"')[1].split('class="hint"')[0]
+    form = _form(client)
+    del form["filters.locations.remote_us"]
+    r = _post(client, {**form, "filters.locations.places.0.remove": "on"}, action="save")
+    assert r.status_code == 400 and "With neither, every job is filtered out." in r.text
+
+
+def test_check_says_so_and_writes_nothing_and_a_failed_check_is_not_called_a_failed_save(site):
+    cfg, client, _ = site
+    v, _ = profile.latest(cfg)
+    r = _post(client, {**_form(client), "filters.max_age_days": "21"}, action="check")
+    assert r.status_code == 200 and "No problems" in r.text and 'value="21"' in r.text and profile.latest(cfg)[0] == v
+    assert 'id="keep">\n    <details open>' in r.text
+    r = _post(client, {**_form(client), "filters.max_age_days": "120"}, action="check")
+    assert r.status_code == 400 and "Not ready to save." in r.text and "Not saved" not in r.text
+
+
+def test_check_renders_a_fresh_spare_row_and_keeps_what_was_typed_in_the_old_one(site):
+    _, client, _ = site
+    page = _post(client, {**_form(client), "projects.1.name": "New one", "projects.1.summary": "Words.", "projects.1.skills": ""}, action="check").text
+    assert 'name="projects.1.name" value="New one"' in page
+    assert 'name="projects.2.name" value=""' in page and "projects.3.name" not in page
+
+
+def test_enter_means_check_because_check_comes_first(site):
+    _, client, _ = site
+    page = client.get("/profile").text
+    assert page.index('value="check"') < page.index('value="save"')
+    assert page.count('type="submit"') == 2
+
+
+def test_a_rebuild_refuses_save_with_the_form_kept_but_not_check(site):
+    cfg, client, _ = site
+    v, _ = profile.latest(cfg)
+    form = {**_form(client), "filters.max_age_days": "21", "note": "keep me"}
+    collect.rebuilding_marker(cfg).write_text("now")
+    r = _post(client, form, action="save")
+    assert r.status_code == 503 and "nothing was saved" in r.text and 'value="21"' in r.text and 'value="keep me"' in r.text
+    assert profile.latest(cfg)[0] == v
+    assert _post(client, form, action="check").status_code == 200
+    collect.rebuilding_marker(cfg).unlink()
+    assert _post(client, browser_submit(r.text, "/profile"), action="save").status_code == 303
+    assert profile.latest(cfg)[1]["filters"]["max_age_days"] == 21
+
+
+def test_every_write_keeps_the_guards(site):
+    cfg, client, _ = site
+    form = _form(client)
+    v, _ = profile.latest(cfg)
+    r = client.post("/profile", data={**form, "action": "save"}, headers={"Origin": "https://evil.example"})
+    assert r.status_code == 403
+    assert client.post("/profile", data={**form, "action": "save"}).status_code == 403
+    client.headers.pop("Cf-Access-Jwt-Assertion")
+    assert client.post("/profile", data={**form, "action": "save"}, headers={"Origin": ORIGIN}).status_code == 403
+    assert profile.latest(cfg)[0] == v
+
+
+def test_a_page_from_before_this_form_existed_is_refreshed_not_saved(site):
+    cfg, client, _ = site
+    v, _ = profile.latest(cfg)
+    r = client.post("/profile", data={"profile": "{}", "action": "save"}, headers={"Origin": ORIGIN})
+    assert r.status_code == 400 and "out of date" in r.text and profile.latest(cfg)[0] == v
+
+
+def test_the_page_has_no_json_no_scripts_and_the_same_csp(site):
+    _, client, _ = site
+    r = client.get("/profile")
+    for banned in ("<script", " onclick", " onchange", "javascript:", '{"', "{&#34;", 'name="profile"'):
+        assert banned not in r.text
+    assert r.headers["content-security-policy"] == ("default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; "
+                                                    "base-uri 'none'; frame-ancestors 'none'")
+    assert r.headers["content-security-policy"] == SECURITY_HEADERS["Content-Security-Policy"]
+
+
+def test_sections_start_closed_and_summarize_their_values(site):
+    _, client, _ = site
+    page = client.get("/profile").text
+    assert "<details open" not in page
+    for words in ("Remote in the US · NYC", "$25 an hour or more · last 14 days · up to 2 years", "1 skill · 1 interest",
+                  "BS Computer Science, Example U, May 2027 · 1 course", "US citizen · no clearance, could obtain one"):
+        assert words in page
+    assert 'href="/watchlist"' in page and "Acme. Boards and notes are set on the Watchlist page." in page
+
+
+def test_a_closed_section_still_posts(site):
+    _, client, _ = site
+    page = client.get("/profile").text
+    assert 'name="skills"' in page.split('id="skills">')[1] and "<details>" in page.split('id="skills">')[1][:30]
+    assert "skills" in browser_submit(page, "/profile")
+
+
+def test_a_first_profile_can_be_made_from_blank(tmp_path):
+    cfg = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
+    app = create_app(cfg=cfg, verifier=AccessVerifier(TEAM, AUD, EMAILS, fetch=Certs([JWK])), origin=ORIGIN, env={})
+    client = TestClient(app, base_url=ORIGIN)
+    client.headers["Cf-Access-Jwt-Assertion"] = token()
+    r = _post(client, _form(client), action="save")
+    assert r.status_code == 400 and profile.latest(cfg) == (0, None)
+    assert "Can&#39;t be blank." in r.text and "required property" not in r.text
+    assert "Pick one of the options." in r.text and "Say what you&#39;re looking for" in r.text
+    assert "Keep at least one kind of role" in r.text and "With neither" not in r.text
+    filled = _form(client) | {
+        "degree.level": "BS", "degree.field": "CS", "degree.graduation": "2027-05", "wants": "Engineering.",
+        "position_types.0.name": "SWE", "position_types.0.titles": "software engineer",
+        "filters.locations.remote_us": "on", "filters.max_years": "2", "filters.max_age_days": "14",
+        "filters.work_authorization": "us_citizen", "filters.clearance.has": "none", "filters.min_hourly_pay": "25",
+        "ranking.threshold": "40", "ranking.max_candidates": "150", "ranking.top_n": "30",
+    }
+    r = _post(client, filled, action="save")
+    assert r.status_code == 303, r.text
+    n, saved = profile.latest(cfg)
+    assert n == 1 and profile.problems(saved) == [] and saved["companies"] == [] and saved["degree"]["school"] == ""
+    assert "per_company" not in saved["ranking"] and "fresh_bonus" not in saved["ranking"]

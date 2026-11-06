@@ -16,6 +16,7 @@ from debrief.jobs.store import JobsStore, state_path
 from debrief.jobs.web import data
 from debrief.jobs.web.app import create_app
 from debrief.jobs.web.auth import AccessVerifier
+from browser_form import browser_submit
 from test_jobs_coverage import _sample, job
 from test_jobs_score import NOW, ByTitle, _add, _cfg
 from test_jobs_collect import it
@@ -184,24 +185,16 @@ def test_track_refuses_cross_site_get_and_rebuilds(site):
 
 # --------------------------------------------------------------------------------- the profile
 
-def test_profile_check_save_and_history(site):
+def test_profile_save_and_history(site):
     cfg, client, _ = site
-    v0, doc = profile.latest(cfg)
-    r = client.post("/profile", data={"profile": "{not json", "action": "save"}, headers={"Origin": ORIGIN})
-    assert r.status_code == 400 and "Not valid JSON" in r.text and profile.latest(cfg)[0] == v0
-    bad = dict(doc)
-    del bad["ranking"]
-    r = client.post("/profile", data={"profile": json.dumps(bad), "action": "save"}, headers={"Origin": ORIGIN})
-    assert r.status_code == 400 and "ranking" in r.text and profile.latest(cfg)[0] == v0
-    good = json.loads(json.dumps(doc))
-    good["filters"]["max_age_days"] = 21
-    r = client.post("/profile", data={"profile": json.dumps(good), "action": "check"}, headers={"Origin": ORIGIN})
-    assert r.status_code == 200 and "No problems found" in r.text and profile.latest(cfg)[0] == v0
-    r = client.post("/profile", data={"profile": json.dumps(good), "action": "save", "note": "three weeks"},
-                    headers={"Origin": ORIGIN}, follow_redirects=False)
+    v0, _ = profile.latest(cfg)
+    assert client.post("/profile", data={"action": "save"}, headers={"Origin": ORIGIN}).status_code == 400
+    assert profile.latest(cfg)[0] == v0
+    form = browser_submit(client.get("/profile").text, "/profile")
+    form |= {"filters.max_age_days": "21", "action": "save", "note": "three weeks"}
+    r = client.post("/profile", data=form, headers={"Origin": ORIGIN}, follow_redirects=False)
     assert r.status_code == 303 and profile.latest(cfg)[0] == v0 + 1
-    r = client.get(f"/profile/v/{v0 + 1}")
-    assert r.status_code == 200 and '+    &#34;max_age_days&#34;: 21' in r.text
+    assert profile.latest(cfg)[1]["filters"]["max_age_days"] == 21
     assert "three weeks" in client.get("/profile").text
     assert client.get("/profile/v/99").status_code == 404
 

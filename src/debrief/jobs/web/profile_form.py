@@ -33,6 +33,63 @@ class Bad(Exception):
     """A plain sentence for the person. Never a schema message."""
 
 
+@dataclass(frozen=True)
+class RowView:
+    index: int
+    title: str
+    summary: str
+    fields: tuple
+    open: bool
+    spare: bool
+    removing: bool
+    problems: int
+    remove_name: str
+    remove_label: str
+    add_label: str
+
+
+@dataclass(frozen=True)
+class FieldView:
+    """All a template macro needs. Templates never see the document."""
+    widget: str
+    name: str
+    id: str
+    label: str
+    help: str
+    value: str = ""
+    errors: tuple[str, ...] = ()
+    pre: str = ""
+    unit: str = ""
+    inputmode: str = ""
+    placeholder: str = ""
+    height: int = 0
+    choices: tuple[tuple[str, str], ...] = ()
+    rows: tuple[RowView, ...] = ()
+
+
+@dataclass(frozen=True)
+class GroupView:
+    id: str
+    title: str
+    part: str
+    summary: str
+    open: bool = False
+    link: str = ""
+    fields: tuple[FieldView, ...] = ()
+    fine: tuple[FieldView, ...] = ()
+    fine_open: bool = False
+    problems: int = 0
+
+
+@dataclass(frozen=True)
+class FormView:
+    base: int
+    groups: tuple[GroupView, ...]
+    page_errors: tuple[str, ...]
+    banner: tuple[tuple[str, str, str], ...]   # (input id, label, message) in page order
+    budget: int | None
+
+
 @dataclass
 class Reading:
     """One pass of a table over a Raw. places maps document paths back to input names, so a schema
@@ -72,6 +129,7 @@ def put(doc, path, value):
 
 @dataclass(frozen=True)
 class Field:
+    widget = "text"
     key: str                 # dotted from the document's top, or from the row inside a Rows
     label: str
     help: str = ""
@@ -122,6 +180,14 @@ class Field:
     def slots(self, prefix=""):
         yield prefix + self.key, self
 
+    def extras(self, typed):
+        return {}
+
+    def view(self, form, at, ref):
+        typed = form.raw.get(at, "")
+        return FieldView(self.widget, at, _input_id(at), self.label, self.help, typed, tuple(form.errors.get(at, ())),
+                         **self.extras(typed))
+
 
 @dataclass(frozen=True)
 class Text(Field):
@@ -134,6 +200,9 @@ class Text(Field):
         typed = typed.strip()
         return self.accept(typed) if self.accept else typed
 
+    def extras(self, typed):
+        return {"placeholder": self.placeholder}
+
 
 class _MultiLine:
     def clean(self, typed):
@@ -145,12 +214,17 @@ class _MultiLine:
 class Area(_MultiLine, Field):
     """Prose. The template writes a newline straight after <textarea>, so a value that itself starts
     with a newline survives the HTML parser."""
+    widget = "area"
     blank: Any = ""
+
+    def extras(self, typed):
+        return {"height": min(max(len(typed) // 70 + typed.count("\n") + 2, 4), 20)}
 
 
 @dataclass(frozen=True)
 class Lines(_MultiLine, Field):
     """A list of strings, one per line, in order. Lines, not commas: "New York, NY" is one place."""
+    widget = "lines"
     blank: Any = dc_field(default_factory=list)
     noun: str = "item"
     first_means: str = ""    # "Place searched for in {row}": what the top line does, for the change list
@@ -161,12 +235,16 @@ class Lines(_MultiLine, Field):
     def parse(self, typed, ref):
         return list(dict.fromkeys(s.strip() for s in typed.split("\n") if s.strip()))
 
+    def extras(self, typed):
+        return {"height": min(max(typed.count("\n") + 2, 3), 30)}
+
 
 @dataclass(frozen=True)
 class Number(Field):
     """<input type=text inputmode=...>, not type=number, which blanks what it can't parse and so would
     lose typed input. Typing 25 over a stored 25.0 keeps 25.0, because they are the same number and a
     different spelling would still change the id."""
+    widget = "number"
     whole: bool = True
     pre: str = ""
     unit: str = ""
@@ -183,10 +261,14 @@ class Number(Field):
             raise Bad("Enter a number, like 25.")
         return ref if ref is not MISSING and value == ref else value
 
+    def extras(self, typed):
+        return {"pre": self.pre, "unit": self.unit, "inputmode": "numeric" if self.whole else "decimal"}
+
 
 @dataclass(frozen=True)
 class Toggle(Field):
     """A checkbox. Unchecked posts nothing, so absent means False."""
+    widget = "toggle"
     blank: Any = False
 
     def to_text(self, value):
@@ -199,7 +281,13 @@ class Toggle(Field):
 @dataclass(frozen=True)
 class Choice(Field):
     """<select>. labels is {stored value: words}, and a test holds it equal to the schema's enum."""
+    widget = "choice"
     labels: Mapping[str, str] = dc_field(default_factory=dict)
+
+    def extras(self, typed):
+        """A stored value outside labels gets its own option, so an untouched select can't change it."""
+        extra = [("", "Choose")] if not typed else [(typed, typed)] if typed not in self.labels else []
+        return {"choices": (*extra, *self.labels.items())}
 
 
 @dataclass(frozen=True)
@@ -207,6 +295,7 @@ class Rows(Field):
     """A list of objects as folded rows, with inputs f"{key}.{n}.{sub.key}" and f"{key}.{n}.remove".
     A row's stored value is found by its id input, so rows need no hidden ids and a renamed row is
     honestly a new row. spare=False is an edit-only list: no blank row and no remove box."""
+    widget = "rows"
     blank: Any = dc_field(default_factory=list)
     row_noun: str = "row"
     add_label: str = ""
@@ -274,6 +363,34 @@ class Rows(Field):
         yield prefix + self.key, self
         for s in self.fields:
             yield from s.slots(f"{prefix}{self.key}[].")
+
+    def row_view(self, form, at, n, stored, spare=False):
+        prefix = f"{at}.{n}."
+        cells = {s.key: form.raw.get(prefix + s.key, "") for s in self.fields}
+        problems = sum(len(v) for k, v in form.errors.items() if k.startswith(prefix))
+        removing = bool(form.raw.get(prefix + "remove"))
+        moved = not stored or any(not s.unchanged(form.raw, stored.get(s.key, MISSING), prefix + s.key) for s in self.fields)
+        title = (self.title(cells) if self.title else cells.get(self.id_key, "").strip()) or f"New {self.row_noun}"
+        return RowView(n, self.add_label if spare else title, "" if spare else self.summary(cells),
+                       tuple(s.view(form, prefix + s.key, stored.get(s.key, MISSING)) for s in self.fields),
+                       open=bool(problems) or (moved and not spare) or removing, spare=spare, removing=removing,
+                       problems=problems, remove_name=prefix + "remove", remove_label=f"Remove this {self.row_noun}",
+                       add_label=self.add_label)
+
+    def view(self, form, at, ref):
+        """Rows come from the inputs, so a re-render keeps what was typed. A blank row is dropped, and
+        there is always one fresh spare."""
+        pool, rows = self.stored_rows(ref), []
+        numbers = self.numbers(form.raw, at)
+        for n in numbers:
+            cells_blank = not any(form.raw.get(f"{at}.{n}.{s.key}", "").strip() for s in self.fields)
+            has_error = any(k.startswith(f"{at}.{n}.") for k in form.errors)
+            if self.spare and cells_blank and not has_error:
+                continue
+            rows.append(self.row_view(form, at, n, self.stored_row(pool, form.raw, at, n)))
+        if self.spare:
+            rows.append(self.row_view(form, at, max(numbers, default=-1) + 1, {}, spare=True))
+        return FieldView(self.widget, at, _input_id(at), self.label, self.help, errors=tuple(form.errors.get(at, ())), rows=tuple(rows))
 
 
 @dataclass(frozen=True)
@@ -571,3 +688,134 @@ def read_all(raw, ref, table=TABLE):
     for f in top_fields(table):
         put(doc, f.path, f.read(rd, f.key, f.path, get(ref, f.path)))
     return rd, doc
+
+
+# ------------------------------------------------------------------------------------ the form
+
+def _input_id(at):
+    return "i-" + at.replace(".", "-")
+
+
+def _banner(views):
+    for v in views:
+        for message in v.errors:
+            yield v.id, v.label, message
+        for row in v.rows:
+            for sub in row.fields:
+                for message in sub.errors:
+                    yield sub.id, f"{row.title}, {sub.label}", message
+
+
+@dataclass(frozen=True)
+class Form:
+    """A page's state: the version it is based on, what's in the inputs, and what's wrong with them.
+    Errors are keyed by input name, and "" is the page itself."""
+    base: int
+    raw: Raw
+    errors: Mapping[str, list[str]] = dc_field(default_factory=dict)
+
+    def view(self, saved, table=TABLE):
+        """saved is version `base`'s document, or None for a first profile, when every section starts open."""
+        doc = saved if saved is not None else blank_doc()
+        groups = []
+        for g in table:
+            summary = g.summary(doc) if saved is not None else "Not set yet"
+            if g.link:
+                groups.append(GroupView(g.id, g.title, g.part, summary, link=g.link))
+                continue
+            fields = tuple(f.view(self, f.key, get(doc, f.path)) for f in g.fields)
+            fine = tuple(f.view(self, f.key, get(doc, f.path)) for f in g.fine)
+            problems = sum(1 for _ in _banner(fields + fine))
+            moved = any(not f.unchanged(self.raw, get(doc, f.path)) for f in g.fields)
+            fine_moved = any(not f.unchanged(self.raw, get(doc, f.path)) for f in g.fine)
+            fine_problems = sum(1 for _ in _banner(fine))
+            groups.append(GroupView(g.id, g.title, g.part, summary, open=saved is None or bool(problems) or moved or fine_moved,
+                                    fields=fields, fine=fine, fine_open=bool(fine_problems) or fine_moved, problems=problems))
+        banner = tuple(item for g in groups for item in _banner(g.fields + g.fine))
+        budget = get(doc, ("ranking", "max_candidates"))
+        return FormView(self.base, tuple(groups), tuple(self.errors.get("", ())), banner, None if budget is MISSING else budget)
+
+
+@dataclass(frozen=True)
+class Submission:
+    form: Form                  # what to re-render
+    doc: dict | None            # what to save; None if form.errors
+
+    @property
+    def check_message(self):
+        return "No problems found. Nothing is saved until you press Save."
+
+    def saved_message(self, version, saved):
+        return f"Saved as version {version}. It applies at the next nightly run." if saved else f"No change: it's the same as version {version}."
+
+
+def open_form(version, doc, table=TABLE):
+    """A fresh page. No profile yet renders every input blank, with base 0."""
+    return Form(version, fill_all(doc if doc is not None else blank_doc(), table))
+
+
+def submit(posted, latest, load, table=TABLE):
+    """Everything between a POST and the decision to write. Nothing here writes."""
+    latest_n, latest_doc = latest
+    try:
+        base_n = int(posted.get("base") or "")
+    except ValueError:
+        base_n = None
+    base_doc = blank_doc() if base_n == 0 else load(base_n) if base_n else None
+    if base_doc is None:
+        return Submission(Form(latest_n, open_form(latest_n, latest_doc, table).raw,
+                               {"": ["This page was out of date, so here is the current profile. Nothing was saved."]}), None)
+    raw = {k: str(v) for k, v in posted.items() if k not in ("base", "action", "note")}
+    rd, doc = read_all(raw, latest_doc if latest_doc is not None else blank_doc(), table)
+    errors = {**rd.failed}
+    for at, messages in _plain(profiles.issues(doc), rd).items():
+        errors.setdefault(at, []).extend(messages)
+    return Submission(Form(latest_n, raw, errors), None if errors else doc)
+
+
+KEYWORD_WORDING = {
+    "minimum": "Must be at least {limit}.",
+    "maximum": "Must be {limit} or less.",
+    "minLength": "Can't be blank.",
+    "minItems": "Add at least one.",
+    "minProperties": "Add at least one.",
+    "uniqueItems": "Something here is listed twice.",
+    "enum": "Pick one of the options.",
+    "pattern": "That doesn't look right.",
+    "type": "That doesn't look right.",
+    "required": "Can't be blank.",
+    "additionalProperties": "This profile has a setting this page doesn't know about, so it can't be saved here.",
+}
+
+CROSS_WORDING = {
+    "type_twice": "Two kinds of role are called {value}. Rename or remove one.",
+    "title_excluded": "“{value}” is also in Words that rule out a title, so it could never match. Take it out of one.",
+    "company_twice": "{value} is listed twice.",
+    "company_blocked": "{value} is on both your Watchlist and Companies to hide. Take it off one of the two.",
+    "top_n_over": "Can't be more than Most jobs the model reads ({limit}), or the list could never fill.",
+    "nowhere": "Turn this on or add an area. With neither, every job is filtered out.",
+}
+
+# The other side of a rule that spans the two pages, for the page that can't edit where it points.
+OTHER_SIDE = {"company_blocked": ("filters", "blocklist")}
+
+
+def _place(issue, rd):
+    for path in (issue.path, OTHER_SIDE.get(issue.rule, ())):
+        for n in range(len(path), 0, -1):
+            if path[:n] in rd.places:
+                return rd.places[path[:n]]
+    return ""
+
+
+def _plain(issues, rd):
+    """profile.Issue -> {input name: [plain sentence]}. A field that already said what's wrong says nothing more."""
+    out = defaultdict(list)
+    for i in issues:
+        at = _place(i, rd)
+        if at in rd.failed:
+            continue
+        field = rd.fields.get(at)
+        wording = (field.messages.get(i.rule) if field else None) or CROSS_WORDING.get(i.rule) or KEYWORD_WORDING[i.rule]
+        out[at].append(wording.format(limit=i.limit, value=i.value))
+    return out

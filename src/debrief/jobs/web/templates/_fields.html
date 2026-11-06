@@ -1,0 +1,72 @@
+{# How each kind of control is drawn. A macro knows controls, never which settings exist. #}
+{% macro errs(f) %}{% for m in f.errors %}<p class="ferr">{{ m }}</p>{% endfor %}{% endmacro %}
+
+{% macro hint(f) %}{% if f.help %}<p class="hint">{{ f.help }}</p>{% endif %}{% endmacro %}
+
+{% macro field(f) %}
+{% if f.widget == "toggle" %}
+<div class="f f-toggle{{ ' bad' if f.errors }}">
+  <label class="chk"><input type="checkbox" id="{{ f.id }}" name="{{ f.name }}"{% if f.value %} checked{% endif %}>
+    <span>{{ f.label }}{% if f.help %}<span class="hint">{{ f.help }}</span>{% endif %}</span></label>
+  {{ errs(f) }}
+</div>
+{% elif f.widget == "rows" %}
+<div class="f f-rows{{ ' bad' if f.errors }}" id="{{ f.id }}">
+  <p class="lab">{{ f.label }}</p>
+  {{ hint(f) }}{{ errs(f) }}
+  <div class="items">
+    {% for r in f.rows %}
+    <details class="item{{ ' new' if r.spare }}{{ ' bad' if r.problems }}"{% if r.open %} open{% endif %}>
+      <summary><b>{{ r.title }}</b>{% if r.summary %}<span class="ct">{{ r.summary }}</span>{% endif %}{% if r.problems %}<span class="badge warn">{{ r.problems }} to fix</span>{% endif %}</summary>
+      <div class="in fields">
+        {% for s in r.fields %}{{ field(s) }}{% endfor %}
+        {% if not r.spare and r.add_label %}<label class="chk quiet"><input type="checkbox" name="{{ r.remove_name }}"{% if r.removing %} checked{% endif %}><span>{{ r.remove_label }}</span></label>{% endif %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="f f-{{ f.widget }}{{ ' bad' if f.errors }}">
+  <label for="{{ f.id }}">{{ f.label }}</label>
+  {% if f.widget == "text" %}
+  <input type="text" id="{{ f.id }}" name="{{ f.name }}" value="{{ f.value }}"{% if f.placeholder %} placeholder="{{ f.placeholder }}"{% endif %}{% if f.errors %} aria-invalid="true"{% endif %}>
+  {% elif f.widget == "number" %}
+  <span class="unit">{% if f.pre %}{{ f.pre }}{% endif %}<input type="text" inputmode="{{ f.inputmode }}" id="{{ f.id }}" name="{{ f.name }}" value="{{ f.value }}"{% if f.errors %} aria-invalid="true"{% endif %}>{% if f.unit %}{{ f.unit }}{% endif %}</span>
+  {% elif f.widget == "choice" %}
+  <select id="{{ f.id }}" name="{{ f.name }}"{% if f.errors %} aria-invalid="true"{% endif %}>
+    {% for v, words in f.choices %}<option value="{{ v }}"{% if v == f.value %} selected{% endif %}>{{ words }}</option>{% endfor %}
+  </select>
+  {% elif f.widget == "lines" or f.widget == "area" %}
+  {# The newline straight after the tag is on purpose: the HTML parser eats exactly one, so a value starting with a newline survives. #}
+  <textarea id="{{ f.id }}" name="{{ f.name }}" rows="{{ f.height }}" class="{{ f.widget }}"{% if f.widget == "lines" %} spellcheck="false"{% endif %}{% if f.errors %} aria-invalid="true"{% endif %}>
+{{ f.value }}</textarea>
+  {% else %}{{ unknown_widget_kind(f.widget) }}{% endif %}
+  {{ errs(f) }}{{ hint(f) }}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro fields(views) %}<div class="fields">{% for f in views %}{{ field(f) }}{% endfor %}</div>{% endmacro %}
+
+{% macro problems(form, checking, restart) %}
+{% if form.page_errors or form.banner %}
+<div class="err">
+  {{ 'Not ready to save.' if checking else 'Not saved.' }}{% if form.banner %} {{ form.banner|length }} {{ 'thing' if form.banner|length == 1 else 'things' }} to fix:{% endif %}
+  <ul>
+    {% for e in form.page_errors %}<li>{{ e }}</li>{% endfor %}
+    {% for id, label, message in form.banner %}<li><a href="#{{ id }}">{{ label }}</a>: {{ message }}</li>{% endfor %}
+  </ul>
+  {% if form.banner %}<p class="again">Your typing is all still here. <a href="{{ restart }}">Start over from the current profile</a> if you'd rather.</p>{% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro savebar(note) %}
+<div class="savebar">
+  <input type="text" name="note" value="{{ note }}" placeholder="Note for this version (optional)" aria-label="Note for this version">
+  {# Check comes first, so Enter in a text input means Check, never Save. #}
+  <button type="submit" name="action" value="check">Check</button>
+  <button type="submit" name="action" value="save" class="primary">Save</button>
+</div>
+{% endmacro %}

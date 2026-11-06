@@ -1,19 +1,42 @@
 {% extends "base.html" %}
+{% from "_fields.html" import fields, problems, savebar %}
 {% block title %}Jobs · Profile{% endblock %}
 {% block body %}
 <h1>Profile</h1>
-<p class="sub">Version {{ version }}. Check it against the schema, then save it as a new version; every version is kept.</p>
+{% if form.base %}
+<p class="sub">Version {{ form.base }}. Changes apply at the next nightly run, and any saved change re-asks the model about up to {{ form.budget }} jobs. Every save is kept as a <a href="#versions">version</a>.</p>
+{% else %}
+<p class="sub">No profile yet. Fill this in and press Save to create the first version.</p>
+{% endif %}
 {% if message %}<p class="msg">{{ message }}</p>{% endif %}
-{% if errors %}<div class="err">Not saved:<ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
-<form method="post" action="/profile">
-  <textarea name="profile" spellcheck="false">{{ text }}</textarea>
-  <div class="row">
-    <input type="text" name="note" value="{{ note }}" placeholder="What changed (saved with the version)" size="40">
-    <button type="submit" name="action" value="check">Check</button>
-    <button type="submit" name="action" value="save" class="primary">Save</button>
-  </div>
+{% if notice %}<p class="err">{{ notice }}</p>{% endif %}
+{{ problems(form, checking, "/profile") }}
+<form method="post" action="/profile" novalidate autocomplete="off">
+  <input type="hidden" name="base" value="{{ form.base }}">
+  {% for g in form.groups %}
+  {% if loop.changed(g.part) %}<h2>{{ g.part }}</h2>{% endif %}
+  {% if g.link %}
+  <a class="set open" id="{{ g.id }}" href="{{ g.link }}"><h3>{{ g.title }}</h3><span class="now">{{ g.summary }}</span><span class="act"></span></a>
+  {% else %}
+  <section class="set{{ ' bad' if g.problems }}" id="{{ g.id }}">
+    <details{% if g.open %} open{% endif %}>
+      <summary><h3>{{ g.title }}</h3><span class="now">{{ g.summary }}</span><span class="act"></span></summary>
+      <div class="body">
+        {{ fields(g.fields) }}
+        {% if g.fine %}
+        <details class="adv"{% if g.fine_open %} open{% endif %}>
+          <summary>Fine tuning</summary>
+          {{ fields(g.fine) }}
+        </details>
+        {% endif %}
+      </div>
+    </details>
+  </section>
+  {% endif %}
+  {% endfor %}
+  {{ savebar(note) }}
 </form>
-<h2>Versions</h2>
+<h2 id="versions">Versions</h2>
 <table>
   <tr><th>Version</th><th>Saved</th><th>Note</th></tr>
   {% for h in history %}<tr><td><a href="/profile/v/{{ h.version }}">v{{ h.version }}</a></td><td>{{ h.saved_at }}</td><td>{{ h.note }}</td></tr>{% endfor %}
