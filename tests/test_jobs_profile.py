@@ -52,6 +52,62 @@ def test_problems_are_reported(changes, needle):
     assert any(needle in p for p in profile.problems(doc(**changes)))
 
 
+def _without(*keys):
+    d = doc()
+    for k in keys:
+        del d[k]
+    return d
+
+
+@pytest.mark.parametrize("bad,lines", [
+    (doc(degree__graduation="May 2027"), ["degree/graduation: 'May 2027' does not match '^\\\\d{4}-(0[1-9]|1[0-2])$'"]),
+    (doc(filters__max_years=-1), ["filters/max_years: -1 is less than the minimum of 0"]),
+    (doc(companies=[{"name": "Acme", "board": "monster:acme"}]),
+     ["companies/0/board: 'monster:acme' does not match "
+      "'^(greenhouse|lever|ashby|workable|smartrecruiters|recruitee|workday):[^\\\\s]+$'"]),
+    (doc(skills=["Python", "Python"]), ["skills: ['Python', 'Python'] has non-unique elements"]),
+    ({**doc(), "surprise": 1}, ["(top): Additional properties are not allowed ('surprise' was unexpected)"]),
+    (doc(position_types=[{"name": "SWE", "titles": ["senior"]}]), ["position_types/SWE: 'senior' is also in filters/exclude_titles"]),
+    (doc(position_types=[{"name": "A", "titles": ["x"]}, {"name": "a", "titles": ["y"]}]), ["position_types: 'a' appears twice"]),
+    (doc(companies=[{"name": "Acme"}, {"name": "acme"}]), ["companies: 'acme' is listed twice"]),
+    (doc(filters__blocklist=["Acme"]), ["companies: 'Acme' is also on filters/blocklist"]),
+    (doc(ranking__top_n=200), ["ranking: top_n (200) is more than max_candidates (150), so it can't be filled"]),
+    (doc(filters__locations={"remote_us": False, "places": {}}), ["filters/locations: no remote and no places, so every job would be filtered out"]),
+    (_without("ranking", "wants"), ["(top): 'wants' is a required property", "(top): 'ranking' is a required property"]),
+    (doc(filters__max_age_days=0, ranking={"threshold": 400, "max_candidates": 1, "top_n": 1, "fresh_bonus": {"x": 9}}),
+     ["filters/max_age_days: 0 is less than the minimum of 1",
+      "ranking/fresh_bonus: 'x' does not match any of the regexes: '^[1-9][0-9]{0,2}$'",
+      "ranking/threshold: 400 is greater than the maximum of 100"]),
+])
+def test_problem_lines_keep_their_exact_text(bad, lines):
+    assert profile.problems(bad) == lines
+
+
+@pytest.mark.parametrize("bad,path,rule", [
+    (doc(filters__max_years=-1), ("filters", "max_years"), "minimum"),
+    (_without("wants"), ("wants",), "required"),
+    (doc(position_types=[{"name": "A", "titles": ["x"]}, {"name": "a", "titles": ["y"]}]), ("position_types", 1, "name"), "type_twice"),
+    (doc(position_types=[{"name": "A", "titles": ["x"]}, {"name": "B", "titles": ["senior"]}]), ("position_types", 1, "titles"), "title_excluded"),
+    (doc(companies=[{"name": "Acme"}, {"name": "acme"}]), ("companies", 1, "name"), "company_twice"),
+    (doc(filters__blocklist=["Acme"]), ("companies", 0, "name"), "company_blocked"),
+    (doc(ranking__top_n=200), ("ranking", "top_n"), "top_n_over"),
+    (doc(filters__locations={"remote_us": False, "places": {}}), ("filters", "locations", "remote_us"), "nowhere"),
+])
+def test_issues_point_at_the_setting_at_fault(bad, path, rule):
+    found = profile.issues(bad)
+    assert [(i.path, i.rule) for i in found] == [(path, rule)]
+    assert [i.line for i in found] == profile.problems(bad)
+
+
+def test_version_reads_any_saved_version(tmp_path):
+    cfg = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
+    assert profile.version(cfg, 1) is None
+    profile.save(cfg, doc())
+    profile.save(cfg, doc(ranking__top_n=20))
+    assert profile.version(cfg, 1) == doc() and profile.version(cfg, 2) == doc(ranking__top_n=20)
+    assert profile.version(cfg, 3) is None
+
+
 def test_save_versions_and_skips_unchanged(tmp_path):
     cfg = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
     assert profile.latest(cfg) == (0, None)
