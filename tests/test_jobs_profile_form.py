@@ -425,3 +425,97 @@ def test_a_first_profile_can_be_made_from_blank(tmp_path):
     n, saved = profile.latest(cfg)
     assert n == 1 and profile.problems(saved) == [] and saved["companies"] == [] and saved["degree"]["school"] == ""
     assert "per_company" not in saved["ranking"] and "fresh_bonus" not in saved["ranking"]
+
+
+# --------------------------------------------------------------------------------- a stale page
+
+def _add_elsewhere(cfg, name="Globex"):
+    _, d = profile.latest(cfg)
+    return profile.save(cfg, {**d, "companies": d["companies"] + [{"name": name, "board": None}]}, note="other tab")[0]
+
+
+def test_a_stale_page_keeps_a_watchlist_add(site):
+    cfg, client, _ = site
+    form = _form(client)
+    v = _add_elsewhere(cfg)
+    r = _post(client, {**form, "filters.max_age_days": "21"}, action="save")
+    n, now = profile.latest(cfg)
+    assert r.status_code == 303 and n == v + 1 and now["filters"]["max_age_days"] == 21
+    assert "Globex" in [c["name"] for c in now["companies"]]
+    assert "change%20made%20elsewhere%20to%20Companies%20was%20kept" in r.headers["location"]
+
+
+def test_an_untouched_stale_page_writes_nothing(site):
+    cfg, client, _ = site
+    form = _form(client)
+    v = _add_elsewhere(cfg)
+    r = _post(client, form, action="save")
+    assert r.status_code == 303 and "No%20change" in r.headers["location"] and profile.latest(cfg)[0] == v
+
+
+def test_a_different_setting_changed_elsewhere_is_taken_up_and_shown(site):
+    cfg, client, _ = site
+    form = _form(client)
+    _, d = profile.latest(cfg)
+    profile.save(cfg, {**d, "skills": ["Python", "Go"]}, note="other tab")
+    r = _post(client, {**form, "wants": "Mine."}, action="check")
+    assert r.status_code == 200 and "Python\nGo</textarea>" in r.text.replace("\r", "") and "Mine." in r.text
+    r = _post(client, browser_submit(r.text, "/profile"), action="save")
+    assert r.status_code == 303
+    now = profile.latest(cfg)[1]
+    assert now["skills"] == ["Python", "Go"] and now["wants"] == "Mine."
+
+
+def _other_tab_sets_age(cfg, days):
+    _, d = profile.latest(cfg)
+    return profile.save(cfg, {**d, "filters": {**d["filters"], "max_age_days": days}}, note="other tab")[0]
+
+
+def test_the_same_setting_changed_twice_stops_explains_and_a_second_save_wins(site):
+    cfg, client, _ = site
+    form = {**_form(client), "filters.max_age_days": "21", "note": "mine"}
+    v = _other_tab_sets_age(cfg, 30)
+    r = _post(client, form, action="save")
+    assert r.status_code == 409 and profile.latest(cfg)[0] == v
+    assert "Changed elsewhere while this page was open" in r.text.split('name="filters.max_age_days"')[1].split('class="hint"')[0]
+    assert 'name="filters.max_age_days" value="21"' in r.text and 'value="mine"' in r.text
+    r = _post(client, browser_submit(r.text, "/profile"), action="save")
+    assert r.status_code == 303 and profile.latest(cfg)[0] == v + 1
+    assert profile.latest(cfg)[1]["filters"]["max_age_days"] == 21
+
+
+def test_a_conflict_stops_check_too(site):
+    cfg, client, _ = site
+    form = {**_form(client), "filters.max_age_days": "21"}
+    _other_tab_sets_age(cfg, 30)
+    r = _post(client, form, action="check")
+    assert r.status_code == 409 and "Not ready to save." in r.text
+
+
+def test_two_changes_that_agree_are_no_conflict(site):
+    cfg, client, _ = site
+    form = {**_form(client), "filters.max_age_days": "21"}
+    v = _other_tab_sets_age(cfg, 21)
+    r = _post(client, form, action="save")
+    assert r.status_code == 303 and "No%20change" in r.headers["location"] and profile.latest(cfg)[0] == v
+
+
+def test_a_stale_row_list_merges_as_one_setting(site):
+    cfg, client, _ = site
+    form = {**_form(client), "position_types.0.name": "Renamed"}
+    _, d = profile.latest(cfg)
+    profile.save(cfg, {**d, "position_types": d["position_types"] + [{"name": "Other", "titles": ["other"]}]}, note="other tab")
+    r = _post(client, form, action="save")
+    assert r.status_code == 409 and 'value="Renamed"' in r.text
+    assert "Changed elsewhere" in r.text.split('id="i-position_types"')[1].split('class="items"')[0]
+
+
+def test_a_blank_page_saved_after_a_first_profile_appeared_changes_nothing(tmp_path):
+    cfg = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
+    app = create_app(cfg=cfg, verifier=AccessVerifier(TEAM, AUD, EMAILS, fetch=Certs([JWK])), origin=ORIGIN, env={})
+    client = TestClient(app, base_url=ORIGIN)
+    client.headers["Cf-Access-Jwt-Assertion"] = token()
+    form = _form(client)
+    profile.save(cfg, doc())
+    assert _post(client, form, action="save").status_code == 303
+    assert profile.latest(cfg) == (1, doc())

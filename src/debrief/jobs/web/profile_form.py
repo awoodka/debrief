@@ -738,15 +738,22 @@ class Form:
 
 @dataclass(frozen=True)
 class Submission:
-    form: Form                  # what to re-render
+    form: Form                  # what to re-render, merged onto the latest version
     doc: dict | None            # what to save; None if form.errors
+    kept: tuple[str, ...] = ()  # labels of settings that changed elsewhere and were left as they are now
+    conflict: bool = False
+
+    @property
+    def _kept_words(self):
+        return f" A change made elsewhere to {_and(self.kept)} was kept." if self.kept else ""
 
     @property
     def check_message(self):
-        return "No problems found. Nothing is saved until you press Save."
+        return "No problems found. Nothing is saved until you press Save." + self._kept_words
 
     def saved_message(self, version, saved):
-        return f"Saved as version {version}. It applies at the next nightly run." if saved else f"No change: it's the same as version {version}."
+        said = f"Saved as version {version}. It applies at the next nightly run." if saved else f"No change: it's the same as version {version}."
+        return said + self._kept_words
 
 
 def open_form(version, doc, table=TABLE):
@@ -766,11 +773,43 @@ def submit(posted, latest, load, table=TABLE):
         return Submission(Form(latest_n, open_form(latest_n, latest_doc, table).raw,
                                {"": ["This page was out of date, so here is the current profile. Nothing was saved."]}), None)
     raw = {k: str(v) for k, v in posted.items() if k not in ("base", "action", "note")}
-    rd, doc = read_all(raw, latest_doc if latest_doc is not None else blank_doc(), table)
-    errors = {**rd.failed}
-    for at, messages in _plain(profiles.issues(doc), rd).items():
-        errors.setdefault(at, []).extend(messages)
-    return Submission(Form(latest_n, raw, errors), None if errors else doc)
+    latest_or_blank = latest_doc if latest_doc is not None else blank_doc()
+    conflicts, kept = {}, ()
+    if base_n != latest_n:
+        raw, conflicts, kept = _rebase(raw, base_doc, latest_or_blank, table)
+    rd, doc = read_all(raw, latest_or_blank, table)
+    errors = {**conflicts}
+    for found in (rd.failed, _plain(profiles.issues(doc), rd)):
+        for at, messages in found.items():
+            errors.setdefault(at, []).extend(messages)
+    return Submission(Form(latest_n, raw, errors), None if errors else doc, kept, bool(conflicts))
+
+
+def _rebase(raw, base, latest, table):
+    """Three-way merge on the inputs, so a re-render and a save see the same thing. Saved versions
+    never change, so a page only has to carry its version number. A setting this page didn't touch
+    takes the latest value. One that both changed stops the save with an explanation, and the page
+    is then based on the latest, so a second Save knowingly wins. That is the only way a page can
+    overwrite another write."""
+    merged, conflicts, kept = {}, {}, []
+    for f in top_fields(table):
+        was, now = get(base, f.path), get(latest, f.path)
+        if f.unchanged(raw, was):
+            merged |= f.fill(now)
+            if not same(was, now):
+                kept.append(f.label)
+        else:
+            merged |= {k: v for k, v in raw.items() if k == f.key or k.startswith(f.key + ".")}
+            if not same(was, now) and not f.unchanged(raw, now):
+                conflicts[f.key] = [CONFLICT]
+    for f in top_fields(TABLE + WATCH_TABLE):
+        if f not in top_fields(table) and not same(get(base, f.path), get(latest, f.path)):
+            kept.append(f.label)
+    return merged, conflicts, tuple(kept)
+
+
+CONFLICT = ("Changed elsewhere while this page was open. Your version is here and doesn't include that change. "
+            "Press Save again to use yours, or start over from the current profile.")
 
 
 KEYWORD_WORDING = {

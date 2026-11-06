@@ -177,7 +177,7 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
         note, checking = str(posted.get("note") or "").strip(), posted.get("action") != "save"
         sub = pf.submit(posted, profiles.latest(cfg), lambda n: profiles.version(cfg, n))
         if sub.form.errors:
-            return show(request, sub.form, note=note, status=400, checking=checking)
+            return show(request, sub.form, note=note, status=409 if sub.conflict else 400, checking=checking)
         if checking:
             return show(request, sub.form, note=note, message=sub.check_message, checking=True)
         if rebuilding():
