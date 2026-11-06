@@ -125,7 +125,7 @@ every day:
   - **Watchlist** (every new job at those companies, with looser filters);
   - **Still open**: saved jobs whose posting has closed are flagged.
 - **Site:** a small Python web app (Starlette and Jinja, plain form posts, no JS framework).
-  - **Pages:** Today, Watchlist, My list, Profile (a JSON editor checked against a schema, with
+  - **Pages:** Today, Watchlist, My list, Profile (a settings page checked against a schema, with
     version history), Coverage.
   - **Signals:** save and dismiss from Today. Dismissals are kept for the scoring check.
   - **Hosting:** a long-running container on the `edge` network.
@@ -994,3 +994,18 @@ mean that I have added it to an outside tracker"); Claude runs the Caddy change 
   29), no scripts, only http(s) links, 403 without a token, Track shows on the lists, an unchanged
   profile save makes no version; the container refuses unauthenticated and forged requests from
   Caddy's side of `edge`; Caddy validates the new block (`edge-jobs.sh --check`). 451 tests pass.
+- **Live 2026-11-05 ~20:20 ET.** Alex created the Access app (both emails; its AUD matches the login
+  redirect's `kid`) and the tunnel hostname, and deployed 44cbfd5. `web.env` written (mode 600);
+  `deploy/web.sh up`; after Alex's go, `deploy/edge-jobs.sh --yes` (backup
+  `/srv/edge/Caddyfile.bak-20261105-201914`): Debrief, Timbre and Local Inference answer 200; chat
+  and jobs redirect to Access without a login and with a forged header; a bad token reaching the
+  site gets 403. The guard is in the crontab (every 10 minutes) and passes.
+- **Settings page, 2026-11-05.** `/profile` is now a settings page, not a JSON editor.
+  `src/debrief/jobs/web/profile_form.py` holds two tables, `TABLE` and `WATCH_TABLE`, that say what
+  each setting is called, where it sits and which control edits it. A test fails if a schema field
+  isn't in a table, so a new schema field needs a row there. An untouched form saves nothing, because
+  `Field.read` returns the stored value whenever an input still shows it, which keeps the profile id
+  stable. A stale page merges field by field: it can't undo a change made elsewhere, and if both sides
+  changed one setting the save stops and explains. Companies are added, removed and edited on
+  `/watchlist`. The site shows no JSON. `debrief jobs profile show|check|save` is unchanged and remains
+  the way to work with the raw document. 642 tests pass.
