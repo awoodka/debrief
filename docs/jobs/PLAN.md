@@ -963,3 +963,34 @@ First real responses:
   Clara), Boston (Suffolk, Middlesex, Norfolk), Austin (Travis, Williamson). It lets Adzuna's
   neighborhood-named jobs match ("Rosslyn, VA" with "Arlington County, VA"); no open posting from
   another source changed place result.
+
+## M4: the site (Alex, 2026-11-06; built)
+jobs.alexwoodka.com, private behind Cloudflare Access. Alex's answers: sign-in for
+alexwoodka@gmail.com **and** alexwoodka@startupshell.org; a watchlist company's board is looked up
+right away; "My list" is only a **Tracked** mark ("the listing card [should] highlight … which would
+mean that I have added it to an outside tracker"); Claude runs the Caddy change after Alex says go.
+- **App** (`src/debrief/jobs/web/`, `debrief jobs web`): Starlette, Jinja (autoescape), no
+  JavaScript, Debrief's look. Pages: Today (the latest morning list, earlier days by date, the jobs
+  kept but not shown under "Also kept"), each catch-up list, Watchlist (add looks the board up at
+  once through `watch.add`; remove asks first), Profile (the JSON with Check and Save, every version
+  and its diff), Coverage (the latest report, alert emails per site, the latest collect's sources).
+  Every card has a Track button; a tracked card is highlighted wherever the job appears.
+- **Gate** (`web/auth.py`): every request needs a Cloudflare Access token, RS256, signed by the
+  team's published keys, with this app's AUD, the team's issuer, not expired, and one of the two
+  emails; else 403. Caddy also refuses requests without the header. Form posts must come from the
+  site itself (Origin / Sec-Fetch-Site). CSP `default-src 'none'`; links only http(s).
+- **Data**: migration 005 `tracked`, carried by rebuilds and moved by `remap_carried` with merges;
+  jobs connections wait up to 30 s for each other's writes (`busy_timeout`); the site refuses
+  writes while `state/REBUILDING` exists (a rebuild would lose them).
+- **Hosting**: `deploy/web.sh up|restart|down|status`, container `debrief-jobs-web` on `edge`
+  (alias `jobs-web`), the run containers' hardening, only `<data>/jobs` writable, settings in
+  `/srv/apps/debrief-v2/web.env` only; `update.sh` recreates it after a deploy.
+  `deploy/edge-jobs.sh` installs the Caddy block (validate, back up, restart, check every site,
+  restore on failure). `deploy/web-guard.sh` (cron, every 10 min) takes the site off `edge` after
+  two checks in a row where Access isn't in front of it.
+- **Packages added** (no existing pin changed): starlette, uvicorn, jinja2, python-multipart,
+  pyjwt[crypto]; httpx for tests.
+- **Checked** on a copy of the live data: every page renders (Today 46 cards, catch-up 335, older
+  29), no scripts, only http(s) links, 403 without a token, Track shows on the lists, an unchanged
+  profile save makes no version; the container refuses unauthenticated and forged requests from
+  Caddy's side of `edge`; Caddy validates the new block (`edge-jobs.sh --check`). 451 tests pass.

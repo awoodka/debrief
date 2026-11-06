@@ -43,6 +43,10 @@ build_and_test() {
 
 if build_and_test; then
   log "deployed ${target:0:7}"
+  # The jobs site (M4) holds its code in memory and was created from the old image: recreate it.
+  if docker inspect debrief-jobs-web >/dev/null 2>&1; then
+    "$CHECKOUT/deploy/web.sh" restart || log "WARN: the jobs site didn't restart cleanly: $CHECKOUT/deploy/web.sh status"
+  fi
 else
   [ -n "$previous" ] || die "tests failed on ${target:0:7}, and there's no earlier deploy to go back to"
   git -C "$CHECKOUT" checkout -q --detach "$previous"

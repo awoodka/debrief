@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% from "_card.html" import card %}
+{% block title %}Jobs · {{ view.day or 'Today' }}{% endblock %}
+{% block body %}
+<h1>{{ view.day or 'No list yet' }}</h1>
+{% if view.header %}<p class="sub">{{ view.header.shown }} shown of {{ view.header.kept }} kept · {{ view.header.new }} new tonight, {{ view.header.carried }} carried over · profile v{{ view.header.version }} · {{ view.header.status }}</p>{% endif %}
+{% if view.coverage %}<p class="sub">{{ view.coverage }}</p>{% endif %}
+{% if view.dates|length > 1 %}
+<form class="row" method="get" action="/">
+  <select name="date">{% for d in view.dates %}<option value="{{ d }}"{{ ' selected' if d == view.date }}>{{ d }}</option>{% endfor %}</select>
+  <button type="submit">Show</button>
+</form>
+{% endif %}
+{% for s in view.sections %}
+<h2>{{ s.title }} ({{ s.cards|length }})</h2>
+{% for c in s.cards %}{{ card(c, back) }}{% endfor %}
+{% else %}
+<p class="empty">Nothing on this list.</p>
+{% endfor %}
+{% if view.beyond %}
+<details>
+  <summary>Also kept, still options for later days ({{ view.beyond|length }})</summary>
+  {% for c in view.beyond %}{{ card(c, back) }}{% endfor %}
+</details>
+{% endif %}
+{% endblock %}

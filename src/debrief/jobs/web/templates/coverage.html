@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Jobs · Coverage{% endblock %}
+{% block body %}
+<h1>Coverage</h1>
+{% set cov = view.coverage %}
+{% if cov %}
+<p class="sub">{{ cov.summary }}</p>
+<table>
+  <tr><th>Google sample</th><th>Today</th><th>Last 7 days</th></tr>
+  {% for k in ['sampled', 'ineligible', 'eligible', 'found', 'near', 'missed', 'pending', 'recall'] %}
+  <tr><td>{{ k }}</td><td>{{ cov.google.day[k] }}</td><td>{{ cov.google.week[k] }}</td></tr>
+  {% endfor %}
+</table>
+<h2>Misses ({{ cov.misses|length }})</h2>
+{% for m in cov.misses %}
+<div class="job"><h3>{{ m.title }}</h3><p class="co">{{ m.company }} · {{ m.location or '?' }} · via {{ m.via or '?' }} · sampled {{ m.first_date }}</p>
+  <p class="miss">{{ m.cause }}</p><p class="note">{{ m.suggestion }}</p></div>
+{% else %}<p class="empty">None.</p>{% endfor %}
+{% if cov.near %}<h2>Near matches (possible duplicates we didn't merge)</h2>
+<table>{% for n in cov.near %}<tr><td>{{ n.title }} — {{ n.company }}</td><td>≈ {{ n.near_title }} — {{ n.near_company }}</td></tr>{% endfor %}</table>{% endif %}
+{% else %}<p class="empty">No coverage report yet.</p>{% endif %}
+<h2>Alert emails, last 7 days</h2>
+{% if view.alerts %}<table>{% for site, n in view.alerts %}<tr><td>{{ site }}</td><td>{{ n }}</td></tr>{% endfor %}</table>
+{% else %}<p class="empty">None yet.</p>{% endif %}
+<h2>Sources in the latest collect{% if view.collect %} ({{ view.collect.run_id }}, {{ view.collect.status }}){% endif %}</h2>
+<table>
+  <tr><th>Source</th><th>Status</th><th>Requests</th><th>Listings</th><th>New jobs</th></tr>
+  {% for s in view.sources %}
+  <tr><td>{{ s.id }}{% if s.exception %}<div class="note">{{ s.exception }} under the keyed-API exception</div>{% endif %}</td>
+      <td>{{ s.status }}{% if s.error %}<div class="note">{{ s.error[:140] }}</div>{% endif %}</td>
+      <td>{{ s.requests if s.requests is not none else '' }}</td><td>{{ s.items if s.items is not none else '' }}</td>
+      <td>{{ s.new if s.new is not none else '' }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

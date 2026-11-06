@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{% block title %}Jobs{% endblock %}</title>
+<style>
+  /* Debrief's look (templates/day.html): the same tokens, light and dark. */
+  :root{
+    --paper:#faf7f1; --surface:#fffdf8; --raise:#f5efe4;
+    --ink:#221d16; --body:#332d24; --muted:#6f6656; --faint:#9a917f;
+    --accent:#b0472a; --accent-ink:#8f3a21; --accent-soft:#f3e7df;
+    --good:#436a3c; --good-bg:#eef3e6; --warn:#a23f2a; --warn-bg:#f7e9e2;
+    --rule:#e7ddcd; --hair:#efe7d8;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#1a1611; --surface:#221d16; --raise:#2a241b;
+      --ink:#efe6d6; --body:#ddd3c2; --muted:#a99f8c; --faint:#7c7362;
+      --accent:#e5825a; --accent-ink:#f0a184; --accent-soft:#37281f;
+      --good:#8fb87f; --good-bg:#22301c; --warn:#e0917a; --warn-bg:#331f18;
+      --rule:#342c20; --hair:#2e271d;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--paper); color:var(--body); font-family:var(--serif); font-size:17px; line-height:1.55;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px; margin:0 auto; padding:22px 18px 80px}
+  a{color:inherit; text-decoration-color:var(--rule); text-underline-offset:2px}
+  a:hover{color:var(--accent); text-decoration-color:var(--accent)}
+  nav{font-family:var(--sans); font-size:14px; display:flex; flex-wrap:wrap; gap:6px 16px; align-items:baseline;
+      border-bottom:1px solid var(--rule); padding-bottom:10px; margin-bottom:22px}
+  nav .brand{font-family:var(--serif); font-weight:700; color:var(--ink); font-size:19px; text-decoration:none; margin-right:6px}
+  nav a{text-decoration:none; color:var(--muted)} nav a.on{color:var(--accent-ink); font-weight:600}
+  nav .who{margin-left:auto; color:var(--faint); font-size:12px}
+  h1{font-size:28px; color:var(--ink); margin:0 0 4px; line-height:1.2}
+  h2{font-family:var(--sans); font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+     margin:30px 0 10px}
+  .sub{font-family:var(--sans); color:var(--muted); font-size:14px; margin:0 0 6px}
+  .job{background:var(--surface); border:1px solid var(--rule); border-left:4px solid var(--rule); border-radius:8px;
+       padding:12px 14px; margin:10px 0}
+  .job.tracked{border-color:var(--accent); border-left-color:var(--accent); background:var(--accent-soft)}
+  .job h3{font-size:18px; margin:2px 0 2px; color:var(--ink); line-height:1.3}
+  .job h3 a{text-decoration:none} .job h3 a:hover{text-decoration:underline}
+  .meta{font-family:var(--sans); font-size:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .score{font-weight:700; color:var(--ink); background:var(--raise); border-radius:5px; padding:1px 7px}
+  .bonus{color:var(--good); font-weight:600; margin-left:2px}
+  .badge{border-radius:999px; padding:1px 8px; background:var(--accent); color:var(--paper); font-weight:600}
+  .badge.warn{background:var(--warn-bg); color:var(--warn)} .badge.soft{background:var(--raise); color:var(--muted); font-weight:500}
+  .co{font-family:var(--sans); font-size:14px; color:var(--muted); margin:0 0 4px}
+  .why{margin:4px 0} .note,.miss,.also{font-family:var(--sans); font-size:13px; margin:3px 0}
+  .note{color:var(--faint)} .miss{color:var(--warn)} .also{color:var(--muted)}
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px}
+  button,.btn{font-family:var(--sans); font-size:13px; border:1px solid var(--rule); background:var(--raise); color:var(--ink);
+              border-radius:6px; padding:5px 12px; cursor:pointer; text-decoration:none}
+  button.primary{background:var(--accent); border-color:var(--accent); color:var(--paper)}
+  button:hover,.btn:hover{border-color:var(--accent)}
+  input[type=text],input[type=url],select,textarea{font:14px var(--sans); color:var(--ink); background:var(--surface);
+              border:1px solid var(--rule); border-radius:6px; padding:6px 8px}
+  textarea{font-family:var(--mono); font-size:13px; width:100%; min-height:60vh; line-height:1.45}
+  details{margin:18px 0} summary{font-family:var(--sans); font-size:14px; color:var(--muted); cursor:pointer}
+  table{border-collapse:collapse; font-family:var(--sans); font-size:13px; width:100%}
+  th,td{text-align:left; padding:5px 8px; border-bottom:1px solid var(--hair); vertical-align:top}
+  th{color:var(--muted); font-weight:600}
+  .msg{font-family:var(--sans); font-size:14px; background:var(--good-bg); color:var(--good); border-radius:6px; padding:8px 12px}
+  .err{font-family:var(--sans); font-size:14px; background:var(--warn-bg); color:var(--warn); border-radius:6px; padding:8px 12px}
+  .err ul{margin:4px 0 0; padding-left:18px}
+  pre{font-family:var(--mono); font-size:12.5px; background:var(--surface); border:1px solid var(--rule); border-radius:6px;
+      padding:10px; overflow:auto; white-space:pre-wrap}
+  .add{color:var(--good)} .del{color:var(--warn)}
+  .empty{font-family:var(--sans); color:var(--faint)}
+</style>
+</head>
+<body><div class="wrap">
+<nav>
+  <a class="brand" href="/">Jobs</a>
+  <a href="/" class="{{ 'on' if path == '/' }}">Today</a>
+  {% for c in catchups %}<a href="/catchup/{{ c.name }}" class="{{ 'on' if path == '/catchup/' ~ c.name }}">{{ c.title }}</a>{% endfor %}
+  <a href="/watchlist" class="{{ 'on' if path.startswith('/watchlist') }}">Watchlist</a>
+  <a href="/profile" class="{{ 'on' if path.startswith('/profile') }}">Profile</a>
+  <a href="/coverage" class="{{ 'on' if path == '/coverage' }}">Coverage</a>
+  <span class="who">{{ email }}</span>
+</nav>
+{% block body %}{% endblock %}
+</div></body>
+</html>

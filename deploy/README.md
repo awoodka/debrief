@@ -57,3 +57,12 @@ scripts/dev build
 ## Bumping Claude Code
 
 Change `CLAUDE_VERSION` in the Dockerfile and rebuild. The build fails if the download doesn't match the checksum in that release's manifest.
+
+## The jobs site (jobs.alexwoodka.com)
+
+A private page behind Cloudflare Access (docs/jobs/PLAN.md, M4):
+
+- `deploy/web.sh up|restart|down|status`: the container `debrief-jobs-web` on the `edge` network (alias `jobs-web`). Its settings live in `/srv/apps/debrief-v2/web.env` (mode 600): `JOBS_WEB_ACCESS_TEAM`, `JOBS_WEB_ACCESS_AUD`, `JOBS_WEB_ALLOWED_EMAILS`, `JOBS_WEB_ORIGIN`, `DEBRIEF_CONTACT`. `update.sh` recreates it after every deploy.
+- `deploy/edge-jobs.sh [--check | --yes]`: installs its block in `/srv/edge/Caddyfile` (from `deploy/edge/Caddyfile.jobs`). Restarting Caddy makes every site blip; the script restores the old file if any site fails afterwards.
+- `deploy/web-guard.sh`, from the crontab every 10 minutes: takes the container off `edge` if Access stops guarding the host.
+

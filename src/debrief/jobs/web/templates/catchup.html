@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% from "_card.html" import card %}
+{% block title %}Jobs · {{ view.title }}{% endblock %}
+{% block body %}
+<h1>{{ view.title }}</h1>
+<p class="sub">{{ view.cards|length }} kept jobs, best first · listed {{ view.day }}{% if view.since %} · posted since {{ view.since }}{% endif %}</p>
+{% for c in view.cards %}{{ card(c, back) }}{% else %}<p class="empty">Nothing on this list.</p>{% endfor %}
+{% endblock %}

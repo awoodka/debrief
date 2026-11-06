@@ -1,0 +1,12 @@
+# >>> jobs (managed by the debrief repo: deploy/edge-jobs.sh from deploy/edge/Caddyfile.jobs; edit there)
+# ---- Jobs: Alex's private job list (`debrief jobs web`, container debrief-jobs-web, alias jobs-web on edge). ----
+# Cloudflare Access is the gate and adds Cf-Access-Jwt-Assertion to what it lets through. This refuses requests
+# without the header; the app itself verifies the token's signature, audience and email on every request.
+http://jobs.alexwoodka.com {
+	import secheaders
+	@no_access_jwt not header Cf-Access-Jwt-Assertion *
+	respond @no_access_jwt "Forbidden" 403
+	encode zstd gzip
+	reverse_proxy jobs-web:8000
+}
+# <<< jobs

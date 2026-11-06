@@ -1,0 +1,24 @@
+{% macro card(c, back) -%}
+<article class="job{{ ' tracked' if c.tracked }}" id="{{ c.anchor }}">
+  <div class="meta">
+    <span class="score">{{ c.score if c.score is not none else '–' }}{% if c.bonus %}<span class="bonus">+{{ c.bonus }}</span>{% endif %}</span>
+    {% if c.tracked %}<span class="badge">Tracked</span>{% endif %}
+    {% if c.tracked and c.closed %}<span class="badge warn">posting closed</span>{% endif %}
+    {% if not c.new %}<span class="badge soft">carried over</span>{% endif %}
+  </div>
+  <h3>{% if c.url %}<a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">{{ c.title }}</a>{% else %}{{ c.title }}{% endif %}</h3>
+  <p class="co">{{ c.company }}{% if c.places %} · {{ c.places|join('; ') }}{% endif %}{% if c.pay %} · {{ c.pay }}{% endif %}{% if c.posted %} · posted {{ c.posted }}{% endif %}</p>
+  {% if c.why %}<p class="why">{{ c.why }}</p>{% endif %}
+  {% if c.no_description %}<p class="note">No description: scored on the title alone.</p>{% endif %}
+  {% if c.mismatches %}<p class="miss">{{ c.mismatches|join('; ') }}</p>{% endif %}
+  {% if c.reason %}<p class="note">{{ c.reason }}</p>{% endif %}
+  {% for o in c.also %}<p class="also">Also listed as <a href="{{ o.url }}" target="_blank" rel="noopener noreferrer">{{ o.title }}</a></p>{% endfor %}
+  {% if c.more %}<p class="also">Also kept at {{ c.company }}: {{ c.more }} more (below).</p>{% endif %}
+  <form class="row" method="post" action="/track">
+    <input type="hidden" name="posting_id" value="{{ c.posting_id }}">
+    <input type="hidden" name="on" value="{{ '0' if c.tracked else '1' }}">
+    <input type="hidden" name="back" value="{{ back }}">
+    <button type="submit" class="{{ '' if c.tracked else 'primary' }}">{{ 'Untrack' if c.tracked else 'Track' }}</button>
+  </form>
+</article>
+{%- endmacro %}

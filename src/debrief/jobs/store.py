@@ -14,6 +14,23 @@ def state_path(cfg):
 class JobsStore(Store):
     migrations = MIGRATIONS
 
+    def __init__(self, path):
+        super().__init__(path)
+        # The site (M4) writes a mark now and then while the nightly run writes too: each waits
+        # for the other's transaction instead of failing with "database is locked".
+        self.conn.execute("PRAGMA busy_timeout = 30000")
+
+    # ------------------------------------------------------------------ the Tracked mark (M4)
+    def tracked(self):
+        """{posting_id: when it was marked}."""
+        return {r[0]: r[1] for r in self.q("SELECT posting_id, at FROM tracked")}
+
+    def set_tracked(self, posting_id, on, at):
+        if on:
+            self.run("INSERT OR IGNORE INTO tracked VALUES (?, ?)", (posting_id, at))
+        else:
+            self.run("DELETE FROM tracked WHERE posting_id=?", (posting_id,))
+
     # ---------------------------------------------------------------------------- items
     def item(self, source_id, item_key):
         return self.one("SELECT * FROM items WHERE source_id=? AND item_key=?", (source_id, item_key))

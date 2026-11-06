@@ -12,6 +12,7 @@
   debrief jobs posting QUERY [--all]                  one posting, its listings and keys
   debrief jobs score [--date D] [--no-cap] [--dry-run] filters, points, the scoring call, the morning list (M2)
   debrief jobs today [--date D] [--all] [--catchup]   print the morning list (or the catch-up list)
+  debrief jobs web [--port 8000]                      the private site (M4), behind Cloudflare Access
   debrief jobs coverage [--date D]                    the coverage check: samples matched, misses with causes (M3)
   debrief jobs catchup [--date D] [--dry-run] [--since D] [--name N]   once: every kept job in the pool, to N.txt
   debrief jobs calibrate                              compare the pipeline's decisions with Alex's labels
@@ -162,6 +163,16 @@ def _today(args):
     return 0
 
 
+def _web(args):
+    """The jobs site (docs/jobs/PLAN.md, M4). Needs JOBS_WEB_ACCESS_TEAM, JOBS_WEB_ACCESS_AUD and
+    JOBS_WEB_ALLOWED_EMAILS (deploy/web.sh passes web.env); refuses to start without them."""
+    import uvicorn
+    from .web.app import create_app
+    uvicorn.run(create_app(), host=args.host, port=args.port, server_header=False, date_header=False,
+                proxy_headers=False, log_level="info")
+    return 0
+
+
 def _coverage(args):
     """The coverage check (docs/jobs/PLAN.md, "Revision 6"): the Google and alert samples."""
     from . import config, coverage
@@ -262,6 +273,10 @@ def _register_m2(jsub):
     jp.add_argument("--catchup", nargs="?", const="catchup", metavar="NAME",
                     help="a catch-up list instead of the morning list (default name: catchup; e.g. older)")
     jp.set_defaults(func=lambda args, _cfg: _run(_today, args))
+    jp = jsub.add_parser("web", help="the private site (M4): today's list, catch-ups, watchlist, profile, coverage")
+    jp.add_argument("--host", default="0.0.0.0")
+    jp.add_argument("--port", type=int, default=8000)
+    jp.set_defaults(func=lambda args, _cfg: _run(_web, args))
     jp = jsub.add_parser("coverage", help="the coverage check: Google's job results and the alert emails against what we collected")
     jp.add_argument("--date", help="the run date (default: today)")
     jp.set_defaults(func=lambda args, _cfg: _run(_coverage, args))

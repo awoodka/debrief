@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Jobs · Remove {{ name }}{% endblock %}
+{% block body %}
+<h1>Remove {{ name }}?</h1>
+<p class="sub">It stops being read every night. Its jobs can still reach your list from the other sources.</p>
+<form class="row" method="post" action="/watchlist/remove">
+  <input type="hidden" name="name" value="{{ name }}">
+  <button type="submit" class="primary">Remove {{ name }}</button>
+  <a class="btn" href="/watchlist">Cancel</a>
+</form>
+{% endblock %}

@@ -244,7 +244,7 @@ def replay(cfg, run_date, into, log=print, fresh=True):
 
 # Live-only tables, not rebuilt from raw: carried over by rebuild() when the old database has them.
 STATE_TABLES = ("source_state", "http_validators", "runs", "fetches", "scores", "daily_list", "highlighted",
-                "coverage_samples", "meta")
+                "coverage_samples", "tracked", "meta")
 
 
 def remap_carried(con):
@@ -266,7 +266,7 @@ def remap_carried(con):
     moved = Counter()
     for gone, nows in sorted(to.items()):
         nows = sorted(nows)
-        for table in ("highlighted", "scores"):
+        for table in ("highlighted", "scores", "tracked"):
             if table not in tables:
                 continue
             rows = con.execute(f"SELECT * FROM main.{table} WHERE posting_id=?", (gone,)).fetchall()
@@ -289,6 +289,21 @@ def rebuild(cfg, log=print):
     to it, and copies the rebuilt one over it. Only as complete as the raw store (60 days)."""
     import sqlite3
     live = state_path(cfg)
+    marker = rebuilding_marker(cfg)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") + "\n")
+    try:
+        return _rebuild(cfg, live, log, sqlite3)
+    finally:
+        marker.unlink(missing_ok=True)
+
+
+def rebuilding_marker(cfg):
+    """Present while a rebuild runs: the site (M4) refuses writes then, which the rebuild would lose."""
+    return state_path(cfg).parent / "REBUILDING"
+
+
+def _rebuild(cfg, live, log, sqlite3):
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     tmp = live.with_name(f"rebuild-{stamp}.sqlite")
     root = cfg.data_dir / "raw"

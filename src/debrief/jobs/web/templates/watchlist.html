@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Jobs · Watchlist{% endblock %}
+{% block body %}
+<h1>Watchlist</h1>
+<p class="sub">Companies whose own job board is read in full every night. Their jobs get their own section on Today.</p>
+{% if message %}<p class="msg">{{ message }}</p>{% endif %}
+<table>
+  <tr><th>Company</th><th>Board</th><th>Open jobs</th><th></th></tr>
+  {% for r in rows %}
+  <tr><td>{{ r.name }}{% if r.note %}<div class="note">{{ r.note }}</div>{% endif %}</td><td>{{ r.board or 'none found' }}</td>
+      <td>{{ r.open if r.open is not none else '–' }}</td>
+      <td><a class="btn" href="/watchlist/remove?name={{ r.name|urlencode }}">Remove</a></td></tr>
+  {% else %}<tr><td colspan="4" class="empty">No companies yet.</td></tr>{% endfor %}
+</table>
+<h2>Add a company</h2>
+<form class="row" method="post" action="/watchlist/add">
+  <input type="text" name="name" placeholder="Company name" required>
+  <input type="url" name="url" placeholder="Careers page URL (optional)">
+  <button type="submit" class="primary">Add</button>
+</form>
+<p class="note">Looks up its job board now (the board directory, or the URL you give) with a few polite requests.</p>
+{% endblock %}

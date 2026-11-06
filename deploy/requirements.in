@@ -6,3 +6,9 @@ beautifulsoup4
 trafilatura
 jsonschema
 python-dotenv
+# The jobs site (docs/jobs/PLAN.md, M4): the web app, its templates, form posts, Cloudflare Access tokens.
+starlette
+uvicorn
+jinja2
+python-multipart
+pyjwt[crypto]

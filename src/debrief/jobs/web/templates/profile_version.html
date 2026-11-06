@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Jobs · Profile v{{ n }}{% endblock %}
+{% block body %}
+<h1>Profile version {{ n }}</h1>
+<p class="sub"><a href="/profile">Back to the profile</a></p>
+<h2>Changes from version {{ n - 1 }}</h2>
+{% if diff %}<pre>{% for line in diff %}<span class="{{ 'add' if line.startswith('+') and not line.startswith('+++') else 'del' if line.startswith('-') and not line.startswith('---') else '' }}">{{ line }}</span>
+{% endfor %}</pre>{% else %}<p class="empty">No earlier version.</p>{% endif %}
+<h2>Version {{ n }}</h2>
+<pre>{{ text }}</pre>
+{% endblock %}

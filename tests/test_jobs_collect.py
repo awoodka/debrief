@@ -641,9 +641,11 @@ def test_remap_carried_moves_shown_and_scored_rows(tmp_path):
     n.executemany(score, [("p:copy", "prof", 7), ("p:main", "prof", 5), ("p:copy", "other", 6), ("p:same", "prof", 4)])
     n.executemany("INSERT INTO highlighted VALUES (?,?,?,?)", [("p:copy", "2026-11-05", "c1", "catchup"),
                                                               ("p:same", "2026-11-05", "c1", "catchup")])
+    n.execute("INSERT INTO tracked VALUES ('p:copy', '2026-11-06T00:00:00Z')")           # the site's mark follows the job
     n.execute("ATTACH DATABASE ? AS old", (str(old_p),))
     moved = coll.remap_carried(n)
-    assert moved == {"highlighted": 1, "scores": 2}
+    assert moved == {"highlighted": 1, "scores": 2, "tracked": 1}
+    assert n.execute("SELECT posting_id FROM tracked").fetchall() == [("p:main",)]
     assert n.execute("SELECT posting_id FROM highlighted ORDER BY 1").fetchall() == [("p:main",), ("p:same",)]
     scores = dict(((p, prof), s) for p, prof, s in n.execute("SELECT posting_id, profile_id, score FROM scores"))
     assert scores == {("p:main", "prof"): 5, ("p:main", "other"): 6, ("p:same", "prof"): 4}   # its own answer wins
@@ -746,3 +748,15 @@ def test_adzuna_places_come_from_its_structured_area():
     prof = json.loads(json.dumps(BASE)); prof["filters"]["locations"]["places"] = {"SF": ["Oakland, CA", "San Francisco, CA"]}
     assert filters.place_fit(list(adzuna_places({"area": ["US", "Pennsylvania", "Allegheny County", "Pittsburgh", "Oakland"]})), prof)[0] is None
     assert filters.place_fit(list(adzuna_places({"area": ["US", "California", "San Francisco", "Hayes Valley"]})), prof)[0] == "SF"
+
+
+def test_the_rebuild_marker_is_there_only_while_rebuilding(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path, monkeypatch, {"simplify-newgrad"})
+    seen = []
+    monkeypatch.setattr(collect, "_rebuild", lambda cfg_, live, log, sqlite3: seen.append(collect.rebuilding_marker(cfg).exists()) or {})
+    collect.rebuild(cfg, log=lambda *a: None)
+    assert seen == [True] and not collect.rebuilding_marker(cfg).exists()
+    monkeypatch.setattr(collect, "_rebuild", lambda *a: 1 / 0)
+    with pytest.raises(ZeroDivisionError):
+        collect.rebuild(cfg, log=lambda *a: None)
+    assert not collect.rebuilding_marker(cfg).exists()                    # removed even when the rebuild fails
