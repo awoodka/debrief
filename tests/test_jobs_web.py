@@ -236,6 +236,154 @@ def test_watchlist_add_and_remove(site):
     assert "Removed Globex" in r.text and "greenhouse:globex" not in r.text.split("</nav>")[1].split("Removed")[0]
 
 
+def _edit(client, *form, **changes):
+    fields = browser_submit(client.get("/watchlist").text, "/watchlist/edit") if not form else form[0]
+    return client.post("/watchlist/edit", data={"action": "save", **fields, **changes}, headers={"Origin": ORIGIN}, follow_redirects=False)
+
+
+def _company(cfg, i=0):
+    return profile.latest(cfg)[1]["companies"][i]
+
+
+def _with_companies(cfg, companies):
+    _, d = profile.latest(cfg)
+    return profile.save(cfg, {**d, "companies": companies})[0]
+
+
+def test_watchlist_board_and_note_can_be_set_and_cleared(site):
+    cfg, client, _ = site
+    _with_companies(cfg, [{"name": "Acme"}, {"name": "Globex", "board": None}])
+    v = profile.latest(cfg)[0]
+    r = _edit(client, **{"companies.0.board": "https://jobs.lever.co/acme/123"})
+    assert r.status_code == 303 and "/watchlist?msg=Saved" in r.headers["location"]
+    assert _company(cfg) == {"name": "Acme", "board": "lever:acme"} and _company(cfg, 1) == {"name": "Globex", "board": None}
+    assert profile.latest(cfg)[0] == v + 1
+    _edit(client, **{"companies.0.board": "ashby:acme", "companies.0.note": "dream job"})
+    assert _company(cfg) == {"name": "Acme", "board": "ashby:acme", "note": "dream job"}
+    assert "dream job" in client.get("/watchlist").text
+    _edit(client, **{"companies.0.note": "", "companies.0.board": ""})
+    assert _company(cfg) == {"name": "Acme", "board": None}
+
+
+def test_an_untouched_watchlist_form_is_a_no_change_with_every_shape_of_company(site):
+    cfg, client, _ = site
+    v = _with_companies(cfg, [{"name": "Acme"}, {"name": "B & <C>", "board": None}, {"name": "D", "board": "lever:d", "note": ""},
+                              {"name": " Padded ", "note": "two\nlines"}])
+    before = profile.profile_id(profile.latest(cfg)[1])
+    r = _edit(client)
+    assert r.status_code == 303 and "No%20change" in r.headers["location"]
+    assert profile.latest(cfg)[0] == v and profile.profile_id(profile.latest(cfg)[1]) == before
+
+
+def test_the_watchlist_form_has_one_way_to_add_and_one_way_to_remove(site):
+    cfg, client, _ = site
+    page = client.get("/watchlist").text
+    fields = browser_submit(page, "/watchlist/edit")
+    assert sorted(k for k in fields if k.startswith("companies")) == ["companies.0.board", "companies.0.name", "companies.0.note"]
+    assert "companies.0.remove" not in page and "companies.1" not in page
+    assert 'action="/watchlist/add"' in page and "/watchlist/remove?name=Acme" in page
+
+
+def test_a_bad_board_or_name_is_refused_on_its_field_in_plain_words(site):
+    cfg, client, _ = site
+    v = profile.latest(cfg)[0]
+    r = _edit(client, **{"companies.0.board": "monster:acme", "companies.0.note": "kept"})
+    assert r.status_code == 400 and "Systems: greenhouse" in r.text.split('name="companies.0.board"')[1].split('class="hint"')[0]
+    assert 'value="monster:acme"' in r.text and 'value="kept"' in r.text and "does not match" not in r.text
+    r = _edit(client, **{"companies.0.board": "https://example.com/careers"})
+    assert r.status_code == 400 and "isn&#39;t a job board we can read" in r.text
+    r = _edit(client, **{"companies.0.name": ""})
+    assert r.status_code == 400 and "To take it off, use Remove." in r.text
+    assert profile.latest(cfg)[0] == v
+
+
+def test_renaming_onto_a_hidden_company_lands_on_the_name(site):
+    cfg, client, _ = site
+    _, d = profile.latest(cfg)
+    profile.save(cfg, {**d, "filters": {**d["filters"], "blocklist": ["Hidden"]}})
+    r = _edit(client, **{"companies.0.name": "Hidden"})
+    assert r.status_code == 400 and "Hidden is on both" in r.text.split('name="companies.0.name"')[1].split('class="hint"')[0]
+
+
+def test_watchlist_edit_keeps_the_guards(site):
+    cfg, client, _ = site
+    fields = browser_submit(client.get("/watchlist").text, "/watchlist/edit") | {"companies.0.note": "n", "action": "save", "note": "mine"}
+    v = profile.latest(cfg)[0]
+    assert client.post("/watchlist/edit", data=fields, headers={"Origin": "https://evil.example"}).status_code == 403
+    assert client.post("/watchlist/edit", data=fields).status_code == 403
+    collect.rebuilding_marker(cfg).write_text("now")
+    r = client.post("/watchlist/edit", data=fields, headers={"Origin": ORIGIN})
+    assert r.status_code == 503 and 'name="companies.0.note" value="n"' in r.text and 'value="mine"' in r.text
+    assert client.post("/watchlist/edit", data={**fields, "action": "check"}, headers={"Origin": ORIGIN}).status_code == 200
+    collect.rebuilding_marker(cfg).unlink()
+    assert profile.latest(cfg)[0] == v
+
+
+def test_a_stale_watchlist_form_keeps_an_add_when_untouched_and_explains_when_not(site):
+    cfg, client, _ = site
+    page = client.get("/watchlist").text
+    _, d = profile.latest(cfg)
+    v, _ = profile.save(cfg, {**d, "companies": d["companies"] + [{"name": "Globex", "board": None}]})
+    r = _edit(client, browser_submit(page, "/watchlist/edit"))
+    assert r.status_code == 303 and "No%20change" in r.headers["location"] and profile.latest(cfg)[0] == v
+    r = _edit(client, browser_submit(page, "/watchlist/edit"), **{"companies.0.note": "mine"})
+    assert r.status_code == 409 and "added Globex" in r.text and 'value="mine"' in r.text and profile.latest(cfg)[0] == v
+
+
+def test_a_stale_settings_page_and_the_watchlist_form_change_only_their_own_settings(site):
+    cfg, client, _ = site
+    page = client.get("/watchlist").text
+    _, d = profile.latest(cfg)
+    profile.save(cfg, {**d, "wants": "Newer."})
+    r = _edit(client, browser_submit(page, "/watchlist/edit"), **{"companies.0.note": "mine"})
+    assert r.status_code == 303 and "elsewhere%20to%20In%20your%20own%20words" in r.headers["location"]
+    _, now = profile.latest(cfg)
+    assert now["wants"] == "Newer." and now["companies"][0]["note"] == "mine"
+
+
+def test_the_watchlist_has_no_edit_form_before_a_profile_exists(tmp_path):
+    from debrief.jobs import config as jconfig
+    cfg = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
+    app = create_app(cfg=cfg, verifier=AccessVerifier(TEAM, AUD, EMAILS, fetch=Certs([JWK])), origin=ORIGIN, env={})
+    client = TestClient(app, base_url=ORIGIN)
+    client.headers["Cf-Access-Jwt-Assertion"] = token()
+    page = client.get("/watchlist")
+    assert page.status_code == 200 and "/watchlist/edit" not in page.text and "No companies yet" in page.text
+    assert client.post("/watchlist/edit", data={"action": "save"}, headers={"Origin": ORIGIN}, follow_redirects=False).status_code == 303
+
+
+def _watch_client(cfg, certs, boards=None, **kw):
+    app = create_app(cfg=cfg, verifier=AccessVerifier(TEAM, AUD, EMAILS, fetch=certs), origin=ORIGIN, env={}, client=boards or Boards())
+    client = TestClient(app, base_url=ORIGIN, **kw)
+    client.headers["Cf-Access-Jwt-Assertion"] = token()
+    return client
+
+
+def test_adding_a_hidden_company_is_explained_not_a_500(site):
+    cfg, _, certs = site
+    _, d = profile.latest(cfg)
+    v, _ = profile.save(cfg, {**d, "filters": {**d["filters"], "blocklist": ["Globex"]}})
+    client = _watch_client(cfg, certs, raise_server_exceptions=False)
+    r = client.post("/watchlist/add", data={"name": "Globex", "url": "https://job-boards.greenhouse.io/globex"}, headers={"Origin": ORIGIN})
+    assert r.status_code == 200 and "Companies to hide" in r.text and profile.latest(cfg)[0] == v
+
+
+def test_a_save_during_the_board_lookup_is_not_reverted(site):
+    cfg, _, certs = site
+
+    class SavesDuringLookup(Boards):
+        def request(self, method, url, params=None, json_body=None, headers=None):
+            _, d = profile.latest(cfg)
+            profile.save(cfg, {**d, "wants": "Changed during the lookup."})
+            return super().request(method, url, params, json_body, headers)
+
+    client = _watch_client(cfg, certs, boards=SavesDuringLookup())
+    r = client.post("/watchlist/add", data={"name": "Globex", "url": "https://job-boards.greenhouse.io/globex"}, headers={"Origin": ORIGIN})
+    assert "Added Globex" in r.text
+    _, now = profile.latest(cfg)
+    assert now["wants"] == "Changed during the lookup." and "Globex" in [c["name"] for c in now["companies"]]
+
+
 def test_safe_url():
     assert data.safe_url("https://a.test/x") == "https://a.test/x"
     assert data.safe_url("javascript:alert(1)") is None and data.safe_url("//a.test") is None and data.safe_url(None) is None

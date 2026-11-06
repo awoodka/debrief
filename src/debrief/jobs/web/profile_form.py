@@ -68,7 +68,6 @@ class RowView:
     problems: int
     remove_name: str
     remove_label: str
-    add_label: str
 
 
 @dataclass(frozen=True)
@@ -473,8 +472,8 @@ class Rows(Field):
         return RowView(n, self.add_label if spare else title, "" if spare else self.summary(cells),
                        tuple(s.view(form, prefix + s.key, stored.get(s.key, MISSING)) for s in self.fields),
                        open=bool(problems) or (moved and not spare) or removing, spare=spare, removing=removing,
-                       problems=problems, remove_name=prefix + "remove", remove_label=f"Remove this {self.row_noun}",
-                       add_label=self.add_label)
+                       problems=problems, remove_name=prefix + "remove",
+                       remove_label=f"Remove this {self.row_noun}" if self.spare and not spare else "")
 
     def view(self, form, at, ref):
         """Rows come from the inputs, so a re-render keeps what was typed. A blank row is dropped, and
@@ -744,7 +743,8 @@ TABLE = (
 
 WATCH_TABLE = (
     Group("companies", "Watchlist", fields=(
-        Rows("companies", "Companies", spare=False, row_noun="company",
+        Rows("companies", "Companies", "Open a company to change its name, job board or note. To add or remove one, use the controls above.",
+             spare=False, row_noun="company",
              summary=lambda r: r.get("board", "").strip() or "no board yet",
              fields=(Text("name", "Company", "Must match the employer name on postings. Renaming can lose its watchlist matches.",
                           messages=_must("Give this company a name. To take it off, use Remove.")),
@@ -932,6 +932,14 @@ def changes(old, new):
     if not out and not same(old, new):
         out.append(Change("Other settings", note=STORED_DIFFERENTLY, group="Other", field="Other settings"))
     return tuple(out)
+
+
+def add_refused(name, doc):
+    """Why a company can't be added, for a save that refused it after the board lookup."""
+    hidden = {b.lower() for b in get(doc, ("filters", "blocklist"))}
+    if name.lower() in hidden:
+        return f"{name} is in Companies to hide, so it can't be watched too. Take it off under Which jobs to keep on the Profile page first."
+    return f"{name} couldn't be added: the board it found doesn't fit the profile. Paste its careers page URL to try another."
 
 
 def by_group(found):

@@ -65,13 +65,19 @@ def find_board(cfg, name, url=None, client=None, store=None):
     return (best[0], best[1], notes) if best[0] else (None, None, notes)
 
 
-def add(cfg, name, url=None, note=None, client=None, store=None):
-    version, prof = profiles.latest(cfg)
+def _latest_without(cfg, name):
+    _, prof = profiles.latest(cfg)
     if prof is None:
         raise WatchError("no profile saved yet")
     if any(c["name"].strip().lower() == name.strip().lower() for c in prof["companies"]):
         raise WatchError(f"{name} is already on the watchlist")
+    return prof
+
+
+def add(cfg, name, url=None, note=None, client=None, store=None):
+    _latest_without(cfg, name)
     board, n, notes = find_board(cfg, name, url=url, client=client, store=store)
+    prof = _latest_without(cfg, name)    # the lookup makes network requests, and a save during it must survive
     entry = {"name": name, "board": board}
     if board:
         entry["note"] = note or f"board found {('from ' + url) if url else 'in the directory'}; {n} open jobs when added"

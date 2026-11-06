@@ -1,9 +1,13 @@
 {% extends "base.html" %}
+{% from "_fields.html" import change_groups, fields, problems, savebar %}
 {% block title %}Jobs · Watchlist{% endblock %}
 {% block body %}
 <h1>Watchlist</h1>
 <p class="sub">Companies whose own job board is read in full every night. Their jobs get their own section on Today.</p>
 {% if message %}<p class="msg">{{ message }}</p>{% endif %}
+{{ change_groups(changes) }}
+{% if notice %}<p class="err">{{ notice }}</p>{% endif %}
+{% if form %}{{ problems(form, checking, "/watchlist") }}{% endif %}
 <table>
   <tr><th>Company</th><th>Board</th><th>Open jobs</th><th></th></tr>
   {% for r in rows %}
@@ -19,4 +23,12 @@
   <button type="submit" class="primary">Add</button>
 </form>
 <p class="note">Looks up its job board now (the board directory, or the URL you give) with a few polite requests.</p>
+{% if form and rows %}
+<h2>Boards and notes</h2>
+<form class="watch-edit" method="post" action="/watchlist/edit" novalidate autocomplete="off">
+  <input type="hidden" name="base" value="{{ form.base }}">
+  {% for g in form.groups %}{{ fields(g.fields) }}{% endfor %}
+  {{ savebar(note) }}
+</form>
+{% endif %}
 {% endblock %}

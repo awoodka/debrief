@@ -20,7 +20,7 @@
       <summary><b>{{ r.title }}</b>{% if r.summary %}<span class="ct">{{ r.summary }}</span>{% endif %}{% if r.problems %}<span class="badge warn">{{ r.problems }} to fix</span>{% endif %}</summary>
       <div class="in fields">
         {% for s in r.fields %}{{ field(s) }}{% endfor %}
-        {% if not r.spare and r.add_label %}<label class="chk quiet"><input type="checkbox" name="{{ r.remove_name }}"{% if r.removing %} checked{% endif %}><span>{{ r.remove_label }}</span></label>{% endif %}
+        {% if r.remove_label %}<label class="chk quiet"><input type="checkbox" name="{{ r.remove_name }}"{% if r.removing %} checked{% endif %}><span>{{ r.remove_label }}</span></label>{% endif %}
       </div>
     </details>
     {% endfor %}
