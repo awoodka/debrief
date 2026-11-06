@@ -1,16 +1,15 @@
-"""The profile as settings: the tables below say what each setting is called, which section it sits
-in and which kind of control edits it. Everything else is derived from them.
+"""The profile as settings. TABLE and WATCH_TABLE say what each setting is called, which section it
+sits in and which kind of control edits it, and everything else is derived from them.
 
-A page's state is a Raw, a flat {input name: text} exactly as a browser posts it. A failed save
-re-renders it and a stale page is merged on it. The profile's id must not change unless a person
-changed something, because any new id re-asks the model about every job in the pool, so Field.read
-returns the stored value verbatim whenever the input still shows that value.
+A page's state is a Raw, a flat {input name: text} exactly as a browser posts it. The profile's id
+must not change unless a person changed something, because a new id re-asks the model about every
+job in the pool. So Field.read returns the stored value verbatim whenever the input still shows it.
 """
 import copy
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field as dc_field, replace
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, NamedTuple
 
 from .. import boards, profile as profiles
 
@@ -27,6 +26,7 @@ MISSING = _Sentinel("MISSING")    # a key that isn't in the document, unlike Non
 REQUIRED = _Sentinel("REQUIRED")  # Field.blank: an emptied input is an error rather than a value
 
 Raw = dict[str, str]
+PAGE = ""    # the errors key for a problem that belongs to no one input
 
 
 class Bad(Exception):
@@ -39,8 +39,6 @@ STORED_DIFFERENTLY = "Same value, stored differently"
 
 @dataclass(frozen=True)
 class Change:
-    """One line of "what changed", in a person's words. group and field are the section and the
-    top-level setting it belongs to, filled in by changes()."""
     label: str
     was: str | None = None
     now: str | None = None
@@ -72,7 +70,6 @@ class RowView:
 
 @dataclass(frozen=True)
 class FieldView:
-    """All a template macro needs. Templates never see the document."""
     widget: str
     name: str
     id: str
@@ -103,27 +100,30 @@ class GroupView:
     problems: int = 0
 
 
+class Problem(NamedTuple):
+    input_id: str
+    label: str
+    message: str
+
+
 @dataclass(frozen=True)
 class FormView:
     base: int
     groups: tuple[GroupView, ...]
     page_errors: tuple[str, ...]
-    banner: tuple[tuple[str, str, str], ...]   # (input id, label, message) in page order
+    banner: tuple[Problem, ...]
     budget: int | None
 
 
 @dataclass
 class Reading:
-    """One pass of a table over a Raw. places maps document paths back to input names, so a schema
-    error on ("companies", 1, "board") lands on "companies.3.board" even after blank rows shift it."""
     raw: Raw
-    places: dict[tuple, str] = dc_field(default_factory=dict)
+    inputs: dict[tuple, str] = dc_field(default_factory=dict)   # document path -> input name
     fields: dict[str, "Field"] = dc_field(default_factory=dict)
     failed: dict[str, list[str]] = dc_field(default_factory=dict)
 
 
-def same(a, b):
-    """Strict in the way the profile id is: 25 is not 25.0, and MISSING only equals MISSING."""
+def same_canonical(a, b):
     if a is MISSING or b is MISSING:
         return a is b
     return profiles.canonical(a) == profiles.canonical(b)
@@ -147,22 +147,20 @@ def put(doc, path, value):
         doc[last] = value
 
 
-# ---------------------------------------------------------------------------- the field kinds
-
 @dataclass(frozen=True)
 class Field:
     widget = "text"
-    key: str                 # dotted from the document's top, or from the row inside a Rows
+    key: str
     label: str
     help: str = ""
-    blank: Any = REQUIRED    # what an emptied input means; the schema then decides whether it's allowed
-    messages: Mapping[str, str] = dc_field(default_factory=dict)   # per-rule wording
+    blank: Any = REQUIRED
+    messages: Mapping[str, str] = dc_field(default_factory=dict)
 
     @property
     def path(self):
         return tuple(self.key.split("."))
 
-    def to_text(self, value):
+    def input_text(self, value):
         return "" if value is MISSING or value is None else str(value)
 
     def clean(self, typed):
@@ -173,12 +171,10 @@ class Field:
         return typed.strip()
 
     def read(self, rd, at, path, ref):
-        """The one rule that keeps the id stable: an input still showing the stored value returns it
-        verbatim, including MISSING, None, "", 25.0 and odd whitespace."""
         typed = self.clean(rd.raw.get(at, ""))
-        rd.places[path] = at
+        rd.inputs[path] = at
         rd.fields[at] = self
-        if typed == self.clean(self.to_text(ref)):
+        if typed == self.clean(self.input_text(ref)):
             return ref
         if not typed.strip():
             if self.blank is REQUIRED:
@@ -190,28 +186,26 @@ class Field:
         except Bad as e:
             rd.failed[at] = [str(e)]
             return ref
-        return ref if same(value, ref) else value
+        return ref if same_canonical(value, ref) else value
 
     def fill(self, value, at=None):
-        return {at or self.key: self.to_text(value)}
+        return {at or self.key: self.input_text(value)}
 
     def unchanged(self, raw, ref, at=None):
         rd = Reading(raw)
-        return same(self.read(rd, at or self.key, self.path, ref), ref) and not rd.failed
+        return same_canonical(self.read(rd, at or self.key, self.path, ref), ref) and not rd.failed
 
     def slots(self, prefix=""):
         yield prefix + self.key, self
 
-    def text(self, value):
-        """Read-only form, for the version page and the change list."""
-        return NOT_SET if value is MISSING or value is None else self.to_text(value) or "Blank"
+    def words(self, value):
+        return NOT_SET if value is MISSING or value is None else self.input_text(value) or "Blank"
 
     def said_label(self, row):
         return f"{row}: {self.label}" if row else self.label
 
     def say(self, old, new, row=""):
-        """This setting's lines in a change list. Empty when the words wouldn't differ."""
-        was, now = self.text(old), self.text(new)
+        was, now = self.words(old), self.words(new)
         if was == now:
             return []
         return [Change(self.said_label(row), was=None if was == NOT_SET else was, now=now)]
@@ -230,7 +224,6 @@ class Field:
 
 @dataclass(frozen=True)
 class Text(Field):
-    """Single-line <input type=text>."""
     blank: Any = ""
     placeholder: str = ""
     accept: Callable[[str], str] | None = None
@@ -251,8 +244,6 @@ class _MultiLine:
 
 @dataclass(frozen=True)
 class Area(_MultiLine, Field):
-    """Prose. The template writes a newline straight after <textarea>, so a value that itself starts
-    with a newline survives the HTML parser."""
     widget = "area"
     blank: Any = ""
 
@@ -262,19 +253,18 @@ class Area(_MultiLine, Field):
 
 @dataclass(frozen=True)
 class Lines(_MultiLine, Field):
-    """A list of strings, one per line, in order. Lines, not commas: "New York, NY" is one place."""
     widget = "lines"
     blank: Any = dc_field(default_factory=list)
     noun: str = "item"
-    first_means: str = ""    # "Place searched for in {row}": what the top line does, for the change list
+    first_line_label: str = ""
 
-    def to_text(self, value):
+    def input_text(self, value):
         return "" if value is MISSING else "\n".join(value)
 
     def parse(self, typed, ref):
         return list(dict.fromkeys(s.strip() for s in typed.split("\n") if s.strip()))
 
-    def text(self, value):
+    def words(self, value):
         return NOT_SET if value is MISSING else " · ".join(value) or "None"
 
     def blank_in_new_row(self):
@@ -288,8 +278,8 @@ class Lines(_MultiLine, Field):
             out.append(Change(self.said_label(row), added=added, removed=removed))
         elif old != new:
             out.append(Change(self.said_label(row), note="Order changed"))
-        if self.first_means and old[:1] != new[:1] and old and new:
-            out.append(Change(self.first_means.format(row=row), was=old[0], now=new[0]))
+        if self.first_line_label and old[:1] != new[:1] and old and new:
+            out.append(Change(self.first_line_label.format(row=row), was=old[0], now=new[0]))
         return out
 
     def extras(self, typed):
@@ -299,8 +289,7 @@ class Lines(_MultiLine, Field):
 @dataclass(frozen=True)
 class Number(Field):
     """<input type=text inputmode=...>, not type=number, which blanks what it can't parse and so would
-    lose typed input. Typing 25 over a stored 25.0 keeps 25.0, because they are the same number and a
-    different spelling would still change the id."""
+    lose typed input."""
     widget = "number"
     whole: bool = True
     pre: str = ""
@@ -318,7 +307,7 @@ class Number(Field):
             raise Bad("Enter a number, like 25.")
         return ref if ref is not MISSING and value == ref else value
 
-    def text(self, value):
+    def words(self, value):
         if value is MISSING:
             return NOT_SET
         unit = self.unit[:-1] if value == 1 and self.unit.endswith("s") else self.unit
@@ -334,46 +323,41 @@ class Number(Field):
 
 @dataclass(frozen=True)
 class Toggle(Field):
-    """A checkbox. Unchecked posts nothing, so absent means False."""
     widget = "toggle"
     blank: Any = False
 
-    def to_text(self, value):
+    def input_text(self, value):
         return "on" if value is True else ""
 
     def parse(self, typed, ref):
         return True
 
-    def text(self, value):
+    def words(self, value):
         return NOT_SET if value is MISSING else "On" if value else "Off"
 
 
 @dataclass(frozen=True)
 class Choice(Field):
-    """<select>. labels is {stored value: words}, and a test holds it equal to the schema's enum."""
     widget = "choice"
     labels: Mapping[str, str] = dc_field(default_factory=dict)
 
-    def text(self, value):
+    def words(self, value):
         return NOT_SET if value is MISSING else self.labels.get(value, str(value))
 
     def extras(self, typed):
-        """A stored value outside labels gets its own option, so an untouched select can't change it."""
         extra = [("", "Choose")] if not typed else [(typed, typed)] if typed not in self.labels else []
         return {"choices": (*extra, *self.labels.items())}
 
 
 @dataclass(frozen=True)
 class Rows(Field):
-    """A list of objects as folded rows, with inputs f"{key}.{n}.{sub.key}" and f"{key}.{n}.remove".
-    A row's stored value is found by its id input, so rows need no hidden ids and a renamed row is
-    honestly a new row. spare=False is an edit-only list: no blank row and no remove box."""
+    """A row's stored value is found by its id input, so rows need no hidden ids and a renamed row is a new row."""
     widget = "rows"
     blank: Any = dc_field(default_factory=list)
     row_noun: str = "row"
     add_label: str = ""
     id_key: str = "name"
-    spare: bool = True
+    add_remove: bool = True
     fields: tuple[Field, ...] = ()
     summary: Callable[[Raw], str] = lambda r: ""
     title: Callable[[Raw], str] | None = None
@@ -385,36 +369,34 @@ class Rows(Field):
         return [] if value is MISSING else list(value)
 
     def numbers(self, raw, at):
-        """The row numbers present in raw. They come from the page, so they only ever order the rows."""
         pattern = re.compile(re.escape(at) + r"\.([0-9]{1,6})\.")
         return sorted({int(m.group(1)) for name in raw if (m := pattern.match(name))})
 
     def skipped(self, raw, at, n):
-        if not self.spare:
+        if not self.add_remove:
             return False
         return bool(raw.get(f"{at}.{n}.remove")) or not any(raw.get(f"{at}.{n}.{s.key}", "").strip() for s in self.fields)
 
-    def stored_rows(self, ref):
-        """{id input's text: rows}. A list because two projects may share a name: each takes its own row, in order."""
+    def stored_by_id(self, ref):
         pool = defaultdict(list)
         id_field = self.sub(self.id_key)
         for row in self.as_rows(ref):
-            pool[id_field.clean(id_field.to_text(row.get(self.id_key, MISSING)))].append(row)
+            pool[id_field.clean(id_field.input_text(row.get(self.id_key, MISSING)))].append(row)
         return pool
 
-    def stored_row(self, pool, raw, at, n):
+    def take_stored_row(self, pool, raw, at, n):
         id_field = self.sub(self.id_key)
         found = pool.get(id_field.clean(raw.get(f"{at}.{n}.{self.id_key}", "")))
         return found.pop(0) if found else {}
 
     def read(self, rd, at, path, ref):
-        rd.places[path] = at
+        rd.inputs[path] = at
         rd.fields[at] = self
-        pool, out = self.stored_rows(ref), []
+        pool, out = self.stored_by_id(ref), []
         for n in self.numbers(rd.raw, at):
             if self.skipped(rd.raw, at, n):
                 continue
-            stored, row = self.stored_row(pool, rd.raw, at, n), {}
+            stored, row = self.take_stored_row(pool, rd.raw, at, n), {}
             for s in self.fields:
                 value = s.read(rd, f"{at}.{n}.{s.key}", path + (len(out), s.key), stored.get(s.key, MISSING))
                 if value is MISSING and not stored:
@@ -422,7 +404,7 @@ class Rows(Field):
                 if value is not MISSING:
                     row[s.key] = value
             out.append(row)
-        if same(out, ref):
+        if same_canonical(out, ref):
             return ref
         return out if out else self.blank
 
@@ -440,22 +422,21 @@ class Rows(Field):
             yield from s.slots(f"{prefix}{self.key}[].")
 
     def row_name(self, row):
-        cells = {s.key: s.to_text(row.get(s.key, MISSING)) for s in self.fields}
+        cells = {s.key: s.input_text(row.get(s.key, MISSING)) for s in self.fields}
         return self.title(cells) if self.title else cells[self.id_key]
 
-    def text(self, value):
+    def words(self, value):
         rows = self.as_rows(value)
         if not rows:
             return NOT_SET if value is MISSING else "None"
-        details = lambda row: " · ".join(s.text(row.get(s.key, MISSING)) for s in self.fields if s.key != self.id_key)
+        details = lambda row: " · ".join(s.words(row.get(s.key, MISSING)) for s in self.fields if s.key != self.id_key)
         return "\n".join(f"{self.row_name(row)}: {details(row)}" for row in rows)
 
     def say(self, old, new, row=""):
-        """Rows pair up by their id input, like read does."""
-        pool, added, out, kept_order = self.stored_rows(old), [], [], []
+        pool, added, out, kept_order = self.stored_by_id(old), [], [], []
         id_field = self.sub(self.id_key)
         for after in self.as_rows(new):
-            found = pool.get(id_field.clean(id_field.to_text(after.get(self.id_key, MISSING))))
+            found = pool.get(id_field.clean(id_field.input_text(after.get(self.id_key, MISSING))))
             if not found:
                 added.append(self.row_name(after))
                 continue
@@ -482,28 +463,24 @@ class Rows(Field):
                        tuple(s.view(form, prefix + s.key, stored.get(s.key, MISSING)) for s in self.fields),
                        open=bool(problems) or (moved and not spare) or removing, spare=spare, removing=removing,
                        problems=problems, remove_name=prefix + "remove",
-                       remove_label=f"Remove this {self.row_noun}" if self.spare and not spare else "")
+                       remove_label=f"Remove this {self.row_noun}" if self.add_remove and not spare else "")
 
     def view(self, form, at, ref):
-        """Rows come from the inputs, so a re-render keeps what was typed. A blank row is dropped, and
-        there is always one fresh spare."""
-        pool, rows = self.stored_rows(ref), []
+        pool, rows = self.stored_by_id(ref), []
         numbers = self.numbers(form.raw, at)
         for n in numbers:
             cells_blank = not any(form.raw.get(f"{at}.{n}.{s.key}", "").strip() for s in self.fields)
             has_error = any(k.startswith(f"{at}.{n}.") for k in form.errors)
-            if self.spare and cells_blank and not has_error:
+            if self.add_remove and cells_blank and not has_error:
                 continue
-            rows.append(self.row_view(form, at, n, self.stored_row(pool, form.raw, at, n)))
-        if self.spare:
+            rows.append(self.row_view(form, at, n, self.take_stored_row(pool, form.raw, at, n)))
+        if self.add_remove:
             rows.append(self.row_view(form, at, max(numbers, default=-1) + 1, {}, spare=True))
         return FieldView(self.widget, at, _input_id(at), self.label, self.help, errors=tuple(form.errors.get(at, ())), rows=tuple(rows))
 
 
 @dataclass(frozen=True)
 class MapRows(Rows):
-    """An object as rows: {"NYC": ["New York, NY"]} <-> [{area: "NYC", places: [...]}]. Two rows with
-    one name would silently collapse in a dict, so the second is an error."""
     blank: Any = dc_field(default_factory=dict)
     value_key: str = ""
 
@@ -511,17 +488,17 @@ class MapRows(Rows):
         return [] if value is MISSING else [{self.id_key: k, self.value_key: v} for k, v in value.items()]
 
     def _order_note(self, old, kept_order, row):
-        return []    # an object's key order isn't part of the id
+        return []
 
     def read(self, rd, at, path, ref):
-        rd.places[path] = at
+        rd.inputs[path] = at
         rd.fields[at] = self
         id_field, value_field = self.sub(self.id_key), self.sub(self.value_key)
-        pool, out = self.stored_rows(ref), {}
+        pool, out = self.stored_by_id(ref), {}
         for n in self.numbers(rd.raw, at):
             if self.skipped(rd.raw, at, n):
                 continue
-            stored = self.stored_row(pool, rd.raw, at, n)
+            stored = self.take_stored_row(pool, rd.raw, at, n)
             id_at, value_at = f"{at}.{n}.{self.id_key}", f"{at}.{n}.{self.value_key}"
             name = id_field.read(rd, id_at, path + ("key", n), stored.get(self.id_key, MISSING))
             value = value_field.read(rd, value_at, path + (name,) if name is not MISSING else path + ("value", n),
@@ -534,15 +511,13 @@ class MapRows(Rows):
                 rd.failed.setdefault(value_at, [value_field.messages.get("required", "Can't be blank.")])
             else:
                 out[name] = value
-        if same(out, ref):
+        if same_canonical(out, ref):
             return ref
         return out if out else self.blank
 
     def slots(self, prefix=""):
         yield prefix + self.key + "{}", self
 
-
-# ---------------------------------------------------------------------------- summary lines
 
 def _noun(n, noun):
     if n == 1:
@@ -629,8 +604,6 @@ def _eligibility(doc):
     return _dots(WORK_AUTHORIZATION.get(doc["filters"]["work_authorization"], doc["filters"]["work_authorization"]), has + could)
 
 
-# ------------------------------------------------------------------------------------ the tables
-
 @dataclass(frozen=True)
 class Group:
     id: str
@@ -638,8 +611,8 @@ class Group:
     part: str = ""
     summary: Callable[[dict], str] = lambda doc: ""
     fields: tuple[Field, ...] = ()
-    fine: tuple[Field, ...] = ()     # inside a nested closed "Fine tuning"
-    link: str = ""                   # a link card with no fields of its own
+    fine: tuple[Field, ...] = ()
+    link: str = ""
 
 
 def _must(sentence):
@@ -647,7 +620,6 @@ def _must(sentence):
 
 
 def _board(typed):
-    """A pasted careers URL becomes its board key, with no network. Anything else meets the schema's pattern."""
     if "://" not in typed:
         return typed
     board = boards.board_from_url(typed)
@@ -682,7 +654,7 @@ TABLE = (
                 summary=lambda r: _places_line(r, "places"),
                 fields=(Text("area", "Area name", messages=_must("Give this area a name.")),
                         Lines("places", "Places", "One per line. Keep the one to search for on top.", noun="place",
-                              first_means="Place searched for in {row}", messages=_must("Add at least one place.")))),
+                              first_line_label="Place searched for in {row}", messages=_must("Add at least one place.")))),
     )),
     Group("looking", "What you're looking for", SEARCH, _looking, fields=(
         Area("wants", "In your own words", "The model reads this to decide what counts as relevant, and what doesn't.",
@@ -692,7 +664,7 @@ TABLE = (
              summary=lambda r: _titles_line(r, "titles"),
              fields=(Text("name", "Name", "The model reads this name. It doesn't affect matching.", messages=_must("Give this a name.")),
                      Lines("titles", "Titles", "One per line, whole words, any case. The top one is what gets searched for.",
-                           noun="title", first_means="Title searched for in {row}", messages=_must("Add at least one title.")))),
+                           noun="title", first_line_label="Title searched for in {row}", messages=_must("Add at least one title.")))),
         Lines("filters.exclude_titles", "Words that rule out a title",
               "One per line. Any match drops the job. “Staff” won't drop “member of technical staff” if that is one of your titles.",
               noun="word"),
@@ -753,7 +725,7 @@ TABLE = (
 WATCH_TABLE = (
     Group("companies", "Watchlist", fields=(
         Rows("companies", "Companies", "Open a company to change its name, job board or note. To add or remove one, use the controls above.",
-             spare=False, row_noun="company",
+             add_remove=False, row_noun="company",
              summary=lambda r: r.get("board", "").strip() or "no board yet",
              fields=(Text("name", "Company", "Must match the employer name on postings. Renaming can lose its watchlist matches.",
                           messages=_must("Give this company a name. To take it off, use Remove.")),
@@ -772,13 +744,11 @@ def top_fields(table):
 
 
 def leaves():
-    """(schema slot, field) for every setting in both tables, sub-fields included."""
     for f in top_fields(TABLE + WATCH_TABLE):
         yield from f.slots()
 
 
 def blank_doc():
-    """What a first profile starts from: every setting whose empty value is valid. The rest stay absent."""
     doc = {}
     for f in top_fields(TABLE + WATCH_TABLE):
         put(doc, f.path, MISSING if f.blank is REQUIRED or f.blank is MISSING else copy.copy(f.blank))
@@ -793,15 +763,11 @@ def fill_all(doc, table=TABLE):
 
 
 def read_all(raw, ref, table=TABLE):
-    """(Reading, document). Starts from ref, so what this table doesn't place survives: the settings
-    page can't touch companies, and the Watchlist page can't touch anything else."""
     rd, doc = Reading(raw), copy.deepcopy(ref)
     for f in top_fields(table):
         put(doc, f.path, f.read(rd, f.key, f.path, get(ref, f.path)))
     return rd, doc
 
-
-# ------------------------------------------------------------------------------------ the form
 
 def _input_id(at):
     return "i-" + at.replace(".", "-")
@@ -818,23 +784,20 @@ def _summary(group, doc):
 def _banner(views):
     for v in views:
         for message in v.errors:
-            yield v.id, v.label, message
+            yield Problem(v.id, v.label, message)
         for row in v.rows:
             for sub in row.fields:
                 for message in sub.errors:
-                    yield sub.id, f"{row.title}, {sub.label}", message
+                    yield Problem(sub.id, f"{row.title}, {sub.label}", message)
 
 
 @dataclass(frozen=True)
 class Form:
-    """A page's state: the version it is based on, what's in the inputs, and what's wrong with them.
-    Errors are keyed by input name, and "" is the page itself."""
     base: int
     raw: Raw
     errors: Mapping[str, list[str]] = dc_field(default_factory=dict)
 
     def view(self, saved, table=TABLE):
-        """saved is version `base`'s document, or None for a first profile, when every section starts open."""
         doc = saved if saved is not None else blank_doc()
         groups = []
         for g in table:
@@ -852,16 +815,16 @@ class Form:
                                     fields=fields, fine=fine, fine_open=saved is None or bool(fine_problems) or fine_moved, problems=problems))
         banner = tuple(item for g in groups for item in _banner(g.fields + g.fine))
         budget = get(doc, ("ranking", "max_candidates"))
-        return FormView(self.base, tuple(groups), tuple(self.errors.get("", ())), banner, None if budget is MISSING else budget)
+        return FormView(self.base, tuple(groups), tuple(self.errors.get(PAGE, ())), banner, None if budget is MISSING else budget)
 
 
 @dataclass(frozen=True)
 class Submission:
-    form: Form                  # what to re-render, merged onto the latest version
-    doc: dict | None            # what to save; None if form.errors
-    kept: tuple[str, ...] = ()  # labels of settings that changed elsewhere and were left as they are now
+    form: Form
+    doc: dict | None
+    kept: tuple[str, ...] = ()
     conflict: bool = False
-    changes: tuple[Change, ...] = ()    # latest -> doc
+    changes: tuple[Change, ...] = ()
 
     @property
     def _kept_words(self):
@@ -879,12 +842,10 @@ class Submission:
 
 
 def open_form(version, doc, table=TABLE):
-    """A fresh page. No profile yet renders every input blank, with base 0."""
     return Form(version, fill_all(doc if doc is not None else blank_doc(), table))
 
 
 def submit(posted, latest, load, table=TABLE):
-    """Everything between a POST and the decision to write. Nothing here writes."""
     latest_n, latest_doc = latest
     try:
         base_n = int(posted.get("base") or "")
@@ -893,7 +854,7 @@ def submit(posted, latest, load, table=TABLE):
     base_doc = blank_doc() if base_n == 0 else load(base_n) if base_n else None
     if base_doc is None:
         return Submission(Form(latest_n, open_form(latest_n, latest_doc, table).raw,
-                               {"": ["This page was out of date, so here is the current profile. Nothing was saved."]}), None)
+                               {PAGE: ["This page was out of date, so here is the current profile. Nothing was saved."]}), None)
     raw = {k: str(v) for k, v in posted.items() if k not in ("base", "action", "note")}
     latest_or_blank = latest_doc if latest_doc is not None else blank_doc()
     conflicts, kept = {}, ()
@@ -909,25 +870,24 @@ def submit(posted, latest, load, table=TABLE):
 
 
 def _rebase(raw, base, latest, table):
-    """Three-way merge on the inputs, so a re-render and a save see the same thing. Saved versions
-    never change, so a page only has to carry its version number. A setting this page didn't touch
-    takes the latest value. One that both changed stops the save with an explanation, and the page
-    is then based on the latest, so a second Save knowingly wins. That is the only way a page can
-    overwrite another write."""
+    """Three-way merge on the inputs, so a re-render and a save see the same thing. A setting this page
+    didn't touch takes the latest value. One that both changed stops the save with an explanation, and
+    the page is then based on the latest, so a second Save knowingly wins. That is the only way a page
+    can overwrite another write."""
     merged, conflicts, kept = {}, {}, []
     for f in top_fields(table):
         was, now = get(base, f.path), get(latest, f.path)
         if f.unchanged(raw, was):
             merged |= f.fill(now)
-            if not same(was, now):
+            if not same_canonical(was, now):
                 kept.append(f.label)
         else:
             merged |= {k: v for k, v in raw.items() if k == f.key or k.startswith(f.key + ".")}
-            if not same(was, now) and not f.unchanged(raw, now):
+            if not same_canonical(was, now) and not f.unchanged(raw, now):
                 told = "; ".join(c.in_words() for c in f.say(was, now)) or f"{f.label} changed"
                 conflicts[f.key] = [CONFLICT.format(told=told)]
     for f in top_fields(TABLE + WATCH_TABLE):
-        if f not in top_fields(table) and not same(get(base, f.path), get(latest, f.path)):
+        if f not in top_fields(table) and not same_canonical(get(base, f.path), get(latest, f.path)):
             kept.append(f.label)
     return merged, conflicts, tuple(kept)
 
@@ -937,22 +897,19 @@ CONFLICT = ("Changed elsewhere while this page was open: {told}. Your version is
 
 
 def changes(old, new):
-    """The human change list, in table order. Non-empty exactly when the id would change: a difference
-    with no visible wording (25 -> 25.0, board null -> absent) still gets a line."""
     out = []
     for g in TABLE + WATCH_TABLE:
         for f in (*g.fields, *g.fine):
             was, now = get(old, f.path), get(new, f.path)
-            if not same(was, now):
+            if not same_canonical(was, now):
                 said = f.say(was, now) or [Change(f.label, note=STORED_DIFFERENTLY)]
                 out += [replace(c, group=g.title, field=f.label) for c in said]
-    if not out and not same(old, new):
+    if not out and not same_canonical(old, new):
         out.append(Change("Other settings", note=STORED_DIFFERENTLY, group="Other", field="Other settings"))
     return tuple(out)
 
 
 def add_refused(name, doc):
-    """Why a company can't be added, for a save that refused it after the board lookup."""
     hidden = {b.lower() for b in get(doc, ("filters", "blocklist"))}
     if name.lower() in hidden:
         return f"{name} is in Companies to hide, so it can't be watched too. Take it off under Which jobs to keep on the Profile page first."
@@ -960,7 +917,6 @@ def add_refused(name, doc):
 
 
 def by_group(found):
-    """[(section title, [changes])], for drawing, in the order given."""
     groups = {}
     for c in found:
         groups.setdefault(c.group, []).append(c)
@@ -972,13 +928,11 @@ def changed_fields(found):
 
 
 def read_only(doc):
-    """[(section title, [(label, value text)])] for "Everything in this version"."""
-    return [(g.title, [(f.label, f.text(get(doc, f.path))) for f in (*g.fields, *g.fine)])
+    return [(g.title, [(f.label, f.words(get(doc, f.path))) for f in (*g.fields, *g.fine)])
             for g in TABLE + WATCH_TABLE if not g.link]
 
 
 def plain_problems(doc):
-    """"Label: message" lines for a whole document with no form behind it (a restore)."""
     both = TABLE + WATCH_TABLE
     rd, _ = read_all(fill_all(doc, both), doc, both)
     return [f"{rd.fields[at].label}: {m}" if at else m for at, messages in _plain(profiles.issues(doc), rd).items() for m in messages]
@@ -1009,20 +963,18 @@ CROSS_WORDING = {
 
 ELSEWHERE = "A setting on another page needs fixing before this can be saved. Press Check on the Profile page to see it."
 
-# The other side of a rule that spans the two pages, for the page that can't edit where it points.
-OTHER_SIDE = {"company_blocked": ("filters", "blocklist")}
+FALLBACK_PATH = {"company_blocked": ("filters", "blocklist")}
 
 
 def _place(issue, rd):
-    for path in (issue.path, OTHER_SIDE.get(issue.rule, ())):
+    for path in (issue.path, FALLBACK_PATH.get(issue.rule, ())):
         for n in range(len(path), 0, -1):
-            if path[:n] in rd.places:
-                return rd.places[path[:n]]
-    return ""
+            if path[:n] in rd.inputs:
+                return rd.inputs[path[:n]]
+    return PAGE
 
 
 def _plain(issues, rd):
-    """profile.Issue -> {input name: [plain sentence]}. A field that already said what's wrong says nothing more."""
     out = defaultdict(list)
     for i in issues:
         at = _place(i, rd)

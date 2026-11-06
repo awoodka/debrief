@@ -1,4 +1,3 @@
-{# How each kind of control is drawn. A macro knows controls, never which settings exist. #}
 {% macro errs(f) %}{% for m in f.errors %}<p class="ferr">{{ m }}</p>{% endfor %}{% endmacro %}
 
 {% macro hint(f) %}{% if f.help %}<p class="hint">{{ f.help }}</p>{% endif %}{% endmacro %}

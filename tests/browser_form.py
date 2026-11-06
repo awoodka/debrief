@@ -1,5 +1,3 @@
-"""What a browser would post for a form on a page the site served, so a test's round trip includes
-the real template and the browser's own rules."""
 from html.parser import HTMLParser
 
 
@@ -48,7 +46,6 @@ class _Forms(HTMLParser):
 
 
 def browser_submit(page, action):
-    """{input name: posted text} for the form posting to action. Buttons are left out: add "action"."""
     parser = _Forms(action)
     parser.feed(page.replace("\r\n", "\n").replace("\r", "\n"))
     parser.close()

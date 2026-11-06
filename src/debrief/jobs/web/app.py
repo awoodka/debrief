@@ -179,7 +179,6 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
 
     # ------------------------------------------------------------------------------ profile
     async def finish(request, sub, draw, home, note, checking, default_note):
-        """A submitted form's one path: problems first, then Check, then the rebuild guard, then the write."""
         if sub.form.errors:
             return draw(request, sub.form, note=note, status=409 if sub.conflict else 400, checking=checking)
         if checking:
@@ -192,7 +191,6 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
         return RedirectResponse(f"{home}?msg=" + _q(sub.saved_message(version, saved)), status_code=303)
 
     def show(request, form, *, note="", status=200, message=None, notice=None, checking=False, changes=()):
-        """The one way the settings page is drawn: GET, every failure, Check and the 503."""
         return page(request, "profile.html", status=status, form=form.view(profiles.version(cfg, form.base)), note=note,
                     message=message or request.query_params.get("msg"), notice=notice, checking=checking,
                     changes=pf.by_group(changes), history=data.profile_history(cfg))

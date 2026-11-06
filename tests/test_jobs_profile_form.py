@@ -1,5 +1,3 @@
-"""The settings page's model (src/debrief/jobs/web/profile_form.py): every schema field has a control
-that fits it, and an untouched form reads back to the identical document."""
 import json
 
 import pytest
@@ -25,8 +23,6 @@ def _resolve(node, schema):
 
 
 def _schema_nodes(node, schema, path=""):
-    """{slot: schema node} for every settable place: "filters.max_years", "companies[].note",
-    "filters.locations.places{}"."""
     node = _resolve(node, schema)
     if "patternProperties" in node or isinstance(node.get("additionalProperties"), dict):
         return {path + "{}": node}
@@ -79,7 +75,6 @@ def test_board_is_the_one_field_that_accepts_a_url_and_its_pattern_has_wording()
 
 
 def _posted_by_a_browser(raw, reading):
-    """Multi-line inputs post CRLF; a single-line input never holds a newline."""
     out = {}
     for name, value in raw.items():
         field = reading.fields.get(name)
@@ -246,8 +241,6 @@ def test_a_blank_first_profile_is_complete_apart_from_what_only_a_person_can_say
     assert ("degree", "level") in missing and ("ranking", "top_n") in missing and ("filters", "max_years") in missing
     assert ("skills",) not in missing and ("companies",) not in missing and ("ranking", "per_company") not in missing
 
-
-# -------------------------------------------------------------------------- through the real page
 
 def _post(client, form, **extra):
     return client.post("/profile", data={**form, **extra}, headers={"Origin": ORIGIN}, follow_redirects=False)
@@ -467,8 +460,6 @@ def test_a_first_profile_can_be_made_from_blank(tmp_path):
     assert "per_company" not in saved["ranking"] and "fresh_bonus" not in saved["ranking"]
 
 
-# --------------------------------------------------------------------------------- a stale page
-
 def _add_elsewhere(cfg, name="Globex"):
     _, d = profile.latest(cfg)
     return profile.save(cfg, {**d, "companies": d["companies"] + [{"name": name, "board": None}]}, note="other tab")[0]
@@ -560,8 +551,6 @@ def test_a_blank_page_saved_after_a_first_profile_appeared_changes_nothing(tmp_p
     assert _post(client, form, action="save").status_code == 303
     assert profile.latest(cfg) == (1, doc())
 
-
-# -------------------------------------------------------------------------------- what changed
 
 FULL = doc(ranking={"threshold": 40, "max_candidates": 150, "top_n": 30, "per_company": 3, "fresh_bonus": {"3": 2}},
            companies=[{"name": "Acme", "board": "greenhouse:acme", "note": "n"}, {"name": "Globex"}],
