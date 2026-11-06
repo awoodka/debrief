@@ -163,11 +163,11 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
         return RedirectResponse("/watchlist?msg=" + _q(msg), status_code=303)
 
     # ------------------------------------------------------------------------------ profile
-    def show(request, form, *, note="", status=200, message=None, notice=None, checking=False):
+    def show(request, form, *, note="", status=200, message=None, notice=None, checking=False, changes=()):
         """The one way the settings page is drawn: GET, every failure, Check and the 503."""
         return page(request, "profile.html", status=status, form=form.view(profiles.version(cfg, form.base)), note=note,
                     message=message or request.query_params.get("msg"), notice=notice, checking=checking,
-                    history=data.profile_history(cfg))
+                    changes=pf.by_group(changes), history=data.profile_history(cfg))
 
     def profile_get(request):
         return show(request, pf.open_form(*profiles.latest(cfg)))
@@ -179,7 +179,7 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
         if sub.form.errors:
             return show(request, sub.form, note=note, status=409 if sub.conflict else 400, checking=checking)
         if checking:
-            return show(request, sub.form, note=note, message=sub.check_message, checking=True)
+            return show(request, sub.form, note=note, message=sub.check_message, checking=True, changes=sub.changes)
         if rebuilding():
             return show(request, sub.form, note=note, status=503,
                         notice="The job data is being rebuilt, so nothing was saved. Your changes are still here. "
@@ -187,13 +187,40 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
         version, saved = await run_in_threadpool(profiles.save, cfg, sub.doc, note or "edited on the site")
         return RedirectResponse("/profile?msg=" + _q(sub.saved_message(version, saved)), status_code=303)
 
-    def profile_version(request):
-        n = request.path_params["n"]
-        got = data.profile_version(cfg, n)
-        if got is None:
+    def version_page(request, n, *, status=200, message=None, errors=(), note=""):
+        doc = profiles.version(cfg, n)
+        if doc is None:
             return page(request, "message.html", status=404, title="Not found", message=f"No profile version {n}.")
-        text, diff = got
-        return page(request, "profile_version.html", n=n, text=text, diff=diff)
+        current_n, current = profiles.latest(cfg)
+        before = profiles.version(cfg, n - 1)
+        history = data.profile_history(cfg)
+        return page(request, "profile_version.html", status=status, n=n, current=current_n, message=message, errors=errors, note=note,
+                    entry=next(h for h in history if h["version"] == n), first=before is None,
+                    previous=n - 1 if before is not None else None, following=n + 1 if n < current_n else None,
+                    changes=pf.by_group(pf.changes(before, doc)) if before is not None else [],
+                    restoring=pf.by_group(pf.changes(current, doc)) if n != current_n else [], settings=pf.read_only(doc))
+
+    def profile_version(request):
+        return version_page(request, request.path_params["n"])
+
+    async def profile_restore(request):
+        """Exactly version n's content, so the id comes back and its stored answers are reused."""
+        n, posted = request.path_params["n"], await request.form()
+        note = str(posted.get("note") or "").strip()
+        doc = profiles.version(cfg, n)
+        if doc is None:
+            return page(request, "message.html", status=404, title="Not found", message=f"No profile version {n}.")
+        if rebuilding():
+            return busy(request)
+        if str(posted.get("base")) != str(profiles.latest(cfg)[0]):
+            return version_page(request, n, status=409, note=note,
+                                message="The profile changed while this page was open, so nothing was restored. "
+                                        "Below is what restoring would change now.")
+        if bad := pf.plain_problems(doc):
+            return version_page(request, n, status=400, errors=bad, note=note)
+        version, saved = await run_in_threadpool(profiles.save, cfg, doc, note or f"restored version {n}")
+        msg = f"Restored version {n} as version {version}." if saved else f"No change: it's the same as version {version}."
+        return RedirectResponse("/profile?msg=" + _q(msg), status_code=303)
 
     # ----------------------------------------------------------------------------- coverage
     def coverage_page(request):
@@ -204,7 +231,8 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
         Route("/watchlist", watchlist), Route("/watchlist/add", watch_add, methods=["POST"]),
         Route("/watchlist/remove", watch_remove_confirm), Route("/watchlist/remove", watch_remove, methods=["POST"]),
         Route("/profile", profile_get), Route("/profile", profile_post, methods=["POST"]),
-        Route("/profile/v/{n:int}", profile_version), Route("/coverage", coverage_page),
+        Route("/profile/v/{n:int}", profile_version), Route("/profile/v/{n:int}/restore", profile_restore, methods=["POST"]),
+        Route("/coverage", coverage_page),
     ]
     return Starlette(routes=routes, middleware=[Middleware(Gate)])
 

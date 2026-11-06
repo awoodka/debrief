@@ -70,3 +70,29 @@
   <button type="submit" name="action" value="save" class="primary">Save</button>
 </div>
 {% endmacro %}
+
+{% macro change_groups(groups, link=False) %}
+{% for group, lines in groups %}
+<div class="chg">
+  <h3>{{ group }}</h3>
+  <dl>
+    {% for c in lines %}
+    <dt>{{ c.label }}</dt>
+    <dd>
+      {% for x in c.added %}<span class="tag add">+ {{ x }}</span>{% endfor %}{% for x in c.removed %}<span class="tag del">− {{ x }}</span>{% endfor %}
+      {% if c.was %}<span class="was">{{ c.was }}</span> → {% endif %}{% if c.now %}<span class="is">{{ c.now }}</span>{% endif %}
+      {% if c.note %}<span class="said">{{ c.note }}</span>{% endif %}
+    </dd>
+    {% endfor %}
+  </dl>
+</div>
+{% endfor %}
+{% endmacro %}
+
+{% macro version_row(h, current) %}
+<li>
+  <span class="v"><a href="/profile/v/{{ h.version }}">v{{ h.version }}</a>{% if h.version == current %}<span class="current">current</span>{% endif %}</span>
+  <span class="when">{{ h.when }}</span>
+  <span class="what-w"><span class="what">{{ h.changed|join(", ") if h.changed else "First version" if h.version == 1 else "No settings changed" }}</span>{% if h.note %}<span class="said">{{ h.note }}</span>{% endif %}</span>
+</li>
+{% endmacro %}

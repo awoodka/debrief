@@ -9,7 +9,7 @@ returns the stored value verbatim whenever the input still shows that value.
 import copy
 import re
 from collections import defaultdict
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass, field as dc_field, replace
 from typing import Any, Callable, Mapping
 
 from .. import boards, profile as profiles
@@ -31,6 +31,29 @@ Raw = dict[str, str]
 
 class Bad(Exception):
     """A plain sentence for the person. Never a schema message."""
+
+
+NOT_SET = "Not set"
+STORED_DIFFERENTLY = "Same value, stored differently"
+
+
+@dataclass(frozen=True)
+class Change:
+    """One line of "what changed", in a person's words. group and field are the section and the
+    top-level setting it belongs to, filled in by changes()."""
+    label: str
+    was: str | None = None
+    now: str | None = None
+    added: tuple[str, ...] = ()
+    removed: tuple[str, ...] = ()
+    note: str = ""
+    group: str = ""
+    field: str = ""
+
+    def in_words(self):
+        parts = [f"added {_and(self.added)}" if self.added else "", f"removed {_and(self.removed)}" if self.removed else "",
+                 f"now {self.now}" if self.now else "", self.note.lower()]
+        return f"{self.label} {', '.join(p for p in parts if p)}"
 
 
 @dataclass(frozen=True)
@@ -180,6 +203,20 @@ class Field:
     def slots(self, prefix=""):
         yield prefix + self.key, self
 
+    def text(self, value):
+        """Read-only form, for the version page and the change list."""
+        return NOT_SET if value is MISSING or value is None else self.to_text(value) or "Blank"
+
+    def said_label(self, row):
+        return f"{row}: {self.label}" if row else self.label
+
+    def say(self, old, new, row=""):
+        """This setting's lines in a change list. Empty when the words wouldn't differ."""
+        was, now = self.text(old), self.text(new)
+        if was == now:
+            return []
+        return [Change(self.said_label(row), was=None if was == NOT_SET else was, now=now)]
+
     def extras(self, typed):
         return {}
 
@@ -235,6 +272,21 @@ class Lines(_MultiLine, Field):
     def parse(self, typed, ref):
         return list(dict.fromkeys(s.strip() for s in typed.split("\n") if s.strip()))
 
+    def text(self, value):
+        return NOT_SET if value is MISSING else " · ".join(value) or "None"
+
+    def say(self, old, new, row=""):
+        old, new = [] if old is MISSING else old, [] if new is MISSING else new
+        added, removed = tuple(x for x in new if x not in old), tuple(x for x in old if x not in new)
+        out = []
+        if added or removed:
+            out.append(Change(self.said_label(row), added=added, removed=removed))
+        elif old != new:
+            out.append(Change(self.said_label(row), note="Order changed"))
+        if self.first_means and old[:1] != new[:1] and old and new:
+            out.append(Change(self.first_means.format(row=row), was=old[0], now=new[0]))
+        return out
+
     def extras(self, typed):
         return {"height": min(max(typed.count("\n") + 2, 3), 30)}
 
@@ -261,6 +313,15 @@ class Number(Field):
             raise Bad("Enter a number, like 25.")
         return ref if ref is not MISSING and value == ref else value
 
+    def text(self, value):
+        if value is MISSING:
+            return NOT_SET
+        unit = self.unit[:-1] if value == 1 and self.unit.endswith("s") else self.unit
+        return f"{self.pre}{value}{' ' + unit if unit else ''}"
+
+    def say(self, old, new, row=""):
+        return [] if old is not MISSING and new is not MISSING and old == new else super().say(old, new, row)
+
     def extras(self, typed):
         return {"pre": self.pre, "unit": self.unit, "inputmode": "numeric" if self.whole else "decimal"}
 
@@ -277,12 +338,18 @@ class Toggle(Field):
     def parse(self, typed, ref):
         return True
 
+    def text(self, value):
+        return NOT_SET if value is MISSING else "On" if value else "Off"
+
 
 @dataclass(frozen=True)
 class Choice(Field):
     """<select>. labels is {stored value: words}, and a test holds it equal to the schema's enum."""
     widget = "choice"
     labels: Mapping[str, str] = dc_field(default_factory=dict)
+
+    def text(self, value):
+        return NOT_SET if value is MISSING else self.labels.get(value, str(value))
 
     def extras(self, typed):
         """A stored value outside labels gets its own option, so an untouched select can't change it."""
@@ -364,6 +431,38 @@ class Rows(Field):
         for s in self.fields:
             yield from s.slots(f"{prefix}{self.key}[].")
 
+    def row_name(self, row):
+        cells = {s.key: s.to_text(row.get(s.key, MISSING)) for s in self.fields}
+        return self.title(cells) if self.title else cells[self.id_key]
+
+    def text(self, value):
+        rows = self.as_rows(value)
+        if not rows:
+            return NOT_SET if value is MISSING else "None"
+        details = lambda row: " · ".join(s.text(row.get(s.key, MISSING)) for s in self.fields if s.key != self.id_key)
+        return "\n".join(f"{self.row_name(row)}: {details(row)}" for row in rows)
+
+    def say(self, old, new, row=""):
+        """Rows pair up by their id input, like read does."""
+        pool, added, out, kept_order = self.stored_rows(old), [], [], []
+        id_field = self.sub(self.id_key)
+        for after in self.as_rows(new):
+            found = pool.get(id_field.clean(id_field.to_text(after.get(self.id_key, MISSING))))
+            if not found:
+                added.append(self.row_name(after))
+                continue
+            before = found.pop(0)
+            kept_order.append(id(before))
+            for s in self.fields:
+                if s.key != self.id_key:
+                    out += s.say(before.get(s.key, MISSING), after.get(s.key, MISSING), self.row_name(after))
+        removed = [self.row_name(r) for rows in pool.values() for r in rows]
+        head = [Change(self.said_label(row), added=tuple(added), removed=tuple(removed))] if added or removed else []
+        return head + out + self._order_note(old, kept_order, row)
+
+    def _order_note(self, old, kept_order, row):
+        return [Change(self.said_label(row), note="Order changed")] if [i for i in map(id, self.as_rows(old)) if i in kept_order] != kept_order else []
+
     def row_view(self, form, at, n, stored, spare=False):
         prefix = f"{at}.{n}."
         cells = {s.key: form.raw.get(prefix + s.key, "") for s in self.fields}
@@ -402,6 +501,9 @@ class MapRows(Rows):
 
     def as_rows(self, value):
         return [] if value is MISSING else [{self.id_key: k, self.value_key: v} for k, v in value.items()]
+
+    def _order_note(self, old, kept_order, row):
+        return []    # an object's key order isn't part of the id
 
     def read(self, rd, at, path, ref):
         rd.places[path] = at
@@ -641,7 +743,7 @@ TABLE = (
 )
 
 WATCH_TABLE = (
-    Group("companies", "Boards and notes", fields=(
+    Group("companies", "Watchlist", fields=(
         Rows("companies", "Companies", spare=False, row_noun="company",
              summary=lambda r: r.get("board", "").strip() or "no board yet",
              fields=(Text("name", "Company", "Must match the employer name on postings. Renaming can lose its watchlist matches.",
@@ -742,6 +844,7 @@ class Submission:
     doc: dict | None            # what to save; None if form.errors
     kept: tuple[str, ...] = ()  # labels of settings that changed elsewhere and were left as they are now
     conflict: bool = False
+    changes: tuple[Change, ...] = ()    # latest -> doc
 
     @property
     def _kept_words(self):
@@ -749,7 +852,9 @@ class Submission:
 
     @property
     def check_message(self):
-        return "No problems found. Nothing is saved until you press Save." + self._kept_words
+        if not self.changes:
+            return "No problems found, and nothing here differs from what's saved." + self._kept_words
+        return "No problems found. Nothing is saved until you press Save. Saving would change the settings listed below." + self._kept_words
 
     def saved_message(self, version, saved):
         said = f"Saved as version {version}. It applies at the next nightly run." if saved else f"No change: it's the same as version {version}."
@@ -782,7 +887,8 @@ def submit(posted, latest, load, table=TABLE):
     for found in (rd.failed, _plain(profiles.issues(doc), rd)):
         for at, messages in found.items():
             errors.setdefault(at, []).extend(messages)
-    return Submission(Form(latest_n, raw, errors), None if errors else doc, kept, bool(conflicts))
+    return Submission(Form(latest_n, raw, errors), None if errors else doc, kept, bool(conflicts),
+                      changes(latest_or_blank, doc) if not errors else ())
 
 
 def _rebase(raw, base, latest, table):
@@ -801,15 +907,56 @@ def _rebase(raw, base, latest, table):
         else:
             merged |= {k: v for k, v in raw.items() if k == f.key or k.startswith(f.key + ".")}
             if not same(was, now) and not f.unchanged(raw, now):
-                conflicts[f.key] = [CONFLICT]
+                told = "; ".join(c.in_words() for c in f.say(was, now)) or f"{f.label} changed"
+                conflicts[f.key] = [CONFLICT.format(told=told)]
     for f in top_fields(TABLE + WATCH_TABLE):
         if f not in top_fields(table) and not same(get(base, f.path), get(latest, f.path)):
             kept.append(f.label)
     return merged, conflicts, tuple(kept)
 
 
-CONFLICT = ("Changed elsewhere while this page was open. Your version is here and doesn't include that change. "
+CONFLICT = ("Changed elsewhere while this page was open: {told}. Your version is here and doesn't include that. "
             "Press Save again to use yours, or start over from the current profile.")
+
+
+def changes(old, new):
+    """The human change list, in table order. Non-empty exactly when the id would change: a difference
+    with no visible wording (25 -> 25.0, board null -> absent) still gets a line."""
+    out = []
+    for g in TABLE + WATCH_TABLE:
+        for f in (*g.fields, *g.fine):
+            was, now = get(old, f.path), get(new, f.path)
+            if not same(was, now):
+                said = f.say(was, now) or [Change(f.label, note=STORED_DIFFERENTLY)]
+                out += [replace(c, group=g.title, field=f.label) for c in said]
+    if not out and not same(old, new):
+        out.append(Change("Other settings", note=STORED_DIFFERENTLY, group="Other", field="Other settings"))
+    return tuple(out)
+
+
+def by_group(found):
+    """[(section title, [changes])], for drawing, in the order given."""
+    groups = {}
+    for c in found:
+        groups.setdefault(c.group, []).append(c)
+    return list(groups.items())
+
+
+def changed_fields(found):
+    return list(dict.fromkeys(c.field for c in found))
+
+
+def read_only(doc):
+    """[(section title, [(label, value text)])] for "Everything in this version"."""
+    return [(g.title, [(f.label, f.text(get(doc, f.path))) for f in (*g.fields, *g.fine)])
+            for g in TABLE + WATCH_TABLE if not g.link]
+
+
+def plain_problems(doc):
+    """"Label: message" lines for a whole document with no form behind it (a restore)."""
+    both = TABLE + WATCH_TABLE
+    rd, _ = read_all(fill_all(doc, both), doc, both)
+    return [f"{rd.fields[at].label}: {m}" if at else m for at, messages in _plain(profiles.issues(doc), rd).items() for m in messages]
 
 
 KEYWORD_WORDING = {

@@ -519,3 +519,191 @@ def test_a_blank_page_saved_after_a_first_profile_appeared_changes_nothing(tmp_p
     profile.save(cfg, doc())
     assert _post(client, form, action="save").status_code == 303
     assert profile.latest(cfg) == (1, doc())
+
+
+# -------------------------------------------------------------------------------- what changed
+
+FULL = doc(ranking={"threshold": 40, "max_candidates": 150, "top_n": 30, "per_company": 3, "fresh_bonus": {"3": 2}},
+           companies=[{"name": "Acme", "board": "greenhouse:acme", "note": "n"}, {"name": "Globex"}],
+           filters__blocklist=["Initrode"], position_types=[{"name": "A", "titles": ["a", "b"]}, {"name": "B", "titles": ["c"]}])
+
+
+def _leaf_paths(node, path=()):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from _leaf_paths(v, path + (k,))
+    elif isinstance(node, list) and node and isinstance(node[0], dict):
+        for i, v in enumerate(node):
+            yield from _leaf_paths(v, path + (i,))
+    else:
+        yield path
+
+
+def _mutated(d, path):
+    d = json.loads(json.dumps(d))
+    target = d
+    for key in path[:-1]:
+        target = target[key]
+    value = target[path[-1]]
+    target[path[-1]] = (not value if isinstance(value, bool) else value + 1 if isinstance(value, (int, float))
+                        else value + "x" if isinstance(value, str) else value + ["new"] if isinstance(value, list) else "set")
+    return d
+
+
+@pytest.mark.parametrize("path", list(_leaf_paths(FULL)), ids=lambda p: ".".join(map(str, p)))
+def test_every_leaf_change_has_a_line(path):
+    assert pf.changes(FULL, FULL) == ()
+    found = pf.changes(FULL, _mutated(FULL, path))
+    assert found and all(c.group and c.field for c in found)
+
+
+@pytest.mark.parametrize("old,new,label,note", [
+    (doc(filters__min_hourly_pay=25), doc(filters__min_hourly_pay=25.0), "Minimum pay", pf.STORED_DIFFERENTLY),
+    (doc(companies=[{"name": "A", "board": None}]), doc(companies=[{"name": "A"}]), "Companies", pf.STORED_DIFFERENTLY),
+    (doc(ranking={"threshold": 40, "max_candidates": 150, "top_n": 30}),
+     doc(ranking={"threshold": 40, "max_candidates": 150, "top_n": 30, "fresh_bonus": {}}), "Freshness bonus", pf.STORED_DIFFERENTLY),
+    (doc(skills=["a", "b"]), doc(skills=["b", "a"]), "Skills", "Order changed"),
+    (doc(position_types=[{"name": "A", "titles": ["a"]}, {"name": "B", "titles": ["b"]}]),
+     doc(position_types=[{"name": "B", "titles": ["b"]}, {"name": "A", "titles": ["a"]}]), "Kinds of role", "Order changed"),
+])
+def test_a_difference_with_no_visible_wording_still_has_a_line(old, new, label, note):
+    assert profile.profile_id(old) != profile.profile_id(new)
+    assert [(c.label, c.note) for c in pf.changes(old, new)] == [(label, note)]
+
+
+def test_a_map_reordered_is_no_change_at_all():
+    old = doc(filters__locations={"remote_us": True, "places": {"A": ["a"], "B": ["b"]}})
+    new = doc(filters__locations={"remote_us": True, "places": {"B": ["b"], "A": ["a"]}})
+    assert profile.profile_id(old) == profile.profile_id(new) and pf.changes(old, new) == ()
+
+
+def test_changes_read_like_a_person_wrote_them():
+    old = doc(filters__locations={"remote_us": True, "places": {"Boston": ["Cambridge, MA", "Boston, MA"], "DC": ["Tysons, VA"]}},
+              filters__min_hourly_pay=22, companies=[{"name": "Globex", "note": "old"}])
+    new = doc(filters__locations={"remote_us": False, "places": {"Boston": ["Boston, MA", "Cambridge, MA"], "DC": ["Bethesda, MD"], "NYC": ["New York, NY"]}},
+              filters__min_hourly_pay=25, companies=[{"name": "Globex", "note": "new"}, {"name": "Acme"}])
+    by_label = {c.label: c for c in pf.changes(old, new)}
+    assert by_label["Remote jobs in the US"].was == "On" and by_label["Remote jobs in the US"].now == "Off"
+    assert by_label["Areas"].added == ("NYC",)
+    assert by_label["DC: Places"].added == ("Bethesda, MD",) and by_label["DC: Places"].removed == ("Tysons, VA",)
+    assert by_label["Boston: Places"].note == "Order changed"
+    assert by_label["Place searched for in Boston"].was == "Cambridge, MA" and by_label["Place searched for in Boston"].now == "Boston, MA"
+    assert by_label["Minimum pay"].was == "$22 an hour" and by_label["Minimum pay"].now == "$25 an hour"
+    assert by_label["Globex: Note"].was == "old" and by_label["Globex: Note"].now == "new"
+    assert by_label["Companies"].added == ("Acme",)
+
+
+def _version_two(cfg):
+    _, d = profile.latest(cfg)
+    d = json.loads(json.dumps(d))
+    d["filters"]["max_age_days"] = 21
+    d["skills"] = d["skills"] + ["Rust"]
+    return profile.save(cfg, d, note="three weeks")[0]
+
+
+def test_a_version_page_shows_chips_and_struck_values_and_no_json(site):
+    cfg, client, _ = site
+    n = _version_two(cfg)
+    r = client.get(f"/profile/v/{n}")
+    assert r.status_code == 200
+    assert '<span class="tag add">+ Rust</span>' in r.text
+    assert '<span class="was">14 days</span> → <span class="is">21 days</span>' in r.text
+    assert "three weeks" in r.text and "This is the current version" in r.text and "Restore version" not in r.text
+    for banned in ("<script", '{"', "&#34;", "@@", "<pre"):
+        assert banned not in r.text
+    assert "No earlier" not in r.text and "Everything in version" in r.text
+
+
+def test_the_first_version_says_so_and_can_be_restored(site):
+    cfg, client, _ = site
+    _version_two(cfg)
+    r = client.get("/profile/v/1")
+    assert "nothing earlier to compare with" in r.text and "Restore version 1" in r.text
+    assert "What restoring would change now" in r.text and "− Rust" in r.text
+    assert client.get("/profile/v/99").status_code == 404
+
+
+def test_a_restore_writes_the_old_document_and_reuses_its_id(site):
+    cfg, client, _ = site
+    first = profile.latest(cfg)[1]
+    n = _version_two(cfg)
+    form = browser_submit(client.get("/profile/v/1").text, "/profile/v/1/restore")
+    r = client.post("/profile/v/1/restore", data={**form, "note": ""}, headers={"Origin": ORIGIN}, follow_redirects=False)
+    assert r.status_code == 303 and f"as%20version%20{n + 1}" in r.headers["location"]
+    v, now = profile.latest(cfg)
+    assert v == n + 1 and profile.canonical(now) == profile.canonical(first)
+    assert profile.profile_id(now) == profile.profile_id(first)
+    assert "restored version 1" in client.get("/profile").text
+
+
+def test_a_stale_restore_refuses_and_shows_the_fresh_preview(site):
+    cfg, client, _ = site
+    n = _version_two(cfg)
+    form = browser_submit(client.get("/profile/v/1").text, "/profile/v/1/restore")
+    _other_tab_sets_age(cfg, 30)
+    r = client.post("/profile/v/1/restore", data=form, headers={"Origin": ORIGIN})
+    assert r.status_code == 409 and "nothing was restored" in r.text and profile.latest(cfg)[0] == n + 1
+    assert "Restore version 1" in r.text
+
+
+def test_restore_keeps_the_guards_and_a_bad_old_version_is_explained(site):
+    cfg, client, _ = site
+    n = _version_two(cfg)
+    form = browser_submit(client.get("/profile/v/1").text, "/profile/v/1/restore")
+    assert client.post("/profile/v/1/restore", data=form, headers={"Origin": "https://evil.example"}).status_code == 403
+    assert client.post("/profile/v/99/restore", data=form, headers={"Origin": ORIGIN}).status_code == 404
+    collect.rebuilding_marker(cfg).write_text("now")
+    assert client.post("/profile/v/1/restore", data=form, headers={"Origin": ORIGIN}).status_code == 503
+    collect.rebuilding_marker(cfg).unlink()
+    assert profile.latest(cfg)[0] == n
+    old = cfg.data_dir / "profile" / "profile-0001.json"
+    bad = json.loads(old.read_text())
+    bad["filters"]["max_age_days"] = 999
+    old.write_text(json.dumps(bad))
+    r = client.post("/profile/v/1/restore", data=form, headers={"Origin": ORIGIN})
+    assert r.status_code == 400 and "Oldest job: Must be 90 or less." in r.text and profile.latest(cfg)[0] == n
+
+
+def test_history_lists_changed_settings_and_tucks_older_versions(site):
+    cfg, client, _ = site
+    n = _version_two(cfg)
+    page = client.get("/profile").text
+    assert "Oldest job, Skills" in page and "three weeks" in page and "First version" in page
+    assert "older version" not in page
+    _, d = profile.latest(cfg)
+    for days in range(30, 35):
+        profile.save(cfg, {**d, "filters": {**d["filters"], "max_age_days": days}})
+    page = client.get("/profile").text
+    assert "2 older versions" in page and page.index("2 older versions") < page.index(f'href="/profile/v/{n - 1}"')
+
+
+def test_check_lists_what_would_change_and_says_when_nothing_would(site):
+    cfg, client, _ = site
+    form = _form(client)
+    r = _post(client, {**form, "skills": form["skills"] + "\r\nRust"}, action="check")
+    assert "Saving would change" in r.text and '<span class="tag add">+ Rust</span>' in r.text
+    r = _post(client, form, action="check")
+    assert "nothing here differs" in r.text and 'class="chg"' not in r.text
+
+
+def test_a_conflict_says_what_changed_elsewhere(site):
+    cfg, client, _ = site
+    form = {**_form(client), "filters.max_age_days": "21"}
+    _other_tab_sets_age(cfg, 30)
+    assert "Oldest job now 30 days" in _post(client, form, action="save").text
+
+
+def test_no_page_shows_json_in_the_history_or_settings(site):
+    cfg, client, _ = site
+    _version_two(cfg)
+    for url in ("/profile", "/profile/v/1", "/profile/v/2"):
+        assert "&#34;" not in client.get(url).text
+
+
+def test_read_only_covers_every_top_level_setting():
+    shown = [label for _, rows in pf.read_only(FULL) for label, _ in rows]
+    assert shown == [f.label for f in pf.top_fields(pf.TABLE + pf.WATCH_TABLE)]
+    text = dict(row for _, rows in pf.read_only(FULL) for row in rows)
+    assert text["Minimum pay"] == "$25 an hour" and text["Skills"] == "Python"
+    assert text["Freshness bonus"] == "Within 3 days: 2 points"
+    assert text["Companies"] == "Acme: greenhouse:acme · n\nGlobex: Not set · Not set"

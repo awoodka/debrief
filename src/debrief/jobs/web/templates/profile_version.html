@@ -1,11 +1,40 @@
 {% extends "base.html" %}
+{% from "_fields.html" import change_groups %}
 {% block title %}Jobs · Profile v{{ n }}{% endblock %}
 {% block body %}
-<h1>Profile version {{ n }}</h1>
-<p class="sub"><a href="/profile">Back to the profile</a></p>
-<h2>Changes from version {{ n - 1 }}</h2>
-{% if diff %}<pre>{% for line in diff %}<span class="{{ 'add' if line.startswith('+') and not line.startswith('+++') else 'del' if line.startswith('-') and not line.startswith('---') else '' }}">{{ line }}</span>
-{% endfor %}</pre>{% else %}<p class="empty">No earlier version.</p>{% endif %}
-<h2>Version {{ n }}</h2>
-<pre>{{ text }}</pre>
+<h1>Version {{ n }}</h1>
+<p class="sub">{% if entry.when %}Saved {{ entry.when }}{% endif %}{% if entry.note %} · “{{ entry.note }}”{% endif %}</p>
+<p class="vnav"><a href="/profile">Back to the profile</a>{% if previous %}<a href="/profile/v/{{ previous }}">v{{ previous }}</a>{% endif %}{% if following %}<a href="/profile/v/{{ following }}">v{{ following }}</a>{% endif %}</p>
+{% if message %}<p class="err">{{ message }}</p>{% endif %}
+{% if errors %}<div class="err">Not restored:<ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+{% if first %}
+<p class="empty">The first version, so there's nothing earlier to compare with.</p>
+{% else %}
+<h2>What changed from version {{ previous }}</h2>
+{{ change_groups(changes) }}
+{% if not changes %}<p class="empty">Nothing changed.</p>{% endif %}
+{% endif %}
+{% if n != current %}
+<form class="chg restore" method="post" action="/profile/v/{{ n }}/restore">
+  <input type="hidden" name="base" value="{{ current }}">
+  <p>Restoring puts every setting back as it was in version {{ n }}, watchlist included. It saves as a new version, and nothing is deleted.</p>
+  <div class="row">
+    <input type="text" name="note" value="{{ note }}" placeholder="Note for this version (optional)" aria-label="Note for this version">
+    <button type="submit" class="primary">Restore version {{ n }}</button>
+  </div>
+  <details class="adv">
+    <summary>What restoring would change now</summary>
+    {% if restoring %}{{ change_groups(restoring) }}{% else %}<p class="empty">Nothing: it's the same as version {{ current }}.</p>{% endif %}
+  </details>
+</form>
+{% else %}
+<p class="note">This is the current version.</p>
+{% endif %}
+<details class="everything">
+  <summary>Everything in version {{ n }}</summary>
+  {% for title, rows in settings %}
+  <h3>{{ title }}</h3>
+  <dl class="ro">{% for label, value in rows %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+  {% endfor %}
+</details>
 {% endblock %}

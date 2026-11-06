@@ -4,15 +4,15 @@ Everything here only reads; the one write the site makes, the Tracked mark, is s
 The lists come from the same place as `jobs today`: each list's rows in daily_list, and the run
 report (runs.report) that holds its entries and the jobs kept but not shown.
 """
-import difflib
 import json
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import urlsplit
 
 from ...store import raw
 from .. import profile as profiles, rank, score
 from ..coverage import summary_line
+from . import profile_form as pf
 
 LIST_STAGES = ("beyond N", "company limit")
 
@@ -118,8 +118,16 @@ def watch_view(cfg, store, prof):
     return [{"name": n, "board": b, "open": k, "note": notes.get(n)} for n, b, k in watch.listing(cfg, store)]
 
 
+def _when(saved_at):
+    try:
+        return datetime.fromisoformat(saved_at.replace("Z", "+00:00")).astimezone().strftime("%b %-d, %H:%M")
+    except ValueError:
+        return ""
+
+
 def profile_history(cfg):
-    """[{version, saved_at, note}] newest first."""
+    """[{version, when, note, changed}] newest first, changed being the settings that differ from the
+    version before. Reads every version file, which are small and few."""
     hist = {}
     path = cfg.data_dir / "profile" / "history.jsonl"
     if path.exists():
@@ -129,22 +137,14 @@ def profile_history(cfg):
             except ValueError:
                 continue
             hist[h.get("version")] = h
-    out = []
-    for n, _ in reversed(profiles.versions(cfg)):
+    out, before = [], None
+    for n, p in profiles.versions(cfg):
+        doc = json.loads(p.read_text())
         h = hist.get(n) or {}
-        out.append({"version": n, "saved_at": h.get("saved_at", ""), "note": h.get("note", "")})
-    return out
-
-
-def profile_version(cfg, n):
-    """(text of version n, unified diff lines against n-1) or None."""
-    paths = dict(profiles.versions(cfg))
-    if n not in paths:
-        return None
-    text = json.dumps(json.loads(paths[n].read_text()), indent=2, ensure_ascii=False)
-    prev = json.dumps(json.loads(paths[n - 1].read_text()), indent=2, ensure_ascii=False) if (n - 1) in paths else ""
-    diff = list(difflib.unified_diff(prev.splitlines(), text.splitlines(), f"version {n - 1}", f"version {n}", lineterm=""))
-    return text, diff
+        changed = pf.changed_fields(pf.changes(before, doc)) if before is not None else []
+        out.append({"version": n, "when": _when(h.get("saved_at", "")), "note": h.get("note", ""), "changed": changed})
+        before = doc
+    return out[::-1]
 
 
 def coverage_view(cfg, store, today=None):

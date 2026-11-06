@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_fields.html" import fields, problems, savebar %}
+{% from "_fields.html" import change_groups, fields, problems, savebar, version_row %}
 {% block title %}Jobs · Profile{% endblock %}
 {% block body %}
 <h1>Profile</h1>
@@ -9,6 +9,7 @@
 <p class="sub">No profile yet. Fill this in and press Save to create the first version.</p>
 {% endif %}
 {% if message %}<p class="msg">{{ message }}</p>{% endif %}
+{{ change_groups(changes) }}
 {% if notice %}<p class="err">{{ notice }}</p>{% endif %}
 {{ problems(form, checking, "/profile") }}
 <form method="post" action="/profile" novalidate autocomplete="off">
@@ -37,8 +38,13 @@
   {{ savebar(note) }}
 </form>
 <h2 id="versions">Versions</h2>
-<table>
-  <tr><th>Version</th><th>Saved</th><th>Note</th></tr>
-  {% for h in history %}<tr><td><a href="/profile/v/{{ h.version }}">v{{ h.version }}</a></td><td>{{ h.saved_at }}</td><td>{{ h.note }}</td></tr>{% endfor %}
-</table>
+<div class="vers">
+  <ol class="vlist">{% for h in history[:5] %}{{ version_row(h, form.base) }}{% endfor %}</ol>
+  {% if history|length > 5 %}
+  <details class="older">
+    <summary>{{ history|length - 5 }} older {{ 'version' if history|length == 6 else 'versions' }}</summary>
+    <ol class="vlist">{% for h in history[5:] %}{{ version_row(h, form.base) }}{% endfor %}</ol>
+  </details>
+  {% endif %}
+</div>
 {% endblock %}
