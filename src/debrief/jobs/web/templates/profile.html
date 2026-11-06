@@ -4,7 +4,7 @@
 {% block body %}
 <h1>Profile</h1>
 {% if form.base %}
-<p class="sub">Version {{ form.base }}. Changes apply at the next nightly run, and any saved change re-asks the model about up to {{ form.budget }} jobs. Every save is kept as a <a href="#versions">version</a>.</p>
+<p class="sub">Version {{ form.base }}{% if history and history[0].when %}, saved {{ history[0].when }}{% endif %}. Changes apply at the next nightly run, and any saved change re-asks the model about up to {{ form.budget }} jobs. Every save is kept as a <a href="#versions">version</a>.</p>
 {% else %}
 <p class="sub">No profile yet. Fill this in and press Save to create the first version.</p>
 {% endif %}
@@ -37,6 +37,7 @@
   {% endfor %}
   {{ savebar(note) }}
 </form>
+{% if history %}
 <h2 id="versions">Versions</h2>
 <div class="vers">
   <ol class="vlist">{% for h in history[:5] %}{{ version_row(h, form.base) }}{% endfor %}</ol>
@@ -47,4 +48,5 @@
   </details>
   {% endif %}
 </div>
+{% endif %}
 {% endblock %}

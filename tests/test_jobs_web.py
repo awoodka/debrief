@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from starlette.testclient import TestClient
 
 from debrief.http import Fetched
-from debrief.jobs import collect, coverage, profile, rank
+from debrief.jobs import collect, config as jconfig, coverage, profile, rank
 from debrief.jobs.store import JobsStore, state_path
 from debrief.jobs.web import data
 from debrief.jobs.web.app import create_app
@@ -342,7 +342,6 @@ def test_a_stale_settings_page_and_the_watchlist_form_change_only_their_own_sett
 
 
 def test_the_watchlist_has_no_edit_form_before_a_profile_exists(tmp_path):
-    from debrief.jobs import config as jconfig
     cfg = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
     app = create_app(cfg=cfg, verifier=AccessVerifier(TEAM, AUD, EMAILS, fetch=Certs([JWK])), origin=ORIGIN, env={})
     client = TestClient(app, base_url=ORIGIN)

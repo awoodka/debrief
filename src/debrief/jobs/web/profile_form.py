@@ -316,7 +316,8 @@ class Number(Field):
         if value is MISSING:
             return NOT_SET
         unit = self.unit[:-1] if value == 1 and self.unit.endswith("s") else self.unit
-        return f"{self.pre}{value}{' ' + unit if unit else ''}"
+        shown = _money(value) if self.pre == "$" else f"{self.pre}{value}"
+        return f"{shown} {unit}" if unit else shown
 
     def say(self, old, new, row=""):
         return [] if old is not MISSING and new is not MISSING and old == new else super().say(old, new, row)
@@ -378,7 +379,7 @@ class Rows(Field):
         return [] if value is MISSING else list(value)
 
     def numbers(self, raw, at):
-        """The row numbers present in raw. A row number comes from the page, so it's only ever a label."""
+        """The row numbers present in raw. They come from the page, so they only ever order the rows."""
         pattern = re.compile(re.escape(at) + r"\.([0-9]{1,6})\.")
         return sorted({int(m.group(1)) for name in raw if (m := pattern.match(name))})
 
@@ -546,9 +547,9 @@ def _and(names):
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if names else ""
 
 
-def _some(names, keep=3, more="more"):
+def _some(names, keep=3):
     names = list(names)
-    return _and(names) if len(names) <= keep + 1 else f"{', '.join(names[:keep])} and {len(names) - keep} {more}"
+    return _and(names) if len(names) <= keep + 1 else f"{', '.join(names[:keep])} and {len(names) - keep} more"
 
 
 def _dots(*parts):
@@ -556,7 +557,7 @@ def _dots(*parts):
 
 
 def _money(value):
-    return f"${value}"
+    return f"${int(value)}" if value == int(value) else f"${value:.2f}"
 
 
 def _month(text):
@@ -717,7 +718,7 @@ TABLE = (
         Lines("interests", "Interests", "One per line.", noun="interest"),
     )),
     Group("projects", "Projects", ABOUT, _projects, fields=(
-        Rows("projects", "Projects", "Written once and untailored. The model judges fit from these, never from a resume.",
+        Rows("projects", "Your projects", "Written once and untailored. The model judges fit from these, never from a resume.",
              row_noun="project", add_label="Add a project",
              summary=lambda r: r.get("summary", "")[:70],
              fields=(Text("name", "Name", messages=_must("Give this project a name.")),
@@ -832,7 +833,7 @@ class Form:
             fine_moved = any(not f.unchanged(self.raw, get(doc, f.path)) for f in g.fine)
             fine_problems = sum(1 for _ in _banner(fine))
             groups.append(GroupView(g.id, g.title, g.part, summary, open=saved is None or bool(problems) or moved or fine_moved,
-                                    fields=fields, fine=fine, fine_open=bool(fine_problems) or fine_moved, problems=problems))
+                                    fields=fields, fine=fine, fine_open=saved is None or bool(fine_problems) or fine_moved, problems=problems))
         banner = tuple(item for g in groups for item in _banner(g.fields + g.fine))
         budget = get(doc, ("ranking", "max_candidates"))
         return FormView(self.base, tuple(groups), tuple(self.errors.get("", ())), banner, None if budget is MISSING else budget)

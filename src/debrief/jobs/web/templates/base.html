@@ -26,6 +26,7 @@
       --rule:#342c20; --hair:#2e271d;
     }
   }
+  :root{color-scheme:light dark; accent-color:var(--accent)}
   *{box-sizing:border-box}
   html,body{margin:0}
   body{background:var(--paper); color:var(--body); font-family:var(--serif); font-size:17px; line-height:1.55;
@@ -62,7 +63,6 @@
   button:hover,.btn:hover{border-color:var(--accent)}
   input[type=text],input[type=url],select,textarea{font:14px var(--sans); color:var(--ink); background:var(--surface);
               border:1px solid var(--rule); border-radius:6px; padding:6px 8px}
-  textarea{font-family:var(--mono); font-size:13px; width:100%; min-height:60vh; line-height:1.45}
   details{margin:18px 0} summary{font-family:var(--sans); font-size:14px; color:var(--muted); cursor:pointer}
   table{border-collapse:collapse; font-family:var(--sans); font-size:13px; width:100%}
   th,td{text-align:left; padding:5px 8px; border-bottom:1px solid var(--hair); vertical-align:top}
@@ -103,9 +103,10 @@
   .hint{display:block; font:400 12.5px/1.45 var(--sans); color:var(--muted); margin:4px 0 0}
   .f input[type=text],.f select,.f textarea{width:100%; display:block; background:var(--paper); padding:7px 9px;
        border-color:color-mix(in srgb,var(--rule),var(--ink) 16%)}
-  .f textarea{font-family:var(--sans); font-size:14px; line-height:1.5; min-height:0; max-height:70vh; resize:vertical; field-sizing:content}
-  .f textarea.area{font-family:var(--serif); font-size:15px}
-  .f input:focus,.f select:focus,.f textarea:focus,.savebar input:focus{outline:2px solid var(--accent); outline-offset:-1px; border-color:var(--accent)}
+  .f textarea{font-family:var(--sans); font-size:14px; line-height:1.5; min-height:4.5em; max-height:70vh; resize:vertical; field-sizing:content}
+  .f textarea.area{font-family:var(--serif); font-size:15px; min-height:6.5em}
+  .f input:focus,.f select:focus,.f textarea:focus,.savebar input:focus,.restore input:focus{outline:2px solid var(--accent); outline-offset:-1px; border-color:var(--accent)}
+  summary:focus-visible,a:focus-visible,button:focus-visible,.btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
   .unit{display:flex; align-items:center; gap:6px; font:14px var(--sans); color:var(--muted)}
   .f .unit input[type=text]{flex:0 1 6em; width:6em; min-width:0; font-variant-numeric:tabular-nums}
   .chk{display:flex; gap:10px; align-items:flex-start; font:600 14px/1.4 var(--sans); color:var(--ink); cursor:pointer}
@@ -147,6 +148,7 @@
   .savebar button{padding:7px 14px; font-size:14px}
   .savebar button.primary{font-weight:600; min-width:84px}
 
+  form.row input{flex:1 1 200px; min-width:0}
   .watch-edit .lab{display:none}
   .watch-edit .hint{margin-top:0}
 
@@ -185,7 +187,8 @@
     .chg dd,.ro dd{margin-bottom:8px}
     .vlist li{grid-template-columns:minmax(0,1fr)}
     .f-number,.f-choice,.body>.fields>.f-text{grid-column:span 6}
-    input[type=text],input[type=url],select,textarea,.f textarea{font-size:16px}
+    /* under 16px, iOS zooms the page when a control takes focus */
+    input[type=text],input[type=url],select,textarea,.f textarea,.f textarea.area{font-size:16px}
     .set>details>summary,a.set.open{padding:13px 14px}
     details.item>summary{padding:11px 10px}
     .savebar{flex-wrap:nowrap}

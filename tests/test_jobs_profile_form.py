@@ -411,6 +411,7 @@ def test_a_first_profile_can_be_made_from_blank(tmp_path):
     r = _post(client, _form(client), action="save")
     assert r.status_code == 400 and profile.latest(cfg) == (0, None)
     assert "Can&#39;t be blank." in r.text and "required property" not in r.text
+    assert 'id="versions"' not in r.text
     assert "Pick one of the options." in r.text and "Say what you&#39;re looking for" in r.text
     assert "Keep at least one kind of role" in r.text and "With neither" not in r.text
     filled = _form(client) | {
@@ -589,6 +590,7 @@ def test_changes_read_like_a_person_wrote_them():
     assert by_label["Boston: Places"].note == "Order changed"
     assert by_label["Place searched for in Boston"].was == "Cambridge, MA" and by_label["Place searched for in Boston"].now == "Boston, MA"
     assert by_label["Minimum pay"].was == "$22 an hour" and by_label["Minimum pay"].now == "$25 an hour"
+    assert pf.changes(doc(filters__min_hourly_pay=25), doc(filters__min_hourly_pay=27.5))[0].now == "$27.50 an hour"
     assert by_label["Globex: Note"].was == "old" and by_label["Globex: Note"].now == "new"
     assert by_label["Companies"].added == ("Acme",)
 
@@ -707,3 +709,8 @@ def test_read_only_covers_every_top_level_setting():
     assert text["Minimum pay"] == "$25 an hour" and text["Skills"] == "Python"
     assert text["Freshness bonus"] == "Within 3 days: 2 points"
     assert text["Companies"] == "Acme: greenhouse:acme · n\nGlobex: Not set · Not set"
+
+
+def test_why_an_add_was_refused_is_honest_about_the_cause():
+    assert "Companies to hide" in pf.add_refused("globex", doc(filters__blocklist=["Globex"]))
+    assert "Companies to hide" not in pf.add_refused("Globex", doc())

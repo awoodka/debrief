@@ -64,14 +64,14 @@
 
 {% macro savebar(note) %}
 <div class="savebar">
-  <input type="text" name="note" value="{{ note }}" placeholder="Note for this version (optional)" aria-label="Note for this version">
+  <input type="text" name="note" value="{{ note }}" placeholder="Note (optional)" aria-label="Note for this version">
   {# Check comes first, so Enter in a text input means Check, never Save. #}
   <button type="submit" name="action" value="check">Check</button>
   <button type="submit" name="action" value="save" class="primary">Save</button>
 </div>
 {% endmacro %}
 
-{% macro change_groups(groups, link=False) %}
+{% macro change_groups(groups) %}
 {% for group, lines in groups %}
 <div class="chg">
   <h3>{{ group }}</h3>
