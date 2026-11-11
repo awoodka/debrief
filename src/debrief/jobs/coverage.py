@@ -152,7 +152,7 @@ def cause(s, watch_boards, watch_failed):
         if b in watch_boards and watch_failed:
             return "broken source", f"the watchlist reads {b}, but it failed that night"
         page = next(u for u in urls if boards.board_from_url(u) == b)
-        return "not watched", f'{s["company"]} posts on {b}: debrief jobs watch add "{s["company"]}" --url {page}'
+        return "not watched", f'{s["company"]} posts on {b}: debrief jobs watch add "{s["company"]}" --kind large|startup --url {page}'
     if urls and all(_aggregator(u) for u in urls):
         hosts = sorted({(urlsplit(u).hostname or "").removeprefix("www.") for u in urls})
         return "closed site only", f"only on {', '.join(hosts)}: widen the alert searches there"

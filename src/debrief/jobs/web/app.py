@@ -11,18 +11,21 @@ Sec-Fetch-Site: same-origin), else 403. While a rebuild runs (collect.rebuilding
 are refused, since the rebuild would lose them.
 """
 import os
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from starlette.routing import Route
 
-from .. import config as jconfig, profile as profiles, watch
+from ... import sanitize
+from .. import config as jconfig, profile as profiles, resume, watch
 from ..collect import rebuilding_marker
 from ..store import JobsStore, state_path
 from . import data, profile_form as pf
@@ -36,6 +39,8 @@ SECURITY_HEADERS = {
     "Cache-Control": "no-store",
 }
 TEMPLATES = Path(__file__).with_name("templates")
+OTHER_INPUTS_BYTES = 512_000
+UPLOAD_LIMIT = resume.MAX_BYTES + OTHER_INPUTS_BYTES
 
 
 def _now():
@@ -122,7 +127,10 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
     def show_watchlist(request, form, *, note="", status=200, message=None, notice=None, checking=False, changes=()):
         prof = profiles.latest(cfg)[1]
         rows = _with_store(lambda s: data.watch_view(cfg, s, prof))
-        return page(request, "watchlist.html", status=status, rows=rows, form=form.view(prof, pf.WATCH_TABLE) if prof else None,
+        lists = [{"kind": kind, "title": title, "anchor": pf.LIST_ANCHORS[kind], "rows": [r for r in rows if r["kind"] == kind]}
+                 for kind, title in pf.COMPANY_KINDS.items()]
+        return page(request, "watchlist.html", status=status, rows=rows, lists=lists,
+                    form=form.view(prof, pf.WATCH_TABLE) if prof else None,
                     note=note, message=message or request.query_params.get("msg"), notice=notice, checking=checking,
                     changes=pf.by_group(changes))
 
@@ -141,26 +149,31 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
     async def watch_add(request):
         form = await request.form()
         name, url = str(form.get("name") or "").strip(), str(form.get("url") or "").strip() or None
+        kind = str(form.get("kind") or "")
         if rebuilding():
             return busy(request)
+        if kind not in pf.COMPANY_KINDS:
+            return RedirectResponse("/watchlist?msg=" + _q("Add it from one of the two lists."), status_code=303)
+        section = "#" + pf.LIST_ANCHORS[kind]
         if not name:
-            return RedirectResponse("/watchlist?msg=" + _q("Give the company's name."), status_code=303)
+            return RedirectResponse("/watchlist?msg=" + _q("Give the company's name.") + section, status_code=303)
 
         def add():
             store = JobsStore(state_path(cfg))
             try:
-                entry, notes, version = watch.add(cfg, name, url=url, client=client, store=store)
+                entry, notes, version = watch.add(cfg, name, kind, url=url, client=client, store=store)
             finally:
                 store.close()
             found = f"board {entry['board']}" if entry.get("board") else "no public board found"
-            return f"Added {name} ({found}; profile version {version}). {entry.get('note') or ''} {' '.join(notes)}".strip()
+            return (f"Added {name} to {pf.COMPANY_KINDS[kind]} ({found}; profile version {version}). "
+                    f"{entry.get('note') or ''} {' '.join(notes)}").strip()
         try:
             msg = await run_in_threadpool(add)
         except watch.WatchError as e:
             msg = str(e)
         except profiles.ProfileError:
             msg = pf.add_refused(name, profiles.latest(cfg)[1])
-        return RedirectResponse("/watchlist?msg=" + _q(msg), status_code=303)
+        return RedirectResponse("/watchlist?msg=" + _q(msg) + section, status_code=303)
 
     def watch_remove_confirm(request):
         return page(request, "watch_remove.html", name=request.query_params.get("name") or "")
@@ -199,10 +212,27 @@ def create_app(cfg=None, verifier=None, origin=None, env=None, client=None):
         return show(request, pf.open_form(*profiles.latest(cfg)))
 
     async def profile_post(request):
-        posted = await request.form()
+        length = request.headers.get("content-length") or ""
+        if length.isdigit() and int(length) > UPLOAD_LIMIT:
+            return page(request, "message.html", status=413, title="Not saved",
+                        message=f"That upload is too big. A resume file can be up to {resume.MAX_BYTES // 1_000_000} MB. "
+                                "Nothing was saved. Go back, choose a smaller file, or paste the text into the box.")
+        posted = await request.form(max_files=1)
         note, checking = str(posted.get("note") or "").strip(), posted.get("action") != "save"
-        sub = pf.submit(posted, profiles.latest(cfg), lambda n: profiles.version(cfg, n))
-        return await finish(request, sub, show, "/profile", note, checking, "edited on the site")
+        upload = posted.get(pf.RESUME_FILE)
+        fields = {k: v for k, v in posted.items() if k != pf.RESUME_FILE}
+        default_note = "edited on the site"
+        latest, load = profiles.latest(cfg), lambda n: profiles.version(cfg, n)
+        if isinstance(upload, UploadFile) and upload.filename:
+            try:
+                fields["resume"] = await run_in_threadpool(resume.text_from_upload, await upload.read(resume.MAX_BYTES + 1))
+            except resume.ResumeError as e:
+                form = pf.submit(fields, latest, load).form
+                form = replace(form, errors={**form.errors, "resume": [*form.errors.get("resume", ()), str(e)]})
+                return show(request, form, note=note, status=400, checking=checking)
+            default_note = f"read the resume from {sanitize.text(upload.filename, 80)}"
+        sub = pf.submit(fields, latest, load)
+        return await finish(request, sub, show, "/profile", note, checking, default_note)
 
     def version_page(request, n, *, status=200, message=None, errors=(), note=""):
         doc = profiles.version(cfg, n)

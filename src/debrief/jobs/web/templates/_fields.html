@@ -36,10 +36,11 @@
   <select id="{{ f.id }}" name="{{ f.name }}"{% if f.errors %} aria-invalid="true"{% endif %}>
     {% for v, words in f.choices %}<option value="{{ v }}"{% if v == f.value %} selected{% endif %}>{{ words }}</option>{% endfor %}
   </select>
-  {% elif f.widget == "lines" or f.widget == "area" %}
+  {% elif f.widget in ("lines", "area", "document") %}
   {# The newline straight after the tag is on purpose: the HTML parser eats exactly one, so a value starting with a newline survives. #}
   <textarea id="{{ f.id }}" name="{{ f.name }}" rows="{{ f.height }}" class="{{ f.widget }}"{% if f.widget == "lines" %} spellcheck="false"{% endif %}{% if f.errors %} aria-invalid="true"{% endif %}>
 {{ f.value }}</textarea>
+  {% if f.upload %}<label class="upload">Or read it from a file (PDF or plain text): <input type="file" name="{{ f.upload }}" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown"></label>{% endif %}
   {% else %}{{ unknown_widget_kind(f.widget) }}{% endif %}
   {{ errs(f) }}{{ hint(f) }}
 </div>

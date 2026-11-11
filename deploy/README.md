@@ -21,7 +21,7 @@ Other modes, for reruns by hand: `run.sh triage` (triage again, without collecti
 - **Containers:** read-only root and code, with only the data dir writable, no capabilities, and memory and pid limits. The site build also has no network and reads the data read-only.
 - **One lock:** `/srv/data/debrief-v2/.run.lock`. It's taken by the runs, `update.sh` and `scripts/dev`, so nothing else writes the state database during a run. A poll that finds it taken is skipped; the daily run waits up to an hour.
 - **Logs:** `/srv/apps/debrief-v2/logs/<date>/<mode>-<HHMM>.log`, and the journal (`journalctl -u debrief-v2-daily`).
-- **Failure:** a unit fails (`systemctl --failed`) when a step fails, the scoring call fell back to the rules-only keep, or the brief has no article. A degraded collect (a feed down) is only a warning. A brief without its article still publishes: the day's page is the scan, with a note, and no `reported.json` is written, so those stories come back tomorrow. After a failed scoring call, `run.sh triage` then `run.sh brief`.
+- **Failure:** a unit fails (`systemctl --failed`) when a step fails, the scoring call fell back to the rules-only keep, a story still has no answer after both scoring calls, or the brief has no article. A degraded collect (a feed down) is only a warning. A brief without its article still publishes: the day's page is the scan, with a note, and no `reported.json` is written, so those stories come back tomorrow. After a failed scoring call, `run.sh triage` then `run.sh brief`.
 
 Installing the units needs root; run this once on the server:
 

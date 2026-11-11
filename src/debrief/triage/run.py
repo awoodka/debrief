@@ -7,9 +7,11 @@ cached, so re-running triage on the same data gives byte-identical files. Stages
   pool -> rules -> merge -> ledger -> order and cap (= the candidates) -> threads -> score
 
 Each stage only drops; every drop is logged with its stage and reason. The scoring call keeps every
-relevant story (triage/score.py). If it fails, or with --no-model, `keep` takes each section's first
-fallback_keep candidates instead and the run is degraded. Triage reads the collector's tables and
-never writes them; it records its own run in `runs` (kind "triage").
+relevant story (triage/score.py). If no call works, too few stories have an answer, or with
+--no-model, `keep` takes each section's first fallback_keep candidates instead and the run is
+degraded; a story left unanswered on an otherwise answered day gets the same rule, and the rest keep
+their answers. Triage reads the collector's tables and never writes them; it records its own run in
+`runs` (kind "triage").
 """
 import json
 import os
@@ -101,6 +103,10 @@ def run(cfg, run_date=None, at=None, model=True, model_name=None, runner=None, f
             ctx.mode, cached = "scored", result["cached"]
             # What the call was, not whether this run replayed it: so a replay writes the same files.
             ctx.scoring = {k: result[k] for k in ("model", "prompt_version", "key", "attempts", "usage", "notes")}
+            if result["unanswered"]:
+                degraded.append(f"{len(result['unanswered'])} of {len(data['candidates'])} candidates got no answer from "
+                                f"the scoring call, so the rules decided them: {', '.join(result['unanswered'])}")
+                log(f"scoring: {degraded[-1]}")
     else:
         degraded.append("rules only (--no-model)")
     if ctx.mode == "rules_only":

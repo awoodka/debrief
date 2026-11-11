@@ -27,7 +27,7 @@ age limit with "posted on or after this date" (the older-roles catch-up). It doe
 import re
 import json
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from ..store import dumps
 from ..triage.score import ScoringError, run_claude
@@ -59,13 +59,21 @@ def posted(p):
     return p.get("published_at") or p.get("first_seen_at")
 
 
+BARE_DATE = "T00:00:00Z"     # how boards.when stores a date with no time
+
+
+def age_days(when, now):
+    if when.endswith(BARE_DATE):
+        return (now.astimezone().date() - date.fromisoformat(when[:10])).days
+    return (now - datetime.fromisoformat(when.replace("Z", "+00:00"))).total_seconds() / 86400
+
+
 def fresh_bonus(p, profile, now):
-    """ranking.fresh_bonus ({"3": 2, "7": 1}: +2 posted within 3 days, +1 within 7) for this job."""
     table = (profile.get("ranking") or {}).get("fresh_bonus") or {}
     when = posted(p)
     if not table or not when:
         return 0
-    days = (now - datetime.fromisoformat(when.replace("Z", "+00:00"))).total_seconds() / 86400
+    days = age_days(when, now)
     return max((int(b) for d, b in table.items() if days <= int(d)), default=0)
 
 

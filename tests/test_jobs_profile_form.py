@@ -90,9 +90,10 @@ def _posted_by_a_browser(raw, reading):
 NASTY = dict(
     filters__min_hourly_pay=25.0,
     ranking={"threshold": 40, "max_candidates": 150, "top_n": 30, "per_company": 3, "fresh_bonus": {}},
-    companies=[{"name": "Acme"}, {"name": "B & <C>", "board": None}, {"name": "D", "board": "lever:d", "note": ""},
-               {"name": "  Padded ", "note": "two\nlines"}],
+    companies=[{"name": "Acme"}, {"name": "B & <C>", "board": None, "kind": "large"}, {"name": "D", "board": "lever:d", "note": ""},
+               {"name": "  Padded ", "note": "two\nlines", "kind": "startup"}],
     wants="\nLeading newline, CRLF\r\nand a trailing newline\n",
+    resume="\nAlex Example  \r\n\r\n\r\nEDUCATION\tBS <Computer> Science & Math\n\n",
     skills=["C++", "  padded  ", "Ünïcode", "a, b"],
     filters__locations={"remote_us": False, "places": {"Z": ["New York, NY", "Hoboken"], "A": ["Boston"]}},
     projects=[{"name": "Same", "summary": " one ", "skills": []}, {"name": "Same", "summary": "two\n", "skills": ["x y"]}],
@@ -384,9 +385,67 @@ def test_sections_start_closed_and_summarize_their_values(site):
     page = client.get("/profile").text
     assert "<details open" not in page
     for words in ("Remote in the US · NYC", "$25 an hour or more · last 14 days · up to 2 years", "1 skill · 1 interest",
-                  "BS Computer Science, Example U, May 2027 · 1 course", "US citizen · no clearance, could obtain one"):
+                  "BS Computer Science, Example U, May 2027 · 1 course", "US citizen · no clearance, could obtain one",
+                  "None. The model reads your projects only."):
         assert words in page
-    assert 'href="/watchlist"' in page and "Acme. Boards and notes are set on the Watchlist page." in page
+
+
+RESUME = "Alex Example\nEDUCATION\nBS Computer Science, Example U, 2027\nPROJECTS\nDebrief: a daily briefing that reads the news."
+
+
+def test_a_resume_change_is_one_short_line_and_saves_as_text(site):
+    cfg, client, _ = site
+    r = _post(client, {**_form(client), "resume": RESUME.replace("\n", "\r\n")}, action="check")
+    assert r.status_code == 200 and r.text.count("a daily briefing that reads the news") == 1
+    changes = r.text.split('<div class="chg">')[1].split("</div>")[0]
+    assert "Resume" in changes and f"Added, {len(RESUME)} characters" in changes
+    v, _ = profile.latest(cfg)
+    assert _post(client, {**_form(client), "resume": RESUME.replace("\n", "\r\n")}, action="save").status_code == 303
+    n, saved = profile.latest(cfg)
+    assert n == v + 1 and saved["resume"] == RESUME
+    assert f"{len(RESUME)} characters the model reads" in client.get("/profile").text
+    r = _post(client, {**_form(client), "resume": RESUME + "\r\nSKILLS\r\nPython"}, action="check")
+    assert f"Edited, {len(RESUME)} → {len(RESUME) + 14} characters" in r.text and r.text.count("a daily briefing") == 1
+
+
+def test_emptying_the_resume_removes_it(site):
+    cfg, client, _ = site
+    _, d = profile.latest(cfg)
+    v, _ = profile.save(cfg, {**d, "resume": RESUME})
+    assert _post(client, {**_form(client), "resume": ""}, action="save").status_code == 303
+    n, saved = profile.latest(cfg)
+    assert n == v + 1 and "resume" not in saved and saved == d
+
+
+def test_a_too_long_resume_says_so_on_its_box(site):
+    cfg, client, _ = site
+    v, _ = profile.latest(cfg)
+    r = _post(client, {**_form(client), "resume": "x" * 20001}, action="save")
+    assert r.status_code == 400 and profile.latest(cfg)[0] == v
+    assert "Too long: at most 20,000 characters." in r.text.split('<label for="i-resume">')[1].split('class="hint"')[0]
+
+
+def test_the_two_lists_are_cards_that_open_their_sections(site):
+    cfg, client, _ = site
+    _, d = profile.latest(cfg)
+    profile.save(cfg, {**d, "companies": [{"name": "IBM", "kind": "large"}, {"name": "Acme"}, {"name": "Globex", "kind": "startup"}]})
+    page = client.get("/profile").text
+    large = page.split('href="/watchlist#large"')[1].split("</a>")[0]
+    startups = page.split('href="/watchlist#startups"')[1].split("</a>")[0]
+    assert "Large companies" in large and "IBM" in large and "Acme" not in large
+    assert "Startups" in startups and "Acme and Globex" in startups
+    profile.save(cfg, {**d, "companies": []})
+    assert "None yet. Add them on the Watchlist page." in client.get("/profile").text.split('href="/watchlist#large"')[1]
+
+
+def test_no_pay_floor_reads_as_any_pay_and_one_reads_as_one(site):
+    cfg, client, _ = site
+    _, d = profile.latest(cfg)
+    profile.save(cfg, {**d, "filters": {**d["filters"], "min_hourly_pay": 0, "max_years": 1},
+                       "ranking": {**d["ranking"], "fresh_bonus": {"1": 1}}})
+    page = client.get("/profile").text
+    assert "Any pay · last 14 days · up to 1 year" in page and "$0 an hour or more" not in page
+    assert "Within 1 day" in page and "+1 point<" in page
 
 
 def test_a_closed_section_still_posts(site):
@@ -553,7 +612,8 @@ def test_a_blank_page_saved_after_a_first_profile_appeared_changes_nothing(tmp_p
 
 
 FULL = doc(ranking={"threshold": 40, "max_candidates": 150, "top_n": 30, "per_company": 3, "fresh_bonus": {"3": 2}},
-           companies=[{"name": "Acme", "board": "greenhouse:acme", "note": "n"}, {"name": "Globex"}],
+           companies=[{"name": "Acme", "board": "greenhouse:acme", "note": "n", "kind": "large"}, {"name": "Globex"}],
+           resume="Alex Example\nBS Computer Science, Example U",
            filters__blocklist=["Initrode"], position_types=[{"name": "A", "titles": ["a", "b"]}, {"name": "B", "titles": ["c"]}])
 
 
@@ -736,7 +796,8 @@ def test_read_only_covers_every_top_level_setting():
     text = dict(row for _, rows in pf.read_only(FULL) for row in rows)
     assert text["Minimum pay"] == "$25 an hour" and text["Skills"] == "Python"
     assert text["Freshness bonus"] == "Within 3 days: 2 points"
-    assert text["Companies"] == "Acme: greenhouse:acme · n\nGlobex: Not set · Not set"
+    assert text["Companies"] == "Acme: Large companies · greenhouse:acme · n\nGlobex: Not set · Not set · Not set"
+    assert text["Your resume"] == "43 characters, starting “Alex Example BS Computer Science, Example U”"
 
 
 def test_why_an_add_was_refused_is_honest_about_the_cause():

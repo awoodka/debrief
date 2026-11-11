@@ -12,3 +12,4 @@ uvicorn
 jinja2
 python-multipart
 pyjwt[crypto]
+pypdf

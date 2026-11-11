@@ -73,6 +73,8 @@ def run(cfg, fixture=DEFAULT, model=None, fresh=False, runner=None, log=print):
             "reported": []}
     result = score.call(cfg.data_dir / "cache" / "score", t, data, model=model, runner=runner or score.run_claude,
                         fresh=fresh, log=log)
+    if result["unanswered"]:
+        raise score.ScoringError(f"{len(result['unanswered'])} of {len(items)} items unanswered, e.g. {result['unanswered'][0]}")
     cmp = compare(items, result["answers"])
     out = cfg.data_dir / "calibration" / f"{fixture.stem}-{result['model']}.md"
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -1,4 +1,4 @@
-# Exact pins for requirements.in, from pip freeze in python:3.13-slim on 2026-11-06 (existing pins kept as constraints).
+# Exact pins for requirements.in, from pip freeze in python:3.13-slim on 2026-11-11 (existing pins kept as constraints).
 anyio==4.16.0
 attrs==26.1.0
 babel==2.18.0
@@ -24,6 +24,7 @@ lxml_html_clean==0.4.5
 MarkupSafe==3.0.4
 pycparser==3.12
 PyJWT==2.15.1
+pypdf==7.0.1
 python-dateutil==3.0.0
 python-dotenv==1.2.4
 python-multipart==0.0.33

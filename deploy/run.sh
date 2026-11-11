@@ -114,6 +114,9 @@ triage() {
   if grep -q '(rules_only)' "$LAST"; then
     log "FAIL: the scoring call failed; the index is the rules-only keep (rerun: run.sh triage)"
     FAILED=1
+  elif grep -q 'so the rules decided them' "$LAST"; then
+    log "FAIL: some stories got no answer from the scoring call, and an unanswered thread is dropped (rerun: run.sh triage)"
+    FAILED=1
   fi
 }
 

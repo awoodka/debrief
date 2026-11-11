@@ -71,6 +71,11 @@ scoring:
   short_summary_chars: 300
   why_max_chars: 240
   reported_days: 3              # titles of stories in a brief this recently go in as a reference list
+  # Under this share of stories answered after both calls, the whole day falls back to the rules and the
+  # run fails. Any smaller gap fails the run too, but keeps the answers. Measured on 7 nights: a random 10% gap
+  # changes what's kept on 3.9% of candidates (p90 5.9%), and a 10% gap in one run on 3.5% (p90 6.8%, worst 10.7%),
+  # against the 4.2 to 7.7% that relevance differs between two clean calls. A random 15% gap has a p90 of 8.8%.
+  min_answered: 0.9
 
 # Stories that are one thing (triage/merge.py).
 merge:

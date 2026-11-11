@@ -532,3 +532,48 @@ Decided with Alex:
 - **Not built:** treating a dropped paper's threads as unattached discussion. For older papers the `discussion` trigger does more (it brings back the paper with its abstract and signals); for fresh ones it would get around "discussion doesn't count toward the use bar".
 
 Checks: 198 tests. Rules-only triage for 2026-10-26 to 11-02 on a frozen copy, old code against new: every existing log line identical; 8 late papers added (5 trending, 3 discussion). Calibration with the new prompt and relevance text: 119 and 119 of 120 (both fresh calls). A scored run for 11-02 on the copy kept both late papers at 4: "Agentic Backdoors via Pretraining Poisoning" (dropped at the use bar on all three of its pool days, its HN threads swallowed) and a paper reported on 10-31, back as an update with a 158-point thread.
+
+## Revision 6: a slip in the scoring answer (2026-11-06)
+
+Prompted by 2026-10-30 and 2026-11-06, the only two of 12 nightly runs where scoring fell back to rules only. One story of 104 and of 119 had no answer, on both tries. The brief still ran, on 43 and 45 stories with no relevance check and no discussion threads, against 9 to 31 kept on the five nights before 11-06.
+
+**The cause, measured** on each night's rebuilt input (the rebuild's cache key matched the stored one on 3 of 4 older nights checked, and 11-06's candidates matched its log). A failed answer was never saved, so these are fresh calls:
+
+| 11-06 input | Calls with every story answered |
+|---|---|
+| Unchanged (10-30's input: same result) | 0 of 3 (0 of 3) |
+| 20 other stories removed | 0 of 2 |
+| The story removed | 2 of 2 |
+| Only its id changed | 2 of 2 |
+| Same id, moved to first | 2 of 2 |
+| Every id a short `c1`, `c2`, ... (both nights) | 4 of 4 |
+
+So it's that hex id at that place in the list, not the story or the batch size. The model usually judges the story and then can't write its id. It left the story out, or wrote why "placeholder" under a made-up or real id, or answered under another story's real id (the drug-discovery story's answer under "OpenAI is stepping back from NDAs"). The old retry sent the same input and got the same slip.
+
+**Decided:** keep the good answers, and ask a second call about only the rest (CRITERIA.md "A slip in the answer"). A filtered answer matters: taking the partial answer as it came would have dropped the NDA story and Mistral Large 4 ("Placeholder" on its real id) as not relevant. On those inputs the second call answered all 8 times, in 2 to 3 s, at under $0.06 each.
+
+**A bigger slip, seen once while checking the fix.** One call on 11-06's unchanged input answered through slot 43, skipped three stories, jumped to slot 71, wrote two made-up ids and stopped: 59 of 119 answered. The answers it gave fit their own stories. The second call answered the other 60. Replaying that first call with a real second call did the same 3 of 3 times, in about 22 s at $0.04 each. Against clean calls, the repaired answers agreed on relevance on 113 and 114 of 119, and score 4 or 5 differed on 6 stories. Two clean calls agreed on 112 and differed on 6. So even this slip leaves the day looking like a clean call.
+
+**How much the rules can stand in for: `scoring.min_answered: 0.9`.** Under it, the whole day falls back to rules only, because a made-up score 3 on most of a day shouldn't look like a working run. The real `score.apply` on the 7 nights from 10-31 to 11-06, with 30 random gaps per size per night:
+
+| Stories without an answer | Kept or dropped differently, % of candidates (mean, p90) | Score 4 or 5 lost or marked down (mean, max) |
+|---|---|---|
+| 5% | 1.6, 2.9 | 0.24, 3 |
+| 10% | 3.9, 5.9 | 0.60, 3 |
+| 15% | 5.7, 8.8 | 0.95, 3 |
+| 20% | 7.3, 10.7 | 1.06, 4 |
+| 50% | 18.5, 25.0 | 3.14, 9 |
+
+Two clean calls on the same input differ on relevance on 4.2% to 7.7% of stories, and on 3 to 8 score 4 or 5 stories. A random 10% gap stays inside that, and at 15% the p90 doesn't. A call that stops early leaves its gap in one run, so the same nights were also run with a contiguous 10% gap at every offset: 3.5% changed on average, p90 6.8%, worst 10.7%, and up to 4 score 4 or 5 stories lost, so the worst offsets do fall outside. No real run has left a gap after the second call.
+
+**Any gap left after both calls fails the unit.** The gap sits at the end of the list when a call stops early, and that's where the threads are. `fallback_keep` has no threads, so they're all dropped: with 11 stories left unanswered on 11-06, METR's thread (the day's only score 5) goes, and a green unit would hide it. A re-run costs under $0.50 at list price and heals it, so the unit fails and says so, and the brief still runs. Keeping unanswered threads by rule would add lines nobody judged, and a third call has no evidence behind it: the second call has answered everything in all 16 real tries.
+
+**Only complete answers are cached.** A transient failure then heals on `run.sh triage`, with no `--fresh`. A repaired answer is complete, so it's cached and replays.
+
+**Not built:**
+
+- **Short ids.** They stopped the slip in the 4 calls tried and cut output about 15%, but they change every night's input and need calibrating again, and a slip would no longer show: a wrong `c58` is a valid id, while a wrong hex id is unknown or repeats. Worth another look if second calls become common. The run report's notes will show how often.
+- **Re-asking the answer right after each gap.** It would catch a wrong answer under a real id whose own answer was left out. None of the 16 whole-list answers captured shows this: a word-overlap scan found 2 suspects, and both are right, matching other calls on the same story. The one misfiled answer seen was repeated under its id, and the "answered twice" rule catches that.
+- **A wider "placeholder" check.** The exact word is the only filler form seen, 3 of 3.
+
+Checks: 682 tests, all 27 deliberately broken versions of the fix caught, and two independent reviews. Real `triage --fresh` on 11-06: status ok, 29 kept, 3 threads, the story at score 3 (as in all 4 clean whole-list calls), METR at 5, and a re-run with no flag replayed byte-identical. Earlier runs of the fix on the same input kept 30 and 31. Whole first-call answers through the old and new code on 7 real nights: all 421 output files byte-identical, and the old code's cache files replay with no call. When a first call errors and a second answers everything, the report gains one note, "call 1 failed". All 18 live cache files hold no repeated ids or filler. With the real CLI and a stand-in `claude` on 11-06's candidates, a gap trips the real gate lines from `deploy/run.sh`, the report names METR's id, and a plain re-run asks again and comes back ok.

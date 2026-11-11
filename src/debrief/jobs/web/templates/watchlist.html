@@ -3,26 +3,31 @@
 {% block title %}Jobs · Watchlist{% endblock %}
 {% block body %}
 <h1>Watchlist</h1>
-<p class="sub">Companies whose own job board is read in full every night. Their jobs get their own section on Today.</p>
+<p class="sub">Companies whose own job board is read in full every night, in two lists: large established companies and startups. Their jobs get their own section on Today, and the model reads both lists.</p>
 {% if message %}<p class="msg">{{ message }}</p>{% endif %}
 {{ change_groups(changes) }}
 {% if notice %}<p class="err">{{ notice }}</p>{% endif %}
 {% if form %}{{ problems(form, checking, "/watchlist") }}{% endif %}
+{% for l in lists %}
+<section id="{{ l.anchor }}">
+<h2>{{ l.title }}</h2>
 <table>
   <tr><th>Company</th><th>Board</th><th>Open jobs</th><th></th></tr>
-  {% for r in rows %}
+  {% for r in l.rows %}
   <tr><td>{{ r.name }}{% if r.note %}<div class="note">{{ r.note }}</div>{% endif %}</td><td>{{ r.board or 'none found' }}</td>
       <td>{{ r.open if r.open is not none else '–' }}</td>
       <td><a class="btn" href="/watchlist/remove?name={{ r.name|urlencode }}">Remove</a></td></tr>
   {% else %}<tr><td colspan="4" class="empty">No companies yet.</td></tr>{% endfor %}
 </table>
-<h2>Add a company</h2>
 <form class="row" method="post" action="/watchlist/add">
-  <input type="text" name="name" placeholder="Company name" required>
-  <input type="url" name="url" placeholder="Careers page URL (optional)">
-  <button type="submit" class="primary">Add</button>
+  <input type="hidden" name="kind" value="{{ l.kind }}">
+  <input type="text" name="name" placeholder="Company name" required aria-label="Company name for {{ l.title }}">
+  <input type="url" name="url" placeholder="Careers page URL (optional)" aria-label="Careers page URL">
+  <button type="submit" class="primary">Add to {{ l.title }}</button>
 </form>
-<p class="note">Looks up its job board now (the board directory, or the URL you give) with a few polite requests.</p>
+</section>
+{% endfor %}
+<p class="note">Add looks up the company's job board now (the board directory, or the URL you give) with a few polite requests.</p>
 {% if form and rows %}
 <h2>Boards and notes</h2>
 <form class="watch-edit" method="post" action="/watchlist/edit" novalidate autocomplete="off">

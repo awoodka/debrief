@@ -1,4 +1,4 @@
-# Exact pins for requirements-dev.in (runtime + test tools), from pip freeze on 2026-11-06 (existing pins kept as constraints).
+# Exact pins for requirements-dev.in (runtime + test tools), from pip freeze on 2026-11-11 (existing pins kept as constraints).
 anyio==4.16.0
 attrs==26.1.0
 babel==2.18.0
@@ -30,6 +30,7 @@ pluggy==1.7.0
 pycparser==3.12
 Pygments==2.21.0
 PyJWT==2.15.1
+pypdf==7.0.1
 pytest==9.1.1
 python-dateutil==3.0.0
 python-dotenv==1.2.4

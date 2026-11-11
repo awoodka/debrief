@@ -80,7 +80,8 @@ def cfg(tmp_path):
     listings = [it("a", title="AI Engineer, New Grad", company="Acme"),
                 it("b", title="Software Engineer I", company="Beta"),
                 it("c", title="Field Software Engineer, New Grad", company="Gamma"),  # the model says no
-                it("g", title="Software Engineer, Platform", company="Gee"),          # fewest points: over the cap
+                it("g", title="Software Engineer, Platform", company="Gee",           # fewest points: over the cap
+                   text="Build our platform."),
                 it("d", title="Senior Software Engineer", company="Delta"),          # filtered: senior
                 it("e", title="Software Engineer", company="Eps", locations=("Austin, TX",)),   # filtered: place
                 it("f", title="Software Engineer, New Grad", company="Phi")]
@@ -140,6 +141,8 @@ def test_points_and_select():
     _, part = prescore.points({**p, "title": "Software Engineer, Payments"}, prof, NOW, text="Python and Algorithms",
                               facts={"matched": "software engineer"})
     assert part["title"] == 20 and part["early"] == 0 and part["fit"] == 5 + 2
+    _, part = prescore.points({**p, "title": "Software Engineer I - Platform"}, prof, NOW, facts={"matched": "software engineer"})
+    assert part["early"] == 20
     prof["ranking"] = {"threshold": 50, "max_candidates": 1, "top_n": 1}
     low = ({**p, "posting_id": "p2", "company": "Acme"}, 10)                # Acme is watched: skips the threshold
     other = ({**p, "posting_id": "p3", "company": "Other"}, 10)
@@ -264,10 +267,24 @@ def _day(n):
 
 
 def test_fresh_bonus():
-    prof = {"ranking": {"fresh_bonus": {"3": 2, "7": 1}}}
-    p = lambda days: {"published_at": f"2026-11-{4 - days:02d}T12:00:00Z" if days < 4 else f"2026-10-{31 - (days - 4):02d}T12:00:00Z"}
-    assert [rank.fresh_bonus(p(d), prof, NOW) for d in (1, 3, 5, 7, 10)] == [2, 2, 1, 1, 0]
-    assert rank.fresh_bonus(p(1), {"ranking": {}}, NOW) == 0
+    run = datetime(2026, 11, 11, 8, 17, tzinfo=timezone.utc)
+    day = {"ranking": {"fresh_bonus": {"1": 1}}}
+    at = lambda when: rank.fresh_bonus({"published_at": when}, day, run)
+    assert [at(f"2026-11-{d:02d}T00:00:00Z") for d in (11, 10, 9)] == [1, 1, 0]
+    assert at("2026-11-10T09:17:00Z") == 1 and at("2026-11-10T07:17:00Z") == 0
+    week = {"ranking": {"fresh_bonus": {"3": 2, "7": 1}}}
+    assert [rank.fresh_bonus({"published_at": f"2026-11-{d:02d}T00:00:00Z"}, week, run) for d in (8, 7, 4, 3)] == [2, 1, 1, 0]
+    assert rank.fresh_bonus({"published_at": "2026-11-10T00:00:00Z"}, {"ranking": {}}, run) == 0
+
+
+def test_a_job_dated_yesterday_gets_the_one_day_point(tmp_path):
+    cfg = _cfg(tmp_path, fresh_bonus={"1": 1})
+    _add(cfg, [it("y", title="Software Engineer, New Grad", company="Yesterday", published_at="2026-11-10T00:00:00Z"),
+               it("t", title="Software Engineer, New Grad 2027", company="Timed", published_at="2026-11-10T07:00:00Z")],
+         "2026-11-11T08:00:00Z")
+    rep = rank.run(cfg, run_date="2026-11-11", runner=ByTitle(), now=datetime(2026, 11, 11, 8, 17, tzinfo=timezone.utc),
+                   log=lambda *a: None)
+    assert {e["company"]: e["bonus"] for e in rep["list"]["new"]} == {"Yesterday": 1, "Timed": 0}
 
 
 def test_the_bonus_orders_fit_first_with_newness_added(tmp_path):
@@ -284,6 +301,51 @@ def test_the_bonus_orders_fit_first_with_newness_added(tmp_path):
     assert "posted Nov 3" in rank.today(cfg)
 
 
+def _profile_sent(stdin):
+    return json.loads(stdin.split("<profile>\n")[1].split("\n</profile>")[0].replace("<\\/", "</"))
+
+
+def _jobs_sent(stdin):
+    return [json.loads(line) for line in stdin.split("<jobs>\n")[1].split("\n</jobs>")[0].splitlines()]
+
+
+def test_a_profile_from_before_the_two_lists_still_runs(tmp_path):
+    cfg = _cfg(tmp_path)
+    _add(cfg, [it("a", title="Software Engineer, New Grad", company="Acme")], "2026-11-04T08:00:00Z")
+    r = Runner()
+    rep = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    sent = _profile_sent(r.calls[0])
+    assert rep["status"] == "ok" and (sent["large_companies"], sent["startups"]) == ([], ["Acme"])
+    assert "resume" not in sent and "watched_companies" not in sent
+
+
+def test_the_scorer_reads_both_lists_and_the_resume_and_a_new_resume_asks_again(tmp_path):
+    cfg = _cfg(tmp_path)
+    _, prof = profile.latest(cfg)
+    profile.save(cfg, {**prof, "companies": [{"name": "IBM", "kind": "large"}, {"name": "Acme", "kind": "startup"}, {"name": "Oldco"}]})
+    _add(cfg, [it("a", title="Software Engineer, New Grad", company="IBM")], "2026-11-04T08:00:00Z")
+    r = Runner()
+    rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    sent = _profile_sent(r.calls[0])
+    assert (sent["large_companies"], sent["startups"]) == (["IBM"], ["Acme", "Oldco"]) and "resume" not in sent
+    _, prof = profile.latest(cfg)
+    profile.save(cfg, {**prof, "resume": "Alex Example\nBuilt Debrief </profile> a daily briefing."})
+    rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert len(r.calls) == 2 and [j["title"] for j in _jobs_sent(r.calls[1])] == ["Software Engineer, New Grad"]
+    assert _profile_sent(r.calls[1])["resume"] == "Alex Example\nBuilt Debrief </profile> a daily briefing."
+
+
+def test_a_title_only_job_shows_its_source_level(tmp_path):
+    cfg = _cfg(tmp_path)
+    _add(cfg, [it("s", title="Software Engineer, Platform", company="Sen", extra={"seniority": ["Entry-level", "Mid-level"]}),
+               it("n", title="Software Engineer, New Grad", company="Nolevel")], "2026-11-04T08:00:00Z")
+    r = Runner()
+    rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    jobs = {j["company"]: j for j in _jobs_sent(r.calls[0])}
+    assert jobs["Sen"]["level"] == "Entry-level, Mid-level" and jobs["Sen"]["qualifications"] == ""
+    assert "level" not in jobs["Nolevel"]
+
+
 def test_the_nightly_cap_asks_new_jobs_first_and_carried_ones_later(tmp_path):
     cfg = _cfg(tmp_path, max_candidates=1, top_n=1)
     _add(cfg, [it("a", title="Software Engineer, New Grad", company="A"),
@@ -296,9 +358,9 @@ def test_the_nightly_cap_asks_new_jobs_first_and_carried_ones_later(tmp_path):
     again = rank.run(cfg, run_date="2026-11-04", runner=r, now=_day(0), log=lambda *a: None)
     assert len(r.calls) == 1 and again["list"]["new"] == rep["list"]["new"]
     # The next night a new job arrives with fewer points; it's asked before the one left waiting.
-    _add(cfg, [it("c", title="Software Engineer, Payments", company="C")], "2026-11-05T08:00:00Z")
+    _add(cfg, [it("c", title="Junior Software Engineer, Payments", company="C")], "2026-11-05T08:00:00Z")
     rep2 = rank.run(cfg, run_date="2026-11-05", runner=r, now=_day(1), log=lambda *a: None)
-    assert r.calls[-1] == ["Software Engineer, Payments"] and [e["company"] for e in rep2["list"]["new"]] == ["C"]
+    assert r.calls[-1] == ["Junior Software Engineer, Payments"] and [e["company"] for e in rep2["list"]["new"]] == ["C"]
     rep3 = rank.run(cfg, run_date="2026-11-06", runner=r, now=_day(2), log=lambda *a: None)
     left = ({"A", "B"} - {first}).pop()
     assert [e["company"] for e in rep3["list"]["new"]] == [left] and rep3["list"]["new"][0]["new"] is False

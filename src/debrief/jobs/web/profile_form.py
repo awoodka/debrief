@@ -82,6 +82,7 @@ class FieldView:
     inputmode: str = ""
     placeholder: str = ""
     height: int = 0
+    upload: str = ""
     choices: tuple[tuple[str, str], ...] = ()
     rows: tuple[RowView, ...] = ()
 
@@ -249,6 +250,33 @@ class Area(_MultiLine, Field):
 
     def extras(self, typed):
         return {"height": min(max(len(typed) // 70 + typed.count("\n") + 2, 4), 20)}
+
+
+@dataclass(frozen=True)
+class Document(Area):
+    widget = "document"
+    blank: Any = MISSING
+    upload: str = ""
+
+    def extras(self, typed):
+        return {**super().extras(typed), "upload": self.upload}
+
+    def words(self, value):
+        if value is MISSING or value is None:
+            return NOT_SET
+        ws = value.split()
+        return f"{len(value):,} characters, starting “{' '.join(ws[:8])}{'…' if len(ws) > 8 else ''}”"
+
+    def say(self, old, new, row=""):
+        if old == new:
+            return []
+        if old is MISSING:
+            note = f"Added, {len(new):,} characters"
+        elif new is MISSING:
+            note = "Removed"
+        else:
+            note = f"Edited, {len(old):,} → {len(new):,} characters" if len(old) != len(new) else f"Edited, {len(new):,} characters"
+        return [Change(self.said_label(row), note=note)]
 
 
 @dataclass(frozen=True)
@@ -539,6 +567,10 @@ def _dots(*parts):
     return " · ".join(p for p in parts if p)
 
 
+def _count(typed, noun):
+    return f"{typed} {noun}" if typed.strip() == "1" else f"{typed} {noun}s"
+
+
 def _money(value):
     return f"${int(value)}" if value == int(value) else f"${value:.2f}"
 
@@ -564,7 +596,8 @@ def _looking(doc):
 
 def _keep(doc):
     f = doc["filters"]
-    return _dots(f"{_money(f['min_hourly_pay'])} an hour or more", f"last {f['max_age_days']} days", f"up to {f['max_years']} years",
+    pay = f"{_money(f['min_hourly_pay'])} an hour or more" if f["min_hourly_pay"] else "Any pay"
+    return _dots(pay, f"last {f['max_age_days']} days", f"up to {_noun(f['max_years'], 'year')}",
                  "full-time" if f["full_time_only"] else "", "new grad" if f["new_grad_only"] else "",
                  _noun(len(f["blocklist"]), "company") + " hidden")
 
@@ -576,9 +609,16 @@ def _daily(doc):
                  f"the model reads up to {r['max_candidates']} a night")
 
 
-def _watching(doc):
-    names = [c["name"] for c in doc["companies"]]
-    return f"{_and(names)}. Boards and notes are set on the Watchlist page." if names else "No companies yet."
+def _resume(doc):
+    text = doc.get("resume")
+    return f"{len(text):,} characters the model reads" if text else "None. The model reads your projects only."
+
+
+def _companies(kind):
+    def summary(doc):
+        names = [c["name"] for c in doc["companies"] if profiles.company_kind(c) == kind]
+        return _some(names, keep=5) if names else "None yet. Add them on the Watchlist page."
+    return summary
 
 
 def _skills(doc):
@@ -641,6 +681,9 @@ WORK_AUTHORIZATION = {"us_citizen": "US citizen", "permanent_resident": "Permane
                       "authorized_no_sponsorship": "Authorized, no sponsorship needed", "needs_sponsorship": "Needs sponsorship"}
 CLEARANCE = {"none": "None", "public_trust": "Public trust", "secret": "Secret", "top_secret": "Top secret", "ts_sci": "TS/SCI"}
 DEGREES = {k: k for k in ("High school", "Associate", "BS", "BA", "MS", "MEng", "MBA", "PhD", "Other")}
+COMPANY_KINDS = {"large": "Large companies", "startup": "Startups"}
+LIST_ANCHORS = {"large": "large", "startup": "startups"}
+RESUME_FILE = "resume_file"
 SEARCH, ABOUT = "Your search", "About you"
 ANY_CHOICE = {"required": "Pick one of the options."}
 
@@ -670,11 +713,11 @@ TABLE = (
               noun="word"),
     )),
     Group("keep", "Which jobs to keep", SEARCH, _keep, fields=(
-        Number("filters.min_hourly_pay", "Minimum pay", "Stated pay clearly below this is dropped. Unstated pay stays.",
+        Number("filters.min_hourly_pay", "Minimum pay", "Stated pay clearly below this is dropped. Unstated pay stays. 0 turns this off.",
                whole=False, pre="$", unit="an hour"),
         Number("filters.max_age_days", "Oldest job", "Older postings are dropped.", unit="days"),
         Number("filters.max_years", "Most experience asked for",
-               "Jobs asking for more are dropped. The scoring prompt separately assumes 2.", unit="years"),
+               "Jobs asking for more are dropped, and the model reads this too.", unit="years"),
         Toggle("filters.full_time_only", "Full-time only", "Drops jobs a source marks part-time, contract, temporary or internship."),
         Toggle("filters.new_grad_only", "New grad only", "Keeps only jobs with a sign they're for new grads."),
         Lines("filters.blocklist", "Companies to hide", "One per line. These never appear on your list.", noun="company"),
@@ -685,26 +728,35 @@ TABLE = (
     ), fine=(
         Number("ranking.max_candidates", "Most jobs the model reads", "Sets the nightly question budget.", unit="jobs"),
         Number("ranking.threshold", "Points to reach the model", "Watchlist companies skip this.", unit="points"),
-        MapRows("ranking.fresh_bonus", "Freshness bonus", "Added to the model's score when ordering the list. Leave blank for no bonus.",
+        MapRows("ranking.fresh_bonus", "Freshness bonus",
+                "Added to the model's score when ordering the list. A job dated yesterday is 1 day old. Leave blank for no bonus.",
                 blank=MISSING, row_noun="bonus", add_label="Add a bonus", id_key="days", value_key="bonus",
                 messages={"additionalProperties": "Days must be a whole number from 1 to 999."},
-                title=lambda r: f"Within {r.get('days', '')} days", summary=lambda r: f"+{r.get('bonus', '')} points",
+                title=lambda r: f"Within {_count(r.get('days', ''), 'day')}", summary=lambda r: f"+{_count(r.get('bonus', ''), 'point')}",
                 fields=(Text("days", "Within this many days", messages=_must("Enter a number of days.")),
                         Number("bonus", "Add", unit="points", messages=_must("Enter the points to add.")))),
     )),
-    Group("watchlist", "Watchlist", SEARCH, _watching, link="/watchlist"),
+    *(Group(LIST_ANCHORS[kind], title, SEARCH, _companies(kind), link=f"/watchlist#{LIST_ANCHORS[kind]}")
+      for kind, title in COMPANY_KINDS.items()),
     Group("skills", "Skills and interests", ABOUT, _skills, fields=(
         Lines("skills", "Skills", "One per line. Each match in a job's text earns points, and the model reads the whole list.", noun="skill"),
         Lines("interests", "Interests", "One per line.", noun="interest"),
     )),
     Group("projects", "Projects", ABOUT, _projects, fields=(
-        Rows("projects", "Your projects", "Written once and untailored. The model judges fit from these, never from a resume.",
+        Rows("projects", "Your projects", "The model reads each project's name and summary, along with your resume.",
              row_noun="project", add_label="Add a project",
              summary=lambda r: r.get("summary", "")[:70],
              fields=(Text("name", "Name", messages=_must("Give this project a name.")),
                      Area("summary", "What it is", messages=_must("Say what this project is. It's what the model reads.")),
                      Lines("skills", "Skills used", "One per line. For your own records. Only the name and summary reach the model.",
                            noun="skill"))),
+    )),
+    Group("resume", "Resume", ABOUT, _resume, fields=(
+        Document("resume", "Your resume",
+                 "The model reads this with your projects every night, taking what you've built and studied, not the role "
+                 "a version was aimed at. Paste it, or choose a PDF or text file and press Check to read it into the box. "
+                 "Leave out anything you'd rather it not read, like your phone number. Empty the box to stop it reading one.",
+                 upload=RESUME_FILE),
     )),
     Group("education", "Education", ABOUT, _education, fields=(
         Choice("degree.level", "Degree", labels=DEGREES, messages=ANY_CHOICE),
@@ -729,6 +781,8 @@ WATCH_TABLE = (
              summary=lambda r: r.get("board", "").strip() or "no board yet",
              fields=(Text("name", "Company", "Must match the employer name on postings. Renaming can lose its watchlist matches.",
                           messages=_must("Give this company a name. To take it off, use Remove.")),
+                     Choice("kind", "List", "Which of your two lists it's on. The model reads both.", labels=COMPANY_KINDS,
+                            messages=ANY_CHOICE),
                      Text("board", "Job board", "Paste the careers page URL, or type it like greenhouse:acme.",
                           blank=None, placeholder="greenhouse:acme", accept=_board,
                           messages={"pattern": "That isn't a job board we can read. Paste its careers page URL, or type it like "
@@ -942,6 +996,7 @@ KEYWORD_WORDING = {
     "minimum": "Must be at least {limit}.",
     "maximum": "Must be {limit} or less.",
     "minLength": "Can't be blank.",
+    "maxLength": "Too long: at most {limit:,} characters.",
     "minItems": "Add at least one.",
     "minProperties": "Add at least one.",
     "uniqueItems": "Something here is listed twice.",

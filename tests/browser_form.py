@@ -13,7 +13,7 @@ class _Forms(HTMLParser):
             self.inside = a.get("action") == self.action
         if not self.inside:
             return
-        if tag == "input" and "name" in a and a.get("type") != "submit":
+        if tag == "input" and "name" in a and a.get("type") not in ("submit", "file"):
             if a.get("type") == "checkbox":
                 if "checked" in a:
                     self.posted[a["name"]] = a.get("value", "on")

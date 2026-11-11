@@ -22,7 +22,8 @@ Alex directs plan changes through this chat, because editing files over SSH is a
   - the watchlist;
   - a short "what I want" text in Alex's words.
 
-  **No resume**: Alex tailors it to each job, so it would skew the scores.
+  **No resume**: Alex tailors it to each job, so it would skew the scores. (Reversed in Revision 8:
+  the scorer reads Alex's current resume and takes its facts, not the role it was aimed at.)
 - **Site:** jobs.alexwoodka.com, private behind Cloudflare Access, with a link to today's
   Debrief. Debrief stays public and unchanged. Alex's own list (saved → applied → interviewing →
   closed) lives in the site.
@@ -1009,3 +1010,90 @@ mean that I have added it to an outside tracker"); Claude runs the Caddy change 
   changed one setting the save stops and explains. Companies are added, removed and edited on
   `/watchlist`. The site shows no JSON. `debrief jobs profile show|check|save` is unchanged and remains
   the way to work with the raw document. 642 tests pass.
+
+## Revision 8 (Alex, 2026-11-11): only jobs a new grad can get, ordered by Alex's priorities
+Alex: "There are a lot of jobs that are getting through that I am simply unqualified for or are not
+new-grad jobs. Furthermore, the focus on AI/ML roles is good, but I would also just like to
+emphasize any role that is both technical and client facing, such as FDSEs. Although startups are
+good, unless its a great fit, I would prefer to be shown a new listing at a larger company with
+repore, like IBM. … So nice match startup (in list), then FDSE type, then big company, then other
+startups where I could fit. I would like no consideration to salary at the moment. And since this
+should only show listings in the last 24 hours really, I would like it to be a point if posted in
+that time fram and 0 if not. If the details of the listing cannot be gathered, I would like only
+information in the job title to be used, less infering. If new-grad or entry level is not in the
+title and you cannot access the listing, assume it is not new grad focused (unless its something
+like Junior where it could be). I would still like my current resume and project to be considered
+though. Please also add a section to the settings page for large companies I want to monitor and
+then a list of startups I would like to monitor as well. You could also add a section for resume
+uploads." On the order: "There shouldn't be anything forcing this or trying to group them, simply
+giving you an idea of the behavior of the tool that I am expecting."
+
+Built:
+- **Title only.** `filters.new_grad_sign` checks the title, then the source's own level field, and
+  only with a description, a new-grad list or the description itself. A list alone no longer passes
+  a job nobody could read. Its cut reads "nothing says it's for new grads (title only)".
+- **"Engineer I" anywhere in the title.** `filters.title_level` is `items.early_career` or
+  `LEVEL_TITLE`, which now also matches a standalone I or 1 up to three words after engineer,
+  developer, scientist, analyst, programmer, SDE, SWE or MTS ("Software Engineer I - Engagement
+  Growth", "SDE I", "Engineer I/II"), and "Level 0". It doesn't match "II", "I/O", "I'm", "Layer-1",
+  "1.5" or a range ("Levels 1 - 5"). The level check and the points' 20 early points share it.
+  Merging still uses `early_career`, unchanged. On a copy of the data, 164 of 12,051 open titles gain
+  a title sign.
+- **One point for a day.** `rank.age_days`: a date-only stamp (exactly midnight UTC, as most lists
+  give) counts whole days from the run's local date, so with `ranking.fresh_bonus` `{"1": 1}` a job
+  dated today or yesterday gets +1. A full timestamp counts hours, so +1 means 24.
+- **The scorer.** `prompts/jobs_score_v1.md` is rewritten in place (its hash, and so the report's
+  prompt version, changes). keep is a factual question: drop a listing that requires more years than
+  `max_years_experience`, professional experience a new grad lacks, a graduate degree or research
+  record, or a bar only a standout record meets, as the listing itself states it. Skills outside
+  Alex's never drop a job. The score uses `wants` as guidance and never as tiers, and leaves out pay
+  and recency (code adds the point). In the fair band it leans toward a large, established company
+  over a comparable startup on neither list, as `wants` asks. A job with no readable listing is
+  judged from its title, its company and Alex's two lists, without guessing its requirements, and
+  can't be scored as a great fit unless the title alone shows one. The model reads
+  `large_companies` and `startups` (in place of `watched_companies`), the resume, and each job's
+  source `level` label.
+- **Two company lists.** `companies[].kind` is `large` or `startup`, optional, and
+  `profile.company_kind` reads a missing kind as startup, so every earlier version stays valid. Both
+  lists get the full watchlist treatment. `debrief jobs watch add NAME --kind large|startup` (kind
+  required). The Watchlist page has a section per list, each with its own Add; Boards and notes has a
+  List choice per company. The Profile page has two cards, Large companies and Startups, naming each
+  list's companies and opening its section.
+- **The resume.** `resume` in the profile: text, 1 to 20,000 characters, optional. The Resume box on
+  the Profile page takes pasted text, or a PDF or text file (`jobs/resume.py`, pypdf). The file's text
+  goes into the box, so Check shows it, Save saves it, and an unreadable file (a Word file, a scan, a
+  locked or broken PDF) keeps everything typed and says why on the box. A request over 2.5 MB is
+  refused before it's read. Change lines and the version page give its size and first words, never
+  the text. A saved change is a new profile id, so the scorer asks again. A save sent in chunks (no
+  Content-Length) still works; the file read is capped either way.
+- **Pay off.** `min_hourly_pay` 0 turns the pay check off (no code change); the page reads "Any pay".
+- **Packages added** (no existing pin changed): pypdf 7.0.1.
+
+Not built, on purpose:
+- Tiers, groups or per-kind points in code. Alex's order lives in `wants`, which Alex edits.
+- An Add box on the Profile page. Add looks a board up over the network and saves at once, so it
+  stays on the Watchlist page, one click from each card.
+- Removing the pay stage. Alex said "at the moment", so it stays one number away.
+- Re-asking after a prompt-only edit. `prompt_version` is still only recorded; profile v10 changes the
+  id anyway.
+- Reading more descriptions for title-only jobs. That is a separate decision.
+
+Profile v10, saved on the server after deploy (never in the repo): the new `wants` with Alex's
+order, a "Forward deployed / implementation" kind of role, Anthropic, OpenAI and Hugging Face under
+large companies and Scale AI under startups (Alex, 2026-11-11),
+`max_years` 1, `min_hourly_pay` 0 and `fresh_bonus` `{"1": 1}`.
+
+Verified: 686 tests pass (scratch data, an image with pypdf). On a copy of the live data, 11-11
+rescored under v10 plus IBM as a large company (`jobs score --no-cap`, 117 jobs, about $0.24 a run):
+- passed the filters 140 -> 117; level cuts among tonight's new postings 33 -> 51, 20 of them title only.
+- the top 20: title-only jobs with no new-grad word in the title 5 -> 0 (Two Sigma, Neuralink,
+  Upwind, Mirantis and WD are gone); forward deployed, deployment and integration roles 0 -> 4.
+- not kept: 25 of 117, each for a stated reason (2+ years required, a Master's or PhD required, an
+  active clearance, an internship or co-op, OPT only).
+- the same prompt run twice changes 25 to 33 of the 117 scores by about a point and flips no keep, so
+  one before/after can't show a small prompt change. Two runs of the final prompt both put
+  large-company entry roles (Highmark, Home Depot, Northrop, Cisco, Leidos; 13 jobs) above startups
+  on neither list known only by title (4 jobs): 4.85 and 4.92 against 4.50. The two top-20 lists
+  share 18 jobs.
+- the Profile and Watchlist pages rendered from that copy show both cards, both sections and the
+  Resume box, and a Check with a test PDF fills the box and saves nothing.

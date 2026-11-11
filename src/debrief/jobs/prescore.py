@@ -40,7 +40,7 @@ def points(posting, profile, now, text=None, facts=None, sources=(), early_sourc
     extra = [w for w in title_ws if w not in set(matched)]
     plain = [w for w in extra if not early_career(w) and w not in ("new", "grad", "level", "early", "career", "i", "1")]
     part = {"title": 30 if matched and not plain else 20 if matched else 0}
-    if early_career(posting["title"]):
+    if filters.title_level(posting["title"]):
         part["early"] = 20
     elif set(sources) & set(early_sources):
         part["early"] = 15

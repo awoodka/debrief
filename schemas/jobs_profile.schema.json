@@ -29,7 +29,7 @@
     },
     "projects": {
       "type": "array",
-      "description": "Written once and untailored: the scorer judges fit from these, never from a resume.",
+      "description": "The scorer reads each project's name and summary, along with the resume.",
       "items": {
         "type": "object", "additionalProperties": false, "required": ["name", "summary", "skills"],
         "properties": {"name": {"type": "string", "minLength": 1}, "summary": {"type": "string", "minLength": 1},
@@ -39,18 +39,22 @@
     "interests": {"$ref": "#/$defs/words"},
     "companies": {
       "type": "array",
-      "description": "Companies of interest: the watchlist. Their boards are read every night, and their jobs skip the pre-score threshold (not the filters).",
+      "description": "Companies of interest, in two lists (kind): large established companies and startups. Their boards are read every night, their jobs skip the pre-score threshold (not the filters), and the scorer reads both lists.",
       "items": {
         "type": "object", "additionalProperties": false, "required": ["name"],
         "properties": {
           "name": {"type": "string", "minLength": 1},
           "board": {"type": ["string", "null"], "pattern": "^(greenhouse|lever|ashby|workable|smartrecruiters|recruitee|workday):[^\\s]+$",
                     "description": "system:id; null until found (directory lookup or a pasted careers URL)"},
-          "note": {"type": "string"}
+          "note": {"type": "string"},
+          "kind": {"enum": ["large", "startup"],
+                   "description": "which list: a large established company, or a startup. Missing (versions saved before Revision 8) means startup."}
         }
       }
     },
-    "wants": {"type": "string", "minLength": 1, "description": "In Alex's words: what to look for and what not. The scorer's definition of relevant."},
+    "wants": {"type": "string", "minLength": 1, "description": "In Alex's words: what to look for and what not, and in what order. The scorer's guide to what's relevant."},
+    "resume": {"type": "string", "minLength": 1, "maxLength": 20000,
+               "description": "Alex's current resume as plain text, uploaded (PDF or text) or pasted on the settings page. The scorer reads it with the projects. Missing: no resume."},
     "filters": {
       "type": "object", "additionalProperties": false,
       "required": ["locations", "max_years", "max_age_days", "work_authorization", "clearance", "exclude_titles", "blocklist",
@@ -76,9 +80,9 @@
         "exclude_titles": {"$ref": "#/$defs/words", "description": "whole words or phrases; any match drops the job. Checked against what is left of the title after its matched position-type title is taken out, so 'member of technical staff' isn't dropped by 'staff', but 'staff software engineer' and 'senior member of technical staff' are."},
         "blocklist": {"$ref": "#/$defs/words", "description": "company names never shown"},
         "full_time_only": {"type": "boolean", "description": "drop jobs a source marks part-time, contract, temporary or internship"},
-        "new_grad_only": {"type": "boolean", "description": "keep only jobs with a sign they're for new grads: the title, a new-grad list, the source's level, or the description"},
+        "new_grad_only": {"type": "boolean", "description": "keep only jobs with a sign they're for new grads: the title or the source's level, and with a description, a new-grad list or the description itself"},
         "min_hourly_pay": {"type": "number", "minimum": 0, "maximum": 500,
-                           "description": "USD an hour; a job whose stated pay is clearly below it is dropped (a year is 2,080 hours). Unstated or unclear pay stays."}
+                           "description": "USD an hour; a job whose stated pay is clearly below it is dropped (a year is 2,080 hours). Unstated or unclear pay stays. 0 turns the check off."}
       }
     },
     "ranking": {
@@ -91,7 +95,7 @@
                         "description": "most jobs from one company on the day's list; the rest are counted under its last one (missing: no limit)"},
         "fresh_bonus": {"type": "object", "additionalProperties": false,
                         "patternProperties": {"^[1-9][0-9]{0,2}$": {"type": "integer", "minimum": 0, "maximum": 5}},
-                        "description": "added to the model's score when ordering the list, by days since posting: {\"3\": 2, \"7\": 1} is +2 within 3 days, +1 within 7 (missing: no bonus)"}
+                        "description": "added to the model's score when ordering the list, by days since posting: {\"1\": 1} is +1 within a day. A date-only stamp counts whole days from the run's date, so a job dated yesterday is 1 day old (missing: no bonus)"}
       }
     }
   },

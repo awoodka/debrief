@@ -3,6 +3,7 @@ profile and watchlist edits, and the guards (same-site forms only, no writes dur
 nothing but http(s) links, everything escaped, no scripts)."""
 import json
 import time
+from urllib.parse import urlencode
 
 import jwt
 import pytest
@@ -199,6 +200,123 @@ def test_profile_save_and_history(site):
     assert client.get("/profile/v/99").status_code == 404
 
 
+def pdf(lines):
+    ops = ["BT /F1 11 Tf 72 720 Td 14 TL"] + [f"({line}) Tj T*" for line in lines] + ["ET"]
+    stream = "\n".join(ops).encode("latin-1")
+    objs = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+            b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"]
+    out, offsets = bytearray(b"%PDF-1.4\n"), []
+    for i, o in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1) + b"".join(b"%010d 00000 n \n" % x for x in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)
+    return bytes(out)
+
+
+RESUME_LINES = ["Alex Example", "Education: BS Computer Science, Example U, 2027", "Projects: Debrief, a daily briefing"]
+
+
+def _upload(client, data, name="resume.pdf", kind="application/pdf", **fields):
+    form = browser_submit(client.get("/profile").text, "/profile") | fields
+    return client.post("/profile", data=form, files={"resume_file": (name, data, kind)}, headers={"Origin": ORIGIN},
+                       follow_redirects=False)
+
+
+def test_uploading_a_pdf_resume_fills_the_box_on_check_and_saves_on_save(site):
+    cfg, client, _ = site
+    v, before = profile.latest(cfg)
+    r = _upload(client, pdf(RESUME_LINES), action="check")
+    assert r.status_code == 200 and profile.latest(cfg)[0] == v
+    box = r.text.split('name="resume"')[1].split("</textarea>")[0]
+    assert all(line in box for line in RESUME_LINES)
+    assert "Added, " in r.text.split('<div class="chg">')[1]
+    r = _upload(client, pdf(RESUME_LINES), action="save")
+    assert r.status_code == 303 and "Saved%20as%20version" in r.headers["location"]
+    n, after = profile.latest(cfg)
+    assert n == v + 1 and after["resume"].splitlines() == RESUME_LINES and {**after, "resume": None} == {**before, "resume": None}
+    assert profile.profile_id(after) != profile.profile_id(before)
+    assert "read the resume from resume.pdf" in client.get("/profile").text
+    page = client.get("/profile").text
+    r = client.post("/profile", data=browser_submit(page, "/profile") | {"action": "save"},
+                    files={"resume_file": ("", b"", "application/octet-stream")}, headers={"Origin": ORIGIN}, follow_redirects=False)
+    assert r.status_code == 303 and "No%20change" in r.headers["location"] and profile.latest(cfg)[0] == n
+
+
+def test_a_text_resume_upload_works(site):
+    cfg, client, _ = site
+    r = _upload(client, "\ufeffAlex Example\r\n\r\n\r\nSkills:\tPython,  Go\u200b\n".encode(), name="resume.md",
+                kind="text/markdown", action="save")
+    assert r.status_code == 303 and profile.latest(cfg)[1]["resume"] == "Alex Example\n\nSkills: Python, Go"
+
+
+@pytest.mark.parametrize("data,words", [
+    (b"PK\x03\x04\x14\x00\x06\x00\x08\x00\x00\x00!\x00word/document.xml", "isn&#39;t a PDF or plain text"),
+    (b"%PDF-1.4 not really a pdf", "couldn&#39;t be read"),
+    (pdf([]), "No text found in that file"),
+])
+def test_an_unreadable_upload_keeps_typing_and_saves_nothing(site, data, words):
+    cfg, client, _ = site
+    v = profile.latest(cfg)[0]
+    r = _upload(client, data, name="resume.docx", kind="application/octet-stream", action="save", skills="Python\r\nRust",
+                resume="Typed by hand")
+    assert r.status_code == 400 and profile.latest(cfg)[0] == v
+    assert words in r.text.split('<label for="i-resume">')[1].split('class="hint"')[0]
+    assert "Rust" in r.text.split('name="skills"')[1].split("</textarea>")[0]
+    assert "Typed by hand" in r.text.split('name="resume"')[1].split("</textarea>")[0]
+
+
+def test_a_locked_or_long_pdf_is_explained(site):
+    import io
+    import pypdf
+    cfg, client, _ = site
+
+    def made(pages, password=None):
+        w = pypdf.PdfWriter()
+        for _ in range(pages):
+            w.add_blank_page(612, 792)
+        if password:
+            w.encrypt(password)
+        buf = io.BytesIO()
+        w.write(buf)
+        return buf.getvalue()
+    assert "locked with a password" in _upload(client, made(1, "secret"), action="check").text
+    assert "has 11 pages" in _upload(client, made(11), action="check").text
+
+
+def test_an_oversized_upload_is_refused_before_parsing(site):
+    cfg, client, _ = site
+    v = profile.latest(cfg)[0]
+    r = _upload(client, b"%PDF-" + b"x" * 2_600_000, action="save")
+    assert r.status_code == 413 and "too big" in r.text and profile.latest(cfg)[0] == v
+    r = client.post("/profile", content=b"--b\r\n" * 600_000, headers={"Origin": ORIGIN, "Content-Type": "multipart/form-data; boundary=b"})
+    assert r.status_code == 413 and profile.latest(cfg)[0] == v
+
+
+def test_a_save_sent_in_chunks_still_saves(site):
+    cfg, client, _ = site
+    v = profile.latest(cfg)[0]
+    form = browser_submit(client.get("/profile").text, "/profile") | {"action": "save", "wants": "Only AI roles."}
+    body = urlencode(form).encode()
+    r = client.post("/profile", content=iter([body[:100], body[100:]]), follow_redirects=False,
+                    headers={"Origin": ORIGIN, "Content-Type": "application/x-www-form-urlencoded"})
+    assert r.status_code == 303 and profile.latest(cfg)[0] == v + 1
+    assert profile.latest(cfg)[1]["wants"] == "Only AI roles."
+
+
+def test_an_upload_keeps_the_guards(site):
+    cfg, client, _ = site
+    v = profile.latest(cfg)[0]
+    form = browser_submit(client.get("/profile").text, "/profile") | {"action": "save"}
+    files = {"resume_file": ("resume.pdf", pdf(RESUME_LINES), "application/pdf")}
+    assert client.post("/profile", data=form, files=files).status_code == 403
+    assert client.post("/profile", data=form, files=files, headers={"Origin": "https://evil.example"}).status_code == 403
+    assert profile.latest(cfg)[0] == v
+
+
 # ------------------------------------------------------------------------------- the watchlist
 
 class Boards:
@@ -224,16 +342,31 @@ def test_watchlist_add_and_remove(site):
     client = TestClient(app, base_url=ORIGIN)
     client.headers["Cf-Access-Jwt-Assertion"] = token()
     v0 = profile.latest(cfg)[0]
-    r = client.post("/watchlist/add", data={"name": "Globex", "url": "https://job-boards.greenhouse.io/globex"},
+    r = client.post("/watchlist/add", data={"name": "Globex", "url": "https://job-boards.greenhouse.io/globex", "kind": "startup"},
                     headers={"Origin": ORIGIN})
-    assert r.status_code == 200 and "Added Globex (board greenhouse:globex" in r.text
+    assert r.status_code == 200 and "Added Globex to Startups (board greenhouse:globex" in r.text
     assert profile.latest(cfg)[0] == v0 + 1 and "greenhouse:globex" in r.text
-    r = client.post("/watchlist/add", data={"name": "globex"}, headers={"Origin": ORIGIN})
+    r = client.post("/watchlist/add", data={"name": "globex", "kind": "large"}, headers={"Origin": ORIGIN})
     assert "already on the watchlist" in r.text
     r = client.get("/watchlist/remove?name=Globex")
     assert r.status_code == 200 and "Remove Globex?" in r.text and profile.latest(cfg)[0] == v0 + 1   # asking changes nothing
     r = client.post("/watchlist/remove", data={"name": "Globex"}, headers={"Origin": ORIGIN})
     assert "Removed Globex" in r.text and "greenhouse:globex" not in r.text.split("</nav>")[1].split("Removed")[0]
+
+
+def test_add_puts_a_company_on_the_chosen_list(site):
+    cfg, _, certs = site
+    client = _watch_client(cfg, certs)
+    v = profile.latest(cfg)[0]
+    r = client.post("/watchlist/add", data={"name": "Globex", "url": "https://job-boards.greenhouse.io/globex", "kind": "large"},
+                    headers={"Origin": ORIGIN}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].endswith("#large")
+    assert _company(cfg, 1) | {"note": ""} == {"name": "Globex", "board": "greenhouse:globex", "kind": "large", "note": ""}
+    page = client.get("/watchlist").text
+    large, startups = page.split('id="large"')[1].split("</section>")[0], page.split('id="startups"')[1].split("</section>")[0]
+    assert "Globex" in large and "Acme" not in large and "Acme" in startups and "Globex" not in startups
+    r = client.post("/watchlist/add", data={"name": "Initech", "kind": "medium"}, headers={"Origin": ORIGIN})
+    assert "Add it from one of the two lists." in r.text and profile.latest(cfg)[0] == v + 1
 
 
 def _edit(client, *form, **changes):
@@ -265,10 +398,22 @@ def test_watchlist_board_and_note_can_be_set_and_cleared(site):
     assert _company(cfg) == {"name": "Acme", "board": None}
 
 
+def test_a_company_moves_between_lists_in_boards_and_notes(site):
+    cfg, client, _ = site
+    _with_companies(cfg, [{"name": "Acme"}, {"name": "Globex", "board": None, "kind": "startup"}])
+    page = client.get("/watchlist").text
+    assert '<option value="" selected>Choose</option>' in page.split('name="companies.0.kind"')[1].split("</select>")[0]
+    r = _edit(client, **{"companies.1.kind": "large"})
+    assert r.status_code == 303 and _company(cfg, 1) == {"name": "Globex", "board": None, "kind": "large"}
+    assert _company(cfg) == {"name": "Acme"}
+    r = _edit(client, **{"companies.1.kind": "medium"})
+    assert r.status_code == 400 and "Pick one of the options." in r.text and _company(cfg, 1)["kind"] == "large"
+
+
 def test_an_untouched_watchlist_form_is_a_no_change_with_every_shape_of_company(site):
     cfg, client, _ = site
-    v = _with_companies(cfg, [{"name": "Acme"}, {"name": "B & <C>", "board": None}, {"name": "D", "board": "lever:d", "note": ""},
-                              {"name": " Padded ", "note": "two\nlines"}])
+    v = _with_companies(cfg, [{"name": "Acme"}, {"name": "B & <C>", "board": None, "kind": "large"}, {"name": "D", "board": "lever:d", "note": ""},
+                              {"name": " Padded ", "note": "two\nlines", "kind": "startup"}])
     before = profile.profile_id(profile.latest(cfg)[1])
     r = _edit(client)
     assert r.status_code == 303 and "No%20change" in r.headers["location"]
@@ -279,9 +424,12 @@ def test_the_watchlist_form_has_one_way_to_add_and_one_way_to_remove(site):
     cfg, client, _ = site
     page = client.get("/watchlist").text
     fields = browser_submit(page, "/watchlist/edit")
-    assert sorted(k for k in fields if k.startswith("companies")) == ["companies.0.board", "companies.0.name", "companies.0.note"]
+    assert sorted(k for k in fields if k.startswith("companies")) == ["companies.0.board", "companies.0.kind", "companies.0.name",
+                                                                       "companies.0.note"]
     assert "companies.0.remove" not in page and "companies.1" not in page
-    assert 'action="/watchlist/add"' in page and "/watchlist/remove?name=Acme" in page
+    assert page.count('action="/watchlist/add"') == 2 and page.count("/watchlist/remove?name=Acme") == 1
+    assert browser_submit(page.split('id="large"')[1].split("</section>")[0], "/watchlist/add") == {"kind": "large", "name": "", "url": ""}
+    assert browser_submit(page.split('id="startups"')[1].split("</section>")[0], "/watchlist/add")["kind"] == "startup"
 
 
 def test_a_bad_board_or_name_is_refused_on_its_field_in_plain_words(site):
@@ -363,7 +511,8 @@ def test_adding_a_hidden_company_is_explained_not_a_500(site):
     _, d = profile.latest(cfg)
     v, _ = profile.save(cfg, {**d, "filters": {**d["filters"], "blocklist": ["Globex"]}})
     client = _watch_client(cfg, certs, raise_server_exceptions=False)
-    r = client.post("/watchlist/add", data={"name": "Globex", "url": "https://job-boards.greenhouse.io/globex"}, headers={"Origin": ORIGIN})
+    r = client.post("/watchlist/add", data={"name": "Globex", "url": "https://job-boards.greenhouse.io/globex", "kind": "large"},
+                    headers={"Origin": ORIGIN})
     assert r.status_code == 200 and "Companies to hide" in r.text and profile.latest(cfg)[0] == v
 
 
@@ -377,7 +526,8 @@ def test_a_save_during_the_board_lookup_is_not_reverted(site):
             return super().request(method, url, params, json_body, headers)
 
     client = _watch_client(cfg, certs, boards=SavesDuringLookup())
-    r = client.post("/watchlist/add", data={"name": "Globex", "url": "https://job-boards.greenhouse.io/globex"}, headers={"Origin": ORIGIN})
+    r = client.post("/watchlist/add", data={"name": "Globex", "url": "https://job-boards.greenhouse.io/globex", "kind": "startup"},
+                    headers={"Origin": ORIGIN})
     assert "Added Globex" in r.text
     _, now = profile.latest(cfg)
     assert now["wants"] == "Changed during the lookup." and "Globex" in [c["name"] for c in now["companies"]]

@@ -120,7 +120,7 @@ def test_matching_waiting_and_causes(tmp_path, monkeypatch):
     causes = {m["company"]: m["cause"] for m in r3["misses"]}
     assert causes == {"Umbrella": "not watched", "Stark": "closed site only", "Wayne": "company site only"}
     umbrella = next(m for m in r3["misses"] if m["company"] == "Umbrella")
-    assert 'debrief jobs watch add "Umbrella" --url https://jobs.lever.co/umbrella/' in umbrella["suggestion"]
+    assert 'debrief jobs watch add "Umbrella" --kind large|startup --url https://jobs.lever.co/umbrella/' in umbrella["suggestion"]
     assert r3["google"]["week"]["recall"] == 0.5 and r3["near"][0]["near_company"] == "Palantir"
     assert r3["summary"].startswith("Coverage (7 days): 50% of 6 sampled jobs found; 3 missed:")
     assert "Hooli" not in json.dumps(r3["misses"]) and r3["ineligible_stages"] == {"title": 1}

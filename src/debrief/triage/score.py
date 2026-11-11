@@ -17,14 +17,20 @@ repo (settings, commands, agents) leaks in. Fetched text goes in as JSON data in
 
 Answers are cached in <data>/cache/score/<key>.json, keyed by a hash of everything the call sees
 (system prompt, user message, model, effort, schema). Re-running triage on the same data replays
-the answer, so the index is byte-identical. A failed call (an error, a timeout, an unusable
-answer) is retried once; then ScoringError, and run.py falls back to the deterministic keep.
+the answer, so the index is byte-identical. Only an answer for every candidate is cached, so a
+re-run after a gap asks again.
+
+There are at most two calls, and the second asks only about what the first left without a usable
+answer (see trusted()). A story still without one is decided by the rules, alone (apply()). If no
+call worked, or too few stories have an answer (scoring.min_answered), ScoringError, and run.py
+falls back to the deterministic keep for the whole day.
 """
 import hashlib
 import json
 import os
 import subprocess
 import tempfile
+from collections import Counter
 from datetime import datetime, timezone
 
 from .. import sanitize
@@ -172,21 +178,39 @@ def parse_response(code, stdout, stderr):
     return d["structured_output"], usage
 
 
-def validate(answer, cand_ids, ref_ids, why_max):
-    """{id: {same_as, why, relevant, score}} for every candidate, or ScoringError. Lenient where the
-    meaning is clear: a same_as that names nothing known (or itself) becomes null, a relevant answer
-    without a score becomes 3, an irrelevant one loses its score."""
-    seen, notes = {}, []
-    for it in (answer or {}).get("items") or []:
-        if isinstance(it, dict) and it.get("id") in cand_ids and it["id"] not in seen:
-            seen[it["id"]] = it
-    missing = [i for i in cand_ids if i not in seen]
-    if missing:
-        raise ScoringError(f"{len(missing)} of {len(cand_ids)} candidates unanswered, e.g. {missing[0]}")
-    out = {}
+def trusted(answer, ids):
+    """({id: item} of the answers that can be used, notes on the rest). On a long list the model
+    sometimes can't copy one hex id, and the same input makes it slip the same way again. It leaves
+    the story out, writes why "placeholder" under a made-up or real id, or answers under another
+    story's id. So an id answered twice is trusted nowhere: either answer may be another story's.
+    The notes name ids only, because a why can belong to a dropped story and they reach the report.
+    A failed call's text can quote a dropped story too, so ask() sends that only to the log."""
+    items = [it for it in (answer or {}).get("items") or [] if isinstance(it, dict) and isinstance(it.get("id"), str)]
+    counts = Counter(it["id"] for it in items)
+    got, notes = {}, []
+    for it in items:
+        i = it["id"]
+        if i not in ids:
+            notes.append(f"{i} isn't a story being asked about")
+        elif counts[i] > 1:
+            notes.append(f"{i} answered twice")
+        elif str(it.get("why")).strip().lower() == "placeholder":
+            notes.append(f"{i} answered with a placeholder")
+        else:
+            got[i] = it
+    return got, list(dict.fromkeys(notes))
+
+
+def validate(got, cand_ids, ref_ids, why_max):
+    """{id: {same_as, why, relevant, score}} for the candidates in `got`. Lenient where the meaning
+    is clear: a same_as that names nothing known (or itself) becomes null, a relevant answer without
+    a score becomes 3, an irrelevant one loses its score."""
+    out, notes = {}, []
     known = set(cand_ids) | set(ref_ids)
     for cid in cand_ids:
-        it = seen[cid]
+        if cid not in got:
+            continue
+        it = got[cid]
         same = it.get("same_as")
         if same is not None and (same == cid or same not in known):
             notes.append(f"{cid}: same_as {same!r} names nothing known; ignored")
@@ -206,39 +230,73 @@ def cache_key(model, effort, system, user):
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
+def add_usage(a, b):
+    if a is None:
+        return b
+    return {k: sorted({*a[k], *b[k]}) if k == "served_by" else round(a[k] + b[k], 4) for k in a}
+
+
+def ask(t, model, system, data, runner, log):
+    """Up to two calls. Returns ({id: item}, notes, usage, calls). ScoringError if no call worked or
+    under scoring.min_answered of the stories have an answer: the rules can stand in for a few stories,
+    not for most of a day. The second call lists the answered stories under <reported>, so its same_as
+    can still reach them."""
+    every = data["candidates"]
+    got, notes, errors, usage = {}, [], [], None
+    for attempt in (1, 2):
+        todo = [c for c in every if c["id"] not in got]
+        answered = [{"id": c["id"], "title": c["title"]} for c in every if c["id"] in got]
+        user = render({"candidates": todo, "reported": data["reported"] + answered})
+        try:
+            answer, used = parse_response(*runner(argv_for(model, system, t.get("effort")), user, t["timeout_s"]))
+        except ScoringError as e:
+            errors.append(str(e))
+            notes.append(f"call {attempt} failed")
+            log(f"scoring attempt {attempt} failed: {e}")
+            continue
+        usage = add_usage(usage, used)
+        found, slips = trusted(answer, {c["id"] for c in todo})
+        got |= found
+        left = [c["id"] for c in every if c["id"] not in got]
+        if left:
+            slips.append(f"call {attempt} left {len(left)} of {len(every)} without a usable answer: {', '.join(left[:5])}")
+        for slip in slips:
+            log(f"scoring: {slip}")
+        notes += slips
+        if not left:
+            break
+    if usage is None or len(got) < t["min_answered"] * len(every):
+        raise ScoringError("; ".join(errors + [f"{len(got)} of {len(every)} candidates got a usable answer"]))
+    return got, notes, usage, attempt
+
+
 def call(cache_dir, t, data, model=None, runner=run_claude, fresh=False, log=print):
-    """Score `data` (from payload()). Returns {"answers", "notes", "usage", "cached", "attempts",
-    "model", "prompt_version"}; raises ScoringError."""
+    """Score `data` (from payload()). Returns {"answers", "unanswered", "notes", "usage", "cached",
+    "attempts", "model", "prompt_version"}; raises ScoringError."""
     model = model or t["model"]
     system = system_prompt(t)
-    user = render(data)
-    key = cache_key(model, t.get("effort"), system, user)
+    key = cache_key(model, t.get("effort"), system, render(data))
     cand_ids = [x["id"] for x in data["candidates"]]
     ref_ids = [x["id"] for x in data["reported"]]
     meta = {"model": model, "prompt_version": prompt_version(t, system), "key": key[:16]}
     path = cache_dir / f"{key}.json"
-    if path.exists() and not fresh:
+    cached = path.exists() and not fresh
+    if cached:
         hit = json.loads(path.read_text())
-        answers, notes = validate(hit["answer"], cand_ids, ref_ids, t["why_max_chars"])
-        return {**meta, "answers": answers, "notes": notes, "usage": hit["usage"], "cached": True,
-                "attempts": hit["attempts"]}
-    errors = []
-    for attempt in (1, 2):
-        try:
-            answer, usage = parse_response(*runner(argv_for(model, system, t.get("effort")), user, t["timeout_s"]))
-            answers, notes = validate(answer, cand_ids, ref_ids, t["why_max_chars"])
-        except ScoringError as e:
-            errors.append(str(e))
-            log(f"scoring attempt {attempt} failed: {e}")
-            continue
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"key": key, **meta, "answer": answer, "usage": usage, "attempts": attempt,
-                                   "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},
-                                  ensure_ascii=False, indent=1))
-        os.replace(tmp, path)
-        return {**meta, "answers": answers, "notes": notes, "usage": usage, "cached": False, "attempts": attempt}
-    raise ScoringError("; ".join(errors))
+        got = {it["id"]: it for it in hit["answer"]["items"]}
+        slips, usage, attempts = hit.get("slips", []), hit["usage"], hit["attempts"]
+    else:
+        got, slips, usage, attempts = ask(t, model, system, data, runner, log)
+        if len(got) == len(cand_ids):
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"key": key, **meta, "answer": {"items": list(got.values())}, "slips": slips, "usage": usage,
+                                       "attempts": attempts, "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},
+                                      ensure_ascii=False, indent=1))
+            os.replace(tmp, path)
+    answers, notes = validate(got, cand_ids, ref_ids, t["why_max_chars"])
+    return {**meta, "answers": answers, "unanswered": [i for i in cand_ids if i not in got], "notes": slips + notes,
+            "usage": usage, "cached": cached, "attempts": attempts}
 
 
 # ------------------------------------------------------------------------------ applying answers
@@ -275,6 +333,12 @@ def apply(ctx, groups, result, ledger_doc):
     answers = result["answers"]
     precedence = ctx.t["merge"]["section_precedence"]
     every = {g.id: g for gs in groups.values() for g in gs}
+    unanswered = set(result["unanswered"])
+    for cid in unanswered:
+        g = every[cid]
+        kept = g.rank <= ctx.t["fallback_keep"].get(g.section, 0)
+        answers[cid] = {"same_as": None, "why": "The scoring call gave no answer for this one, so the rules decided.",
+                        "relevant": kept, "score": 3 if kept else None}
     cands = {cid: every[cid] for cid in answers}
     u = Union()
     for cid, a in answers.items():
@@ -290,9 +354,12 @@ def apply(ctx, groups, result, ledger_doc):
         relevant = [g for g in members if g.info["relevant"]]
         if not relevant:
             for g in members:
-                g.drop("score", f"not relevant: {g.info['why']}")
+                if g.id in unanswered:
+                    g.drop("keep", g.info["why"])
+                else:
+                    g.drop("score", f"not relevant: {g.info['why']}")
             continue
-        best = max(relevant, key=lambda g: (g.info["score"], -(g.rank or 0)))
+        best = max(relevant, key=lambda g: (g.info["score"], g.id not in unanswered, -(g.rank or 0)))
         if targets:
             keeper = _revive(ctx, groups, every, targets[0], ledger_doc, rank=min(g.rank or 1 for g in members))
             why = f"same story as {keeper.id}, reported {keeper.prev_reported} (the model's same_as)"

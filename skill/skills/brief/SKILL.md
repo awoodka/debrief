@@ -87,6 +87,8 @@ contains.
   feed failed today, so press coverage may be thin."
 - **Triage's `mode` is `rules_only`:** the stories weren't screened for relevance. Say so in
   `notes`, and judge harder.
+- **A story's `why` says the rules decided:** the scoring call never judged it, so its score of 3
+  means nothing. Judge it yourself.
 - **Thin evidence:** say how thin, in the prose. A detail file with only a title and a link is a
   guess, so don't lead with it.
 

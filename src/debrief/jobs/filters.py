@@ -202,8 +202,14 @@ def place_fit(locations, profile, remote_flag=None):
 
 # ------------------------------------------------------------------------------------------ level
 
-LEVEL_TITLE = re.compile(r"\bassociate\b|\brotation(al)?\b|\bresidency\b|\blevel\s*(i|1)\b", re.I)
+ENTRY_WORDS = r"\bassociate\b|\brotation(al)?\b|\bresidency\b|\blevel\s*(0|i|1)\b(?!\.\d)"
+ROLE = r"\b(engineer|developer|scientist|analyst|programmer|sde|swe|mts)"
+UP_TO_THREE_WORDS = r"(\W+[\w+#]+){0,3}?"
+LEVEL_ONE = r"\W+(?<!-)(i|1)(\s*/\s*(ii|2))?"
+NOT_II_IM_POINT_IO_OR_RANGE = r"(?![\w'’]|\.\d|\s*/\s*o\b|\s*(-|–|to)\s*\d)"
+LEVEL_TITLE = re.compile(f"{ENTRY_WORDS}|{ROLE}{UP_TO_THREE_WORDS}{LEVEL_ONE}{NOT_II_IM_POINT_IO_OR_RANGE}", re.I)
 LEVEL_DATA = re.compile(r"entry|junior|new grad|graduate|early career|student", re.I)
+LEVEL_KEYS = ("levels", "seniority", "level", "experience")
 LEVEL_TEXT = re.compile(
     r"\bnew[\s-]grad(uate)?s?\b|\brecent(ly)?\s+grad(uate|uated|s)?\b|\bentry[\s-]level\b|\bearly[\s-]career\b|"
     r"\b(university|college)\s+grad(uate)?s?\b|\bnew\s+college\s+grad|\bclass\s+of\s+20[2-3]\d\b|"
@@ -212,25 +218,25 @@ LEVEL_TEXT = re.compile(
     r"\bnew\s+graduate\s+level\b", re.I)
 
 
+def title_level(title):
+    return early_career(title) or bool(LEVEL_TITLE.search(title or ""))
+
+
 def new_grad_sign(title, text=None, data=None, listed_early=False):
-    """Where the job says it's for new grads, or None: the title ("New Grad", "Junior", "Associate",
-    "Engineer I", a class year), a new-grad list carrying it, the source's own level field ("Entry
-    Level"), or the description ("new grads", "recent graduates", "0-2 years", "entry-level")."""
-    if early_career(title) or LEVEL_TITLE.search(title or ""):
+    if title_level(title):
         return "title"
-    if listed_early:
-        return "a new-grad list"
     d = data or {}
-    for k in ("levels", "seniority", "level", "experience"):
+    for k in LEVEL_KEYS:
         v = d.get(k)
         vals = v if isinstance(v, list) else [v]
         if any(isinstance(x, str) and LEVEL_DATA.search(x) for x in vals):
             return f"the source's level ({k})"
-    if text:
-        m = LEVEL_TEXT.search(text)
-        if m:
-            return f"the description: {' '.join(m.group(0).split())!r}"
-    return None
+    if not text:
+        return None
+    if listed_early:
+        return "a new-grad list"
+    m = LEVEL_TEXT.search(text)
+    return f"the description: {' '.join(m.group(0).split())!r}" if m else None
 
 
 # ------------------------------------------------------------------------------- degree, employment

@@ -1,6 +1,6 @@
 """The watchlist: the profile's companies, whose boards are read in full every night.
 
-`watch add NAME` finds the company's board with no AI:
+`watch add NAME --kind large|startup` finds the company's board with no AI:
   1. a careers URL (--url) is read by boards.board_from_url;
   2. otherwise the name is looked up in the board directory (the two company-board lists, plus
      every board the community lists and watchlist link to). Every board filed under exactly that
@@ -74,11 +74,13 @@ def _latest_without(cfg, name):
     return prof
 
 
-def add(cfg, name, url=None, note=None, client=None, store=None):
+def add(cfg, name, kind, url=None, note=None, client=None, store=None):
+    if kind not in profiles.COMPANY_KINDS:
+        raise WatchError(f"{kind!r} isn't a list: use one of {', '.join(profiles.COMPANY_KINDS)}.")
     _latest_without(cfg, name)
     board, n, notes = find_board(cfg, name, url=url, client=client, store=store)
     prof = _latest_without(cfg, name)    # the lookup makes network requests, and a save during it must survive
-    entry = {"name": name, "board": board}
+    entry = {"name": name, "board": board, "kind": kind}
     if board:
         entry["note"] = note or f"board found {('from ' + url) if url else 'in the directory'}; {n} open jobs when added"
     else:

@@ -173,14 +173,51 @@ def test_level():
     assert lv("Associate Software Engineer") == "title"
     assert lv("Software Engineer I") == "title"
     assert lv("Software Engineer (2027)") == "title"
-    assert lv(listed=True) == "a new-grad list"
+    assert lv(listed=True) == "level"
+    assert lv(text="Build our platform.", listed=True) == "a new-grad list"
     assert lv(levels=["Entry Level"]) == "the source's level (levels)"
+    assert lv(levels=["Entry Level"], listed=True) == "the source's level (levels)"
     assert lv(seniority=["Mid-level"]) == "level"
     assert lv(text="We welcome new grads and recent graduates.").startswith("the description")
     assert lv(text="Between new graduate level and 5 years of engineering experience.").startswith("the description")
     assert lv(text="0-2 years of experience with Python").startswith("the description")
     assert lv(text="5+ years building distributed systems") == "level"
     assert filters.check(job(), p, NOW, skip=("level",)).ok
+
+
+def test_a_list_alone_cuts_a_title_only_job_and_says_so():
+    p = copy.deepcopy(PROFILE)
+    p["filters"]["new_grad_only"] = True
+    v = filters.check(job(title="Software Engineer, Platform"), p, NOW, listed_early=True)
+    assert (v.ok, v.stage, v.reason) == (False, "level", "nothing says it's for new grads (title only)")
+
+
+@pytest.mark.parametrize("title,new_grad", [
+    ("Software Engineer I - Engagement Growth", True),
+    ("Software Engineer 1 - Cloud Infrastructure", True),
+    ("Software Dev Engineer I, Graviton Software", True),
+    ("Software Developer Engineer 1 - Graviton", True),
+    ("Full Stack Software Engineer I/II", True),
+    ("Software Engineer Embedded Systems I (Full Time)", True),
+    ("SDE I", True),
+    ("Data Scientist I", True),
+    ("Software Engineer Level 0", True),
+    ("Software Engineer II - Payments", False),
+    ("Software Engineer III", False),
+    ("Software Engineer, I/O Systems", False),
+    ("Layer-1 Engineer", False),
+    ("Software Engineer, Layer-1 Protocol", False),
+    ("Application Developer Levels 1 - 5", False),
+    ("Software Engineer 1.5", False),
+    ("Software Engineer (I'm hiring)", False),
+    ("Software Engineer, Team 12", False),
+])
+def test_a_level_one_anywhere_in_the_title_is_new_grad(title, new_grad):
+    p = copy.deepcopy(PROFILE)
+    p["filters"]["new_grad_only"] = True
+    p["position_types"] += [{"name": "Other", "titles": ["sde", "data scientist", "engineer", "developer"]}]
+    v = filters.check(job(title=title), p, NOW, listed_early=True)
+    assert (v.facts.get("new_grad_sign") if v.ok else v.stage) == ("title" if new_grad else "level")
 
 
 def test_facts():

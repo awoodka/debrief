@@ -7,7 +7,7 @@
   debrief jobs collect [--source ID ...] [--date D]   fetch every source, build postings (M1)
   debrief jobs collect --replay DATE [--into PATH]    rebuild a day from raw files, no network
   debrief jobs collect --rebuild                      rebuild the database from all raw files (parser change)
-  debrief jobs watch add NAME [--url URL] | remove NAME | list
+  debrief jobs watch add NAME --kind large|startup [--url URL] | remove NAME | list
                                    the watchlist (each change is a new profile version)
   debrief jobs posting QUERY [--all]                  one posting, its listings and keys
   debrief jobs score [--date D] [--no-cap] [--dry-run] filters, points, the scoring call, the morning list (M2)
@@ -95,10 +95,11 @@ def _watch(args):
     cfg = config.load()
     try:
         if args.step == "add":
-            entry, notes, version = watch.add(cfg, args.name, url=args.url, note=args.note)
+            entry, notes, version = watch.add(cfg, args.name, args.kind, url=args.url, note=args.note)
             for n in notes:
                 print(f"  {n}")
-            print(f"added {entry['name']} ({entry['board'] or 'no board'}): profile version {version}")
+            print(f"added {entry['name']} to {'large companies' if entry['kind'] == 'large' else 'startups'} "
+                  f"({entry['board'] or 'no board'}): profile version {version}")
             if not entry["board"]:
                 print("  no public board found; set a LinkedIn alert for it, or rerun with --url <careers page>")
         elif args.step == "remove":
@@ -240,6 +241,8 @@ def register(sub):
     wsub = jp.add_subparsers(dest="step", required=True)
     wp = wsub.add_parser("add", help="find the company's board (directory, or --url) and add it")
     wp.add_argument("name")
+    wp.add_argument("--kind", required=True, choices=("large", "startup"),
+                    help="which list: a large established company, or a startup")
     wp.add_argument("--url", help="the company's careers or job-board URL, when the directory doesn't have it")
     wp.add_argument("--note")
     wp = wsub.add_parser("remove", help="take a company off the watchlist")

@@ -12,7 +12,7 @@
 {{ change_groups(changes) }}
 {% if notice %}<p class="err">{{ notice }}</p>{% endif %}
 {{ problems(form, checking, "/profile") }}
-<form method="post" action="/profile" novalidate autocomplete="off">
+<form method="post" action="/profile" enctype="multipart/form-data" novalidate autocomplete="off">
   <input type="hidden" name="base" value="{{ form.base }}">
   {% for g in form.groups %}
   {% if loop.changed(g.part) %}<h2>{{ g.part }}</h2>{% endif %}

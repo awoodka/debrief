@@ -118,7 +118,7 @@ The rule from the brief, a topic with at least 3 independent sources, stays dorm
 
 The caps add up to 100, plus up to 40 threads. A normal day runs about 80–90 candidates: about 30 announcements, 30 press, 15 papers, and a few releases.
 
-## The model call (Sonnet 5.5, one call per run)
+## The model call (Sonnet 5.5, one call per run, a second only to fill gaps)
 
 The model is `scoring.model` in `triage.yml`. It was planned as Haiku 5.5; the calibration below moved it to Sonnet 5.5.
 
@@ -155,7 +155,11 @@ Writing `why` before deciding makes the decision a reasoned one. Code checks the
 
 Haiku thinks before answering (15k tokens of it), which is why it was slower. So the default is Sonnet. The worked examples in `relevance.md` come from those same items, so these numbers are optimistic; the next days' runs are the real check.
 
-**Degraded mode.** If the call fails (auth, quota, a timeout, or invalid output after one retry), each section keeps its first `fallback_keep` candidates in the deterministic order, and the run is marked `degraded`.
+**A slip in the answer.** On a long list the model sometimes can't copy one hex id, and the same input makes it slip again. It can also lose its place and stop early: one call on 2026-11-06 answered 59 of 119. An answer counts only if its id is a candidate, appears once, and its `why` isn't "placeholder". A second call asks about only the rest, with the answered stories listed under `<reported>` so its `same_as` can reach them. A story still without an answer is decided alone by the `fallback_keep` rule: kept at score 3 if it's within its section's first `fallback_keep`, otherwise dropped at stage `keep`. `fallback_keep` has no threads, so an unanswered thread is always dropped, whatever it's worth. The others keep their answers, the run is marked `degraded`, and `deploy/run.sh` fails the unit so someone can re-run it. The run report names every story the rules decided and every id that was answered but not used. Only an answer for every candidate is cached, so re-running triage after a gap asks again.
+
+One slip can't be caught: a wrong answer under a real id, with that id's own answer left out, looks like a right one and is used. No captured answer does this (PLAN.md "Revision 6").
+
+**Degraded mode.** If no call works (auth, quota, a timeout), or under `scoring.min_answered` (90%) of the candidates have a usable answer after both calls, each section keeps its first `fallback_keep` candidates in the deterministic order. The run is marked `degraded` with mode `rules_only`, and `deploy/run.sh` fails the unit. Re-running triage asks again.
 
 ## How we check it (M6, weekly)
 

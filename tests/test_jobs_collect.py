@@ -264,6 +264,7 @@ def test_early_career_words():
     assert items.core_title("Software Engineer II") != items.core_title("Software Engineer")
     assert items.early_career("Graduate Software Engineer") and items.early_career("Software Engineer 1")
     assert items.early_career("Data Scientist (2026)") and not items.early_career("AI Engineer")
+    assert not items.early_career("Software Engineer I - Engagement Growth")
 
 
 EARLY = frozenset({"simplify", "vansh"})
@@ -460,15 +461,19 @@ def test_watch_add_picks_the_live_board_and_saves_a_version(tmp_path, monkeypatc
         s.save_directory("greenhouse:globexcorp", "Globex Corp", "globex corp", "universe-kalil", AT)
     pages = {"https://boards-api.greenhouse.io/v1/boards/globex/jobs": {"jobs": [{"id": 1, "title": "a"}]},
              "https://api.lever.co/v0/postings/globex?mode=json": [{"id": "x", "text": "a"}, {"id": "y", "text": "b"}]}
-    entry, notes, version = watch.add(cfg, "Globex", client=SiteClient(pages), store=s)
-    assert entry["board"] == "lever:globex" and version == 2
+    entry, notes, version = watch.add(cfg, "Globex", "startup", client=SiteClient(pages), store=s)
+    assert entry["board"] == "lever:globex" and entry["kind"] == "startup" and version == 2
     assert any("ashby:globex: HTTP 404" in n for n in notes)
     with pytest.raises(watch.WatchError, match="already"):
-        watch.add(cfg, "globex", client=SiteClient(pages), store=s)
-    entry, notes, _ = watch.add(cfg, "Initech", client=SiteClient(pages), store=s)
+        watch.add(cfg, "globex", "large", client=SiteClient(pages), store=s)
+    entry, notes, _ = watch.add(cfg, "Initech", "large", client=SiteClient(pages), store=s)
     assert entry["board"] is None and "LinkedIn alert" in entry["note"]
-    entry, _, _ = watch.add(cfg, "Hooli", url="https://boards.greenhouse.io/globex/jobs/1", client=SiteClient(pages), store=s)
+    entry, _, _ = watch.add(cfg, "Hooli", "large", url="https://boards.greenhouse.io/globex/jobs/1", client=SiteClient(pages), store=s)
     assert entry["board"] == "greenhouse:globex"
+    assert {c["name"]: c.get("kind") for c in profile.latest(cfg)[1]["companies"]} == {
+        "Acme": None, "Globex": "startup", "Initech": "large", "Hooli": "large"}
+    with pytest.raises(watch.WatchError, match="isn't a list"):
+        watch.add(cfg, "Umbrella", "medium", client=None, store=None)
     assert watch.remove(cfg, "Initech") == 5
     assert [c["name"] for c in profile.latest(cfg)[1]["companies"]] == ["Acme", "Globex", "Hooli"]
     s.close()

@@ -345,7 +345,8 @@ def test_a_gone_job_is_cut_and_a_reopened_one_comes_back(tmp_path):
         build.apply(s, src(id="describe", family="detail", url=None), REGISTRY["describe"],
                     [rec({"id": 1, "title": "Software Engineer", "content": "Python"}, meta=meta, fetched_at=_iso(now))],
                     ["ref#1"])
-    assert "gone" not in s.posting(pid)["data"] and filters.check(s.posting(pid), prof, now, listed_early=True).ok
+    assert "gone" not in s.posting(pid)["data"]
+    assert filters.check(s.posting(pid), prof, now, text=s.texts_for(pid), listed_early=True).ok
     s.close()
 
 

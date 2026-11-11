@@ -114,8 +114,9 @@ def catchup_view(store, prof, name):
 
 def watch_view(cfg, store, prof):
     from .. import watch
-    notes = {c["name"]: c.get("note") for c in (prof or {}).get("companies") or []}
-    return [{"name": n, "board": b, "open": k, "note": notes.get(n)} for n, b, k in watch.listing(cfg, store)]
+    by_name = {c["name"]: c for c in (prof or {}).get("companies") or []}
+    return [{"name": n, "board": b, "open": k, "note": by_name.get(n, {}).get("note"), "kind": profiles.company_kind(by_name.get(n, {}))}
+            for n, b, k in watch.listing(cfg, store)]
 
 
 def _when(saved_at):

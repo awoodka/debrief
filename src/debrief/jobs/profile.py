@@ -93,6 +93,14 @@ def issues(doc):
     return out
 
 
+COMPANY_KINDS = tuple(json.loads(SCHEMA.read_text())["properties"]["companies"]["items"]["properties"]["kind"]["enum"])
+KIND_BEFORE_REVISION_8 = "startup"
+
+
+def company_kind(company):
+    return company.get("kind") or KIND_BEFORE_REVISION_8
+
+
 def problems(doc):
     """Every problem with a profile, as "where: what" lines (empty = valid)."""
     return [i.line for i in issues(doc)]

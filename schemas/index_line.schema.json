@@ -163,14 +163,14 @@
       ],
       "minimum": 3,
       "maximum": 5,
-      "description": "The scoring call's grade of a relevant story: 5 reshapes the field, 4 clearly moves the landscape (both main-body candidates), 3 worth knowing (a line). null in a rules-only run"
+      "description": "The scoring call's grade of a relevant story: 5 reshapes the field, 4 clearly moves the landscape (both main-body candidates), 3 worth knowing (a line). 3 when the call gave no answer and the rules kept the story. null in a rules-only run"
     },
     "why": {
       "type": [
         "string",
         "null"
       ],
-      "description": "The scoring call's one line on why it matters; null in a rules-only run"
+      "description": "The scoring call's one line on why it matters, or a line saying the rules decided when it gave no answer; null in a rules-only run"
     },
     "detail": {
       "type": "string",

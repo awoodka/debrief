@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from .. import sanitize
 from ..config import REPO
 from ..triage.score import ScoringError, argv_for, parse_response, run_claude
+from . import filters, profile as profiles
 
 SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["items"],
@@ -70,19 +71,22 @@ def pay_line(pay):
 
 
 def profile_view(profile):
-    """What the model reads about Alex: everything that bears on fit, constraints included."""
     f = profile["filters"]
-    return {
+    listed = lambda kind: [c["name"] for c in profile["companies"] if profiles.company_kind(c) == kind]
+    view = {
         "degree": profile["degree"], "coursework": profile["coursework"], "skills": profile["skills"],
         "position_types": [p["name"] for p in profile["position_types"]],
         "projects": [{"name": p["name"], "summary": p["summary"]} for p in profile["projects"]],
-        "interests": profile["interests"], "watched_companies": [c["name"] for c in profile["companies"]],
+        "interests": profile["interests"], "large_companies": listed("large"), "startups": listed("startup"),
         "wants": profile["wants"],
         "constraints": {"places": f["locations"]["places"], "remote_us_ok": f["locations"]["remote_us"],
                         "max_years_experience": f["max_years"], "work_authorization": f["work_authorization"],
                         "clearance": f["clearance"], "full_time_only": f["full_time_only"],
                         "new_grad_only": f["new_grad_only"]},
     }
+    if profile.get("resume"):
+        view["resume"] = profile["resume"]
+    return view
 
 
 def job_view(jid, posting, text, sources, early_sources, max_chars):
@@ -99,6 +103,12 @@ def job_view(jid, posting, text, sources, early_sources, max_chars):
         out["employment"] = sanitize.text(d["employment"], 40)
     if d.get("remote") is True or d.get("work_model") == "remote":
         out["remote"] = True                      # a source says so, whatever city it names
+    levels = []
+    for k in filters.LEVEL_KEYS:
+        v = d.get(k)
+        levels += [x for x in (v if isinstance(v, list) else [v]) if isinstance(x, str) and x.strip()]
+    if levels:
+        out["level"] = sanitize.text(", ".join(dict.fromkeys(levels)), 80)
     return out
 
 

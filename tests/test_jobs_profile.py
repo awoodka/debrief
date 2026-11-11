@@ -35,6 +35,16 @@ def test_valid_profile_has_no_problems():
     assert profile.problems(doc()) == []
 
 
+def test_kind_and_resume():
+    assert "kind" not in BASE["companies"][0] and "resume" not in BASE
+    assert profile.problems(doc(companies=[{"name": "Acme", "kind": "large"}, {"name": "Beta", "kind": "startup"}],
+                                resume="x" * 20000)) == []
+    assert any(p.startswith("companies/0/kind") for p in profile.problems(doc(companies=[{"name": "Acme", "kind": "medium"}])))
+    assert any(p.startswith("resume") for p in profile.problems(doc(resume="x" * 20001)))
+    assert any(p.startswith("resume") for p in profile.problems(doc(resume="")))
+    assert [profile.company_kind(c) for c in ({"name": "A"}, {"name": "B", "kind": "large"})] == ["startup", "large"]
+
+
 @pytest.mark.parametrize("changes,needle", [
     ({"degree__graduation": "May 2027"}, "degree/graduation"),
     ({"filters__max_years": -1}, "filters/max_years"),
