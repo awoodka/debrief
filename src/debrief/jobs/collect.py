@@ -9,8 +9,9 @@ config/jobs/sources.yml order. For each source:
 3. In one transaction, build.apply() stores items and postings; only then are the source's ETags
    saved. A crash before that leaves the source to retry next run.
 
-Statuses: ok, partial (some requests failed), failed, empty (responses, but no jobs at all),
-needs_key (its key isn't set; nothing requested), not_due (the weekly directory), disabled,
+Statuses: ok, partial (some requests failed, or answered with something unreadable), failed,
+empty (responses, but no jobs at all), needs_key (its key isn't set; nothing requested), not_due
+(the weekly directory), disabled,
 and probe_only (no collector: example boards, big-company APIs that aren't on the watchlist, the
 SerpAPI account check).
 
@@ -95,8 +96,10 @@ def collect_source(cfg, store, client, source, run_id, run_date, now, prof, env,
                 store.record_fetch(run_id, source.id, rec["seq"], rec["url"], rec["fetched_at"], rec.get("status", 0),
                                    len(raw.body(rec)), rec.get("error") or None, ref)
             if status != "failed":
+                unread = {r["url"] for r in ctx.records if not raw.ok(r)}
                 for url, etag, last_modified in ctx.validators:
-                    store.save_validators(url, etag, last_modified, stamp)
+                    if url not in unread:
+                        store.save_validators(url, etag, last_modified, stamp)
             errors = ([crash] if crash else []) + [f"{r['url']}: {r.get('error') or r.get('status')}" for r in ctx.records
                                                     if _failed(r, adapter.tolerate)]
             store.save_source_state(source.id, run_id, status, "; ".join(errors)[:500] or None, stamp)

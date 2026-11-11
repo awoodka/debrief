@@ -220,16 +220,31 @@ def _fallback_key(it):
     return company_short(company_norm(it.company)), core_title(it.title), frozenset(place_tokens(it.locations))
 
 
+def _read(adapter, rec, source, counts):
+    """What one response says: (listings, texts, gone, directory). A 2xx we can't read is a failed
+    request, not a broken source (Workday's maintenance page comes back as 200 HTML): it says nothing
+    about any job, and the source's other responses still count. The raw file keeps what came back."""
+    try:
+        gone = getattr(adapter, "gone", None)
+        return (list(adapter.parse(rec, source)), list(adapter.texts(rec, source)),
+                gone(rec, source) if gone else {}, list(adapter.directory(rec, source)))
+    except ValueError as e:
+        rec.update(status=0, error=f"answered {rec['status']} from {rec.get('final_url') or rec['url']} but can't be read: "
+                                   f"{type(e).__name__}: {e}"[:300])
+        counts["unreadable"] += 1
+        return [], [], {}, []
+
+
 def apply(store, source, adapter, records, refs, warn=None, early_sources=frozenset()):
     """Store one source's records. Returns counts. early_sources: the ids of the new-grad lists,
     whose every listing is early-career (for early_match)."""
     counts = Counter()
     seen = defaultdict(set)
-    parsed = [list(adapter.parse(rec, source)) for rec in records]
-    per_job = Counter(_fallback_key(it) for its in parsed for it in its if it.active)
-    for rec, ref, listings in zip(records, refs, parsed):
+    read = [_read(adapter, rec, source, counts) for rec in records]
+    per_job = Counter(_fallback_key(it) for listings, *_ in read for it in listings if it.active)
+    for rec, ref, (listings, texts, gone, directory) in zip(records, refs, read):
         at = rec["fetched_at"]
-        for key, text, facts in adapter.texts(rec, source):
+        for key, text, facts in texts:
             pid = store.find_key(f"job:{key}")
             if not pid:
                 continue
@@ -241,8 +256,7 @@ def apply(store, source, adapter, records, refs, warn=None, early_sources=frozen
             if new:
                 p["data"].update(new)
                 store.save_posting(p)
-        gone = getattr(adapter, "gone", None)
-        for key, closed in (gone(rec, source) if gone else {}).items():
+        for key, closed in gone.items():
             pid = store.find_key(f"job:{key}")
             if not pid:
                 continue
@@ -254,7 +268,7 @@ def apply(store, source, adapter, records, refs, warn=None, early_sources=frozen
             elif not closed and p["data"].get("gone"):
                 del p["data"]["gone"]
                 store.save_posting(p)
-        for board, name in adapter.directory(rec, source):
+        for board, name in directory:
             store.save_directory(board, name, company_norm(name), source.id, at)
             counts["directory"] += 1
         for it in listings:

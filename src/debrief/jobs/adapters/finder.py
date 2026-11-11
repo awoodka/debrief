@@ -221,9 +221,9 @@ class BoardFinder(Adapter):
             return []
         meta = record.get("meta") or {}
         found, board, system = meta.get("found") or {}, meta.get("board"), meta.get("system")
+        jobs, _ = boards.parse_list(system, json.loads(raw.body(record)))    # even with nothing found: a 200 we can't read isn't a search
         if not found or not board:
             return []
-        jobs, _ = boards.parse_list(system, json.loads(raw.body(record)))
         out = []
         for j in jobs:
             if not j.get("id"):

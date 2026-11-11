@@ -1097,3 +1097,38 @@ rescored under v10 plus IBM as a large company (`jobs score --no-cap`, 117 jobs,
   share 18 jobs.
 - the Profile and Watchlist pages rendered from that copy show both cards, both sections and the
   Resume box, and a Check with a test PDF fills the box and saves nothing.
+
+## A 200 we can't read (Alex, 2026-11-07: the describe crash)
+- **What happened.** Workday's `wd5` servers were in maintenance during the 03:00 run. Five HPE requests
+  were redirected to its HTML maintenance page, status 200. `json.loads` raised in `describe.texts`, and
+  the source's transaction rolled back, so 12 good descriptions were lost. 18 of the 20 listed jobs had no
+  description (9 of 20 the night before). The raw record also stopped `collect --replay` and `--rebuild`
+  on that date until now, since neither has a crash guard.
+- **The rule.** A response an adapter can't read is a failed request, not a broken source. `build._read`
+  reads each record once. On `ValueError` it marks the in-memory record failed (status 0, like a robots
+  refusal) with the reason and where the request landed. `boards.parse_list` raises it for any other JSON
+  shape as well (only Lever did before). The raw file keeps what came back, so replay reaches the same
+  answer, and `--replay` and `--rebuild` print an `unreadable` count, since they have no report. A failed
+  record closes no job, clears no "gone" mark, keeps no ETag, doesn't count as a finder search, and is asked
+  again next night. Anything else an adapter raises is a bug in our code and still fails the source as a crash.
+- **Checked** on a copy of the live data. 11-07's recorded responses through the real `collect.run`:
+  `partial`, 12 descriptions, the error names the maintenance page. `--replay` and `--rebuild` exit 0 where
+  the old code exits 1, and the rebuild has the live 4,635 descriptions plus exactly those 12. Past nights
+  (11-04 to 11-06), old code vs the fix: all five built tables byte-identical. The 798 stored responses
+  have 5 read errors, all those HPE pages. The list made again with a real scoring call: 7 of 20 described
+  (published: 2). Verkada, rank 5 on the title, needs a Master's and is no longer kept.
+- **Not built, on purpose.**
+  - An answer given on the title alone isn't asked again when a description arrives later, and a rerun
+    doesn't change it. After the fix, 11-07's outage leaves 1 of the 20 listed jobs (Chewy) title-only
+    because its own board was down, and the list marks it. Asking again would need a change to the nightly
+    budget, or the job would lose its answer on a night with no budget left.
+  - A page read during fetch (`Paged`, the watchlist's Workday search) still raises there, so that source's
+    later requests wait a night. What was read before it is kept, and the source says `partial`. No stored
+    response has ever done this, and no watchlist company is on Workday today.
+  - A Workday board's searches share one URL. If maintenance starts between two titles on one night, the
+    first title's good answer counts as a look for both, so the second waits `retry_days`. A 5xx did this
+    already. The window is seconds.
+  - A board that always answers 200 HTML would be asked every night and keep collect `degraded`, loudly.
+    None of the 91 finder answers with status 200 so far does this.
+  - A weekly company list that fails while another succeeds waits its week: the source is `partial`, which
+    sets `last_ok_at`. The directory is a lookup table, so that list is a week stale at worst.

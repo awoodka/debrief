@@ -114,6 +114,14 @@ def _pay(lo, hi, currency=None, period=None):
     return {"min": lo, "max": hi, "currency": currency, "period": period}
 
 
+def _rows(data, key):
+    """The board's job list under `key`, or ValueError: a 200 with some other JSON says nothing about any job."""
+    rows = data.get(key) if isinstance(data, dict) else None
+    if not isinstance(rows, list) or not all(isinstance(j, dict) for j in rows):
+        raise ValueError(f"expected a list of jobs under {key!r}")
+    return rows
+
+
 def parse_list(system, data):
     """(jobs, total) from a board's list JSON. Raises ValueError on an unexpected shape.
 
@@ -124,7 +132,7 @@ def parse_list(system, data):
     total = None
     if system == "greenhouse":
         jobs = []
-        for j in data["jobs"]:
+        for j in _rows(data, "jobs"):
             ranges = j.get("pay_input_ranges") or []
             r = ranges[0] if ranges else {}
             loc = (j.get("location") or {}).get("name")
@@ -136,8 +144,8 @@ def parse_list(system, data):
                                      r.get("currency_type")) if r else None,
                          "remote": None})
     elif system == "lever":
-        if not isinstance(data, list):
-            raise ValueError(f"expected a list, got {type(data).__name__}")
+        if not isinstance(data, list) or not all(isinstance(j, dict) for j in data):
+            raise ValueError(f"expected a list of jobs, got {type(data).__name__}")
         jobs = []
         for j in data:
             cat = j.get("categories") or {}
@@ -154,7 +162,7 @@ def parse_list(system, data):
                          "country": j.get("country"), "more_places": len(cat.get("allLocations") or []) > 1})
     elif system == "ashby":
         jobs = []
-        for j in data["jobs"]:
+        for j in _rows(data, "jobs"):
             locs = [j["location"]] if j.get("location") else []
             locs += [x.get("location") for x in j.get("secondaryLocations") or [] if x.get("location")]
             comp = j.get("compensation") or {}
@@ -168,7 +176,7 @@ def parse_list(system, data):
                          "more_places": bool(j.get("secondaryLocations"))})
     elif system == "workable":
         jobs = []
-        for j in data["jobs"]:
+        for j in _rows(data, "jobs"):
             loc = _loc(j.get("city"), j.get("state"), j.get("country"))
             locs = [_loc(x.get("city"), x.get("region"), x.get("country")) for x in j.get("locations") or []] or ([loc] if loc else [])
             jobs.append({"id": j.get("shortcode"), "title": j.get("title"),
@@ -177,9 +185,10 @@ def parse_list(system, data):
                          "url": j.get("url") or j.get("shortlink"), "text": html_text(j.get("description")),
                          "pay": None, "remote": bool(j.get("telecommuting")), "employment": j.get("employment_type")})
     elif system == "smartrecruiters":
+        rows = _rows(data, "content")
         total = data.get("totalFound")
         jobs = []
-        for j in data["content"]:
+        for j in rows:
             loc = _loc((j.get("location") or {}).get("city"), (j.get("location") or {}).get("region"),
                        (j.get("location") or {}).get("country"))
             jobs.append({"id": j.get("id"), "title": j.get("name"), "published": when(j.get("releasedDate")),
@@ -187,7 +196,7 @@ def parse_list(system, data):
                          "remote": (j.get("location") or {}).get("remote")})
     elif system == "recruitee":
         jobs = []
-        for j in data["offers"]:
+        for j in _rows(data, "offers"):
             loc = _loc(j.get("city"), j.get("country"))
             sal = j.get("salary") or {}
             jobs.append({"id": j.get("slug") or str(j.get("id")), "title": j.get("title"),
@@ -197,9 +206,10 @@ def parse_list(system, data):
                          "pay": _pay(sal.get("min"), sal.get("max"), sal.get("currency"), sal.get("period")),
                          "remote": j.get("remote")})
     elif system == "workday":
+        rows = _rows(data, "jobPostings")
         total = data.get("total")
         jobs = []
-        for j in data["jobPostings"]:
+        for j in rows:
             path = j.get("externalPath") or ""
             jobs.append({"id": workday_req(path), "title": j.get("title"), "published": None,
                          "age_days": workday_age_days(j.get("postedOn")), "location": j.get("locationsText"),
