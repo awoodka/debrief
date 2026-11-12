@@ -18,6 +18,9 @@ from .. import times
 
 SYSTEMS = ("greenhouse", "lever", "ashby", "workable", "smartrecruiters", "recruitee", "workday")
 WORKDAY_PAGE = 20
+# Some tenants never report a total above 2,000 (Leidos: total 2000, its facets count 2,178 jobs),
+# so reading 2,000 jobs of such a board isn't reading all of it.
+WORKDAY_MAX_TOTAL = 2000
 SMARTRECRUITERS_PAGE = 100
 
 

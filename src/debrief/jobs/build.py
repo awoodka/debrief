@@ -13,7 +13,8 @@ same raw files rebuilds the same rows.
   - A posting's link is chosen from all its listings (link_rank): the company's own listing of the
     job first, an aggregator's page only when nothing better exists.
   - "full" snapshot sources: a listing missing from a complete response for its scope (every
-    request ok, none a 304) is made inactive. If a complete response parsed to nothing while the
+    request ok, none a 304, none marked partial: the adapter stopped before the end of the list)
+    is made inactive. If a complete response parsed to nothing while the
     scope had more than a few active listings, nothing is closed and a warning says why (a format
     change looks exactly like that).
   - Every item that names a board, and every directory row an adapter gives, goes in the board
@@ -301,7 +302,8 @@ def apply(store, source, adapter, records, refs, warn=None, early_sources=frozen
         for rec in records:
             by_scope[rec.get("each") or ""].append(rec)
         for scope, recs in by_scope.items():
-            complete = all(raw.ok(r) and r.get("status") != 304 for r in recs)
+            complete = all(raw.ok(r) and r.get("status") != 304 and not (r.get("meta") or {}).get("partial")
+                           for r in recs)
             if not complete:
                 continue
             gone = [k for k in store.active_in_scope(source.id, scope) if k not in seen[scope]]

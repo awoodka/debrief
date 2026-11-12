@@ -26,24 +26,36 @@ class Watchlist(Adapter):
             if not board:
                 ctx.warn(f"{c['name']}: no board yet (debrief jobs watch add, or paste its careers URL)")
                 continue
-            system = boards.split(board)[0]
             meta = {"board": board, "company": c["name"]}
             method, url, body = boards.list_request(board, 0, full=True)
             if method == "GET":
                 ctx.get(source, url, each=board, meta=meta)
-                continue
-            total, page = None, 0
-            while page < max_pages:
-                method, url, body = boards.list_request(board, page, full=True)
-                rec = ctx.post(source, url, body, each=board, meta={**meta, "page": page})
-                if not raw.ok(rec):
-                    break
-                data = json.loads(raw.body(rec))
-                if total is None:
-                    total = data.get("total") or 0
-                page += 1
-                if page >= boards.pages_needed(system, total) or not data.get("jobPostings"):
-                    break
+            else:
+                self._read_workday(ctx, source, board, meta, max_pages)
+
+    def _read_workday(self, ctx, source, board, meta, max_pages):
+        """Pages a Workday board to its end. Every record of a read that didn't reach the end is
+        marked partial."""
+        system = boards.split(board)[0]
+        recs, total, reached_end = [], None, False
+        for page in range(max_pages):
+            _, url, body = boards.list_request(board, page, full=True)
+            rec = ctx.post(source, url, body, each=board, meta={**meta, "page": page})
+            recs.append(rec)
+            if not raw.ok(rec):
+                break
+            try:
+                jobs, page_total = boards.parse_list(system, json.loads(raw.body(rec)))
+            except ValueError:
+                break
+            if total is None:
+                total = page_total or 0
+            if not jobs or page + 1 >= boards.pages_needed(system, total):
+                reached_end = total < boards.WORKDAY_MAX_TOTAL
+                break
+        if not reached_end:
+            for rec in recs:
+                rec["meta"]["partial"] = True
 
     def parse(self, record, source):
         if not raw.ok(record):

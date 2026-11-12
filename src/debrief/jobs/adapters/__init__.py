@@ -7,7 +7,8 @@ robots.txt before every request: a disallowed URL is recorded as refused and nev
   "window"  a recent window or search: a missing job means nothing
   "flag"    the source marks closed jobs itself (Simplify's `active`)
   "full"    the complete current list for its scope (a watchlist board, a markdown list): a job
-            missing from a complete snapshot (every request ok, no 304) is closed
+            missing from a complete snapshot (every request ok, no 304, no record's meta marked
+            "partial") is closed. An adapter that stops reading a list early marks its records partial.
 """
 from datetime import datetime, timezone
 
