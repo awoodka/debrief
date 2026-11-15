@@ -200,7 +200,7 @@ The session's stream is kept in `brief_session.jsonl` and summarized in `brief_s
   - `what_happened` as a plain list, then the lead;
   - the sections, numbered, each with its case for, case against and what the analysis suggests as labeled paragraphs, each marked by a 2px rule in the margin in the for, against or accent color, its quotes (signed by the commenter and the site of the thread, or for a quote from a story's own text, by its site's address, such as wired.com, and linked; a quote with no link isn't signed), and a Sources list whose threads show their points and comments as plain text;
   - Updates, where "first reported" links to that issue when the archive has it, and Notes;
-  - the scan of every story kept, grouped by section. A covered story shows where: its section's number (§2), Updates or What happened;
+  - the scan of every story kept, grouped by section. A covered story shows where: its section's number (§2), Updates or What happened. A gist that is a page's boilerplate rather than its story isn't shown: a request to enable JavaScript, a cookie notice, a sign-up or paywall prompt, a bot check, or a newsletter's note about itself (`JUNK_GISTS` in `page.py`);
   - a footer for readers: how many stories were kept and covered, the sources that didn't load by their names in `sources.yml`, the pages checked for the issue, links to all issues, the feed and "How Debrief works", and the previous and next issues.
 
   A scan-only brief gets a note in place of the article.

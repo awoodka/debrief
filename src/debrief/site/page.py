@@ -38,6 +38,15 @@ LANDMARKS = {"what-happened": ("What happened", "what_happened"), "updates": ("U
 _BOLD = re.compile(r"\*\*(\S(?:.*?\S)?)\*\*")
 _ITALIC = re.compile(r"(?<![\w*])\*(\S(?:.*?\S)?)\*(?![\w*])")
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+JUNK_GISTS = {   # what a scraped page can say in place of its story; a scan row shows no gist for these
+    "asks for JavaScript": r"\benable JavaScript\b|\bJavaScript (?:is )?(?:required|disabled)\b",
+    "a cookie notice": r"\b(?:we|this (?:site|website)) uses? cookies\b|\baccept (?:all )?cookies\b",
+    "a sign-up or paywall prompt": r"\b(?:subscribe|sign in|log in|register) to (?:read|continue)\b|\benter your email\b",
+    "a bot check": r"\bverify (?:that )?you are (?:a )?human\b|\bchecking your browser\b",
+    "a newsletter's note about itself": r"^This (?:story|article) (?:originally )?appeared in\b"
+                                        r"|^This is [^.]{1,40}, an? (?:daily|weekly|monthly) newsletter\b",
+}
+_JUNK = re.compile("|".join(f"(?:{p})" for p in JUNK_GISTS.values()), re.I)
 
 
 @dataclass(frozen=True)
@@ -306,8 +315,8 @@ def _scan(doc):
         for x in rows:
             anchor = anchors.get(x["id"]) if x["covered"] else None
             mark = f'<a class="where" href="#{anchor}">{_where(anchor)}</a>' if anchor else ""
-            out.append(f'<li data-story="{esc(x["id"])}"><div class="row">{link(esc(x["title"]), x["url"])}{mark}</div>'
-                       f'<p class="gist">{inline(x["gist"])}</p></li>')
+            gist = f'<p class="gist">{inline(x["gist"])}</p>' if x["gist"] and not _JUNK.search(x["gist"]) else ""
+            out.append(f'<li data-story="{esc(x["id"])}"><div class="row">{link(esc(x["title"]), x["url"])}{mark}</div>{gist}</li>')
         out.append("</ul>")
     return "".join(out) + "</section>"
 

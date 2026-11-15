@@ -200,6 +200,32 @@ def test_a_quote_from_a_page_is_signed_by_its_site_and_one_with_no_link_is_not_s
             'wired.com</a></p>') in quotes[1]
 
 
+BOILERPLATE = [   # the first four are real gists, from 2026-11-14, 11-05, 11-03 (and 11-10) and 10-26
+    "To play this video you need to enable JavaScript in your browser.",
+    "Join for quick access. Enter your email below and we'll send confirmation plus sign you up to our newsletter.",
+    "This story originally appeared in The Algorithm, our weekly newsletter on AI.",
+    "This is The Stepback, a weekly newsletter breaking down one essential story from the tech world.",
+    "We use cookies to give you the best experience. Accept all cookies to continue.",
+    "Subscribe to read the full story.",
+    "Checking your browser before accessing techsite.example.",
+]
+NEWS = [   # real gists that name browsers, subscriptions and newsletters but are news
+    "The New York Times and a group of other publications have filed lawsuits against the company that makes the Brave "
+    "web browser over alleged unlawful scraping to train AI and also letting users bypass paywalls.",
+    "If you have a personal Google AI subscription, all your saved chat history in Gemini can be used for training.",
+    "This is a link-post for our new paper \"Predicting how propensities generalize out-of-distribution\".",
+    "eBay appears to have blocked AI agents, including Meta's Muse, from browsing on the platform.",
+]
+
+
+def test_the_scan_shows_no_gist_where_a_page_gave_boilerplate_instead_of_its_story(tmp_path):
+    _, doc = written(tmp_path)
+    doc["scan"] = [{**doc["scan"][0], "id": f"url:{i}", "gist": g} for i, g in enumerate(BOILERPLATE + NEWS)]
+    scan = between(page.day_page(doc), '<section class="scan" id="scan">', "</section>")
+    assert len(re.findall(r"<li data-story=", scan)) == len(BOILERPLATE + NEWS)
+    assert [htmllib.unescape(g) for g in re.findall(r'<p class="gist">(.*?)</p>', scan)] == NEWS
+
+
 def test_a_scan_only_brief_gets_a_page_with_its_note(tmp_path):
     cfg, day = setup_day(tmp_path)
     write_draft(day, {"date": DATE})
