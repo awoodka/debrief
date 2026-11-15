@@ -1,8 +1,9 @@
 """The site's pages as finished HTML: a day's page from its brief.json (and its picture, picture.py),
-the archive list, the 404 page, and the Atom feed. templates/page.html is the shell every page
-shares (its head, the Content-Security-Policy), templates/site.css the one stylesheet, and
-templates/progress.js the one script: on a day's page it marks the rail's link to the part being
-read and draws the reading-progress bar. Without it the pages read the same.
+the archive list, the "How Debrief works" page (templates/about.md), the 404 page, and the Atom
+feed. templates/page.html is the shell every page shares (its head, the Content-Security-Policy),
+templates/site.css the one stylesheet, and templates/progress.js the one script: on a day's page it
+marks the rail's link to the part being read and draws the reading-progress bar. Without it the
+pages read the same.
 
 Every string from the data is escaped. Prose gets only **bold** and *italic*. Links come only from
 the data's url fields, and only http(s) ones. Each section has id="s-N" and data-stories (its story
@@ -35,6 +36,7 @@ LANDMARKS = {"what-happened": ("What happened", "what_happened"), "updates": ("U
              "scan": ("Everything kept today", "scan")}
 _BOLD = re.compile(r"\*\*(\S(?:.*?\S)?)\*\*")
 _ITALIC = re.compile(r"(?<![\w*])\*(\S(?:.*?\S)?)\*(?![\w*])")
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 
 
 @dataclass(frozen=True)
@@ -383,6 +385,33 @@ def not_found_page():
     return _shell("Debrief · Not found", "/", head='<meta name="robots" content="noindex">', body=(
         '<div class="page"><main class="notfound">\n<div class="masthead"><a class="wordmark" href="/">Debrief</a></div>\n'
         '<h1>No issue at this address.</h1>\n<p><a href="/">All issues</a></p>\n</main></div>'))
+
+
+def _markdown(md):
+    """templates/about.md as HTML. It needs only '#' and '##' headings, '- ' lists, paragraphs and
+    **bold**, and an email address in it becomes a mailto link."""
+    out = []
+    for block in re.split(r"\n{2,}", md.strip()):
+        if block.startswith("## "):
+            out.append(f"<h2>{inline(block[3:])}</h2>")
+        elif block.startswith("# "):
+            out.append(f"<h1>{inline(block[2:])}</h1>")
+        elif block.startswith("- "):
+            out.append("<ul>" + "".join(f"<li>{inline(ln[2:])}</li>" for ln in block.splitlines()) + "</ul>")
+        else:
+            out.append(f"<p>{inline(block)}</p>")
+    return _EMAIL.sub(lambda m: f'<a href="mailto:{m[0]}">{m[0]}</a>', "\n".join(out))
+
+
+def about_page():
+    """about/index.html: how Debrief is made, from templates/about.md. Its first line is the title
+    and its first paragraph the description link previews show."""
+    md = (TEMPLATES / "about.md").read_text()
+    title, first = re.split(r"\n{2,}", md.strip())[:2]
+    title = title.removeprefix("# ")
+    return _shell(title, "../", head=_head(plain(first), f"{SITE}/about/", title, "website"), body=(
+        '<div class="page">\n<div class="masthead"><a class="wordmark" href="../">Debrief</a></div>\n'
+        f'<main class="about">\n{_markdown(md)}\n</main>\n<footer class="foot">{_links("../")}</footer>\n</div>'))
 
 
 def favicon(css):

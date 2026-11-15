@@ -220,7 +220,8 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
     a, b = build.build(cfg, tmp_path / "a"), build.build(cfg, tmp_path / "b")
     assert a == b == {"v2": [DATE], "v1": []}
     files = sorted(p.relative_to(tmp_path / "a") for p in (tmp_path / "a").rglob("*") if p.is_file())
-    assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", f"{DATE}/picture.svg", "404.html", "favicon.svg",
+    assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", f"{DATE}/picture.svg", "404.html",
+                                       "about/index.html", "favicon.svg",
                                        "feed.xml", "fonts/OFL.txt", "fonts/newsreader-italic.woff2",
                                        "fonts/newsreader.woff2", "index.html", "progress.js", "site.css"]
     pub = json.loads((tmp_path / "a" / DATE / "brief.json").read_text())
@@ -238,7 +239,7 @@ def test_two_builds_of_the_same_inputs_are_byte_identical(tmp_path):
     def tree(root):
         return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
     a = tree(tmp_path / "a")
-    assert len(a) == 18 and a == tree(tmp_path / "b")
+    assert len(a) == 19 and a == tree(tmp_path / "b")
 
 
 PICTURES = {"endpaper": "an endpaper", "map": "a map of the day", "spines": "a shelf of book spines",
@@ -372,7 +373,7 @@ def test_every_page_shares_one_stylesheet_and_one_deferred_script_under_a_strict
     add_v1(cfg, {"2026-09-14": v1_page({"dek": "x"})})
     build.build(cfg, tmp_path / "out")
     out = tmp_path / "out"
-    for f, root in (("index.html", ""), ("404.html", "/"), (f"{DATE}/index.html", "../")):
+    for f, root in (("index.html", ""), ("404.html", "/"), (f"{DATE}/index.html", "../"), ("about/index.html", "../")):
         body = (out / f).read_text()
         assert f'content="{CSP}"' in body
         assert f'<link rel="stylesheet" href="{root}site.css">' in body and "<style" not in body and "style=" not in body
@@ -453,6 +454,28 @@ def test_every_text_color_reads_at_4_5_to_1_on_the_paper(theme):
     t = themes()[theme]
     for name in ("ink", "muted", "accent", "for", "against"):
         assert contrast(rgb(t[name], t), rgb(t["paper"], t)) >= 4.5, name
+
+
+def test_how_debrief_works_is_a_page_of_its_own_in_the_shared_shell(tmp_path):
+    cfg, _ = written(tmp_path)
+    build.build(cfg, tmp_path / "out")
+    html = (tmp_path / "out" / "about" / "index.html").read_text()
+    assert "<title>How Debrief works</title>" in html and re.findall(r"<h1>(.*?)</h1>", html) == ["How Debrief works"]
+    assert [htmllib.unescape(h) for h in re.findall(r"<h2>(.*?)</h2>", html)] == [
+        "When it runs", "What it reads", "How stories are chosen", "How an issue is written", "What you'll see",
+        "Limits", "Corrections"]
+    seen, at = text(html), 0
+    for line in (page.TEMPLATES / "about.md").read_text().splitlines():
+        if line.strip():
+            at = seen.index(re.sub(r"^(?:#+|-) |\*\*", "", line), at)
+    assert "<strong>The case for, the case against, and what the analysis suggests.</strong>" in html
+    assert "Issues before October 26, 2026 come from the first version of the pipeline" in seen
+    assert "first person" not in seen and "[the date" not in seen
+    assert '<a href="mailto:alexwoodka@gmail.com">alexwoodka@gmail.com</a>.' in html
+    assert f'content="{CSP}"' in html and '<link rel="stylesheet" href="../site.css">' in html and "style=" not in html
+    assert '<link rel="canonical" href="https://debrief.alexwoodka.com/about/">' in html
+    assert '<meta name="description" content="Debrief is a daily briefing on AI and machine learning. An automated' in html
+    assert '<a class="wordmark" href="../">Debrief</a>' in html
 
 
 def test_the_feed_lists_the_newest_30_issues_newest_first(tmp_path):

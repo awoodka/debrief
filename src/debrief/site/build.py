@@ -9,6 +9,7 @@
   site.css            the one stylesheet (templates/site.css), with every color and face as a token
   progress.js         the one script (templates/progress.js): the rail marks the part being read,
                       and a bar across the top shows how far through the issue the reader is
+  about/index.html    "How Debrief works", from templates/about.md
   favicon.svg         a D in the tokens' accent and paper colors
   fonts/              the typeface, Newsreader, upright and italic (templates/fonts/, with its license)
   404.html            the page for an address with no issue
@@ -105,6 +106,8 @@ def build(cfg, out, validator=None, log=print):
     shutil.copyfile(page.TEMPLATES / "progress.js", out / "progress.js")
     shutil.copytree(page.TEMPLATES / "fonts", out / "fonts")
     (out / "favicon.svg").write_text(page.favicon(css))
+    (out / "about").mkdir()
+    (out / "about" / "index.html").write_text(page.about_page())
     (out / "404.html").write_text(page.not_found_page())
     (out / "index.html").write_text(page.index_page(issues))
     (out / "feed.xml").write_text(page.feed(issues[:FEED_SIZE]))
