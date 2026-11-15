@@ -12,10 +12,11 @@ This is v2. It replaced the first version, a collector plus a five-seat council 
 still in the archive.
 
 An issue opens with a headline and a short "What happened" list of plain facts. Then comes the article: a
-lead and a few themed sections, with a for, against and "my read" where a call is genuinely two-sided,
-and quotes from the comment threads where they say it best. Follow-ups on earlier stories get their own
-short section. At the bottom, the scan lists every story triage kept, one headline and gist each, so
-nothing is lost by being left out of the article. A normal day is about a 10-minute read.
+lead and a few themed sections, with the case for, the case against and what the analysis suggests where
+a call is genuinely two-sided, and quotes from the comment threads where they say it best. Follow-ups on
+earlier stories get their own short section. At the bottom, the scan lists every story triage kept, one
+headline and gist each, so nothing is lost by being left out of the article. A normal day is about a
+10-minute read.
 
 ## What it's looking for
 
@@ -41,8 +42,8 @@ or know first-hand.
    fetch at most five pages, only from sites the day's stories link to. A check runs when it finishes:
    every story id has to exist, every quote has to be word for word from a stored comment or text, and no
    link can appear in the prose. Code then adds the links, the attributions and the scan.
-4. **The page.** A small deterministic builder turns the brief into a static page in the original
-   design, and the site is swapped into place atomically.
+4. **The page.** A small deterministic builder turns the brief into a static page, and the site is
+   swapped into place atomically.
 
 The brief takes 1 to 3 minutes. Triage's drops are never shown to the skill, and everything fetched from
 the web is treated as data, never as instructions.
@@ -82,7 +83,7 @@ skill/           the brief skill, a Claude Code plugin: SKILL.md and its referen
 config/          sources.yml (every source), triage.yml, relevance.md, brief.yml, settings.yml
 prompts/         the scoring call's instructions
 schemas/         the JSON Schemas for everything triage and the brief write
-templates/       the page and the archive list
+templates/       the page shell and the stylesheet
 tests/           pytest, on recorded responses and frozen days
 deploy/          Dockerfile, locked requirements, run.sh, update.sh, the systemd units
 docs/            how it works, the design record, the inclusion criteria, the source probe

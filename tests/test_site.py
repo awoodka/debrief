@@ -41,25 +41,158 @@ def text(page_html):
 CSP = "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'"
 
 
+def between(html, start, end):
+    return html.split(start, 1)[1].split(end, 1)[0]
+
+
+def hrefs(fragment):
+    return re.findall(r'href="([^"]+)"', fragment)
+
+
+def two_v2_days(cfg, doc, later="2026-10-25"):
+    """A second v2 brief, the day after the fixture day."""
+    (cfg.data_dir / "runs" / later).mkdir()
+    (cfg.data_dir / "runs" / later / "brief.json").write_text(json.dumps({**doc, "date": later, "headline": "The day after"}))
+
+
 def test_a_day_page_has_every_part_of_the_brief(tmp_path):
     _, doc = written(tmp_path)
     doc["meta"]["session"] = {"cost_usd_list_price": 1.2345, "stderr": "a session error"}
     doc["meta"]["warnings"] = ["the article is 120 words, under the aim"]
     html = page.day_page(doc)
-    for text in [doc["headline"], *(e["text"] for e in doc["what_happened"])]:
-        assert page.inline(text) in html
+    seen = text(html)
+    assert re.search(r"<h1>Saturday, October 24, 2026</h1>\s*<p class=\"standfirst\">" + re.escape(page.inline(doc["headline"])), html)
+    assert "55 words · 8 stories Saturday, October 24, 2026" in seen
+    assert all(page.inline(e["text"]) in html for e in doc["what_happened"])
     for n, s in enumerate(doc["sections"], 1):
         assert f'<section class="theme" id="s-{n}" data-stories="{page.esc(" ".join(s["stories"]))}">' in html
-        assert page.inline(s["heading"]) in html
-    assert ">For<" in html and ">Against<" in html and ">My read<" in html
+        assert f'<h2><span class="num">{n}</span> {page.inline(s["heading"])}</h2>' in html
+    split = doc["sections"][0]["split"]
+    assert (f"The case for {split['for']} The case against {split['against']} "
+            f"The analysis suggests {split['read']}") in seen
     q = doc["sections"][0]["quotes"][0]
     assert page.esc(q["text"]) in html and f'href="{page.esc(q["url"])}"' in html
-    assert page.inline(doc["updates"][0]["text"]) in html and "first reported" in html
+    assert page.inline(doc["updates"][0]["text"]) in html
     assert all(page.esc(x["title"]) in html for x in doc["scan"])
-    assert html.count('class="in"') == sum(x["covered"] for x in doc["scan"])
-    assert "HN · " in html                                                       # thread chips
-    assert "Content-Security-Policy" in html and "<script" not in html
+    assert re.search(r"HN · [\d,]+ points · [\d,]+ comments", seen)
+    assert "My read" not in seen and "chip" not in html
+    assert f'content="{CSP}"' in html and "<script" not in html and "<style" not in html and "style=" not in html
     assert "1.2345" not in html and "a session error" not in html and "under the aim" not in html
+
+
+def test_a_day_page_head_names_the_issue_for_tabs_feeds_and_link_previews(tmp_path):
+    _, doc = written(tmp_path)
+    html = page.day_page(doc)
+    assert "<title>Debrief · Oct 24 · PHP2Shell attackers had four days; flow language models…</title>" in html
+    url = f"https://debrief.alexwoodka.com/{DATE}/"
+    for tag in (f'<meta name="description" content="{page.esc(doc["headline"])}">',
+                '<meta property="og:title" content="Debrief · Saturday, October 24, 2026">',
+                f'<meta property="og:description" content="{page.esc(doc["headline"])}">',
+                '<meta property="og:type" content="article">', f'<meta property="og:url" content="{url}">',
+                '<meta property="og:site_name" content="Debrief">', f'<link rel="canonical" href="{url}">',
+                '<link rel="alternate" type="application/atom+xml" title="Debrief" href="../feed.xml">',
+                '<link rel="icon" href="../favicon.svg" type="image/svg+xml">', '<link rel="stylesheet" href="../site.css">'):
+        assert tag in html, tag
+    doc["headline"] = ""
+    html = page.day_page(doc)
+    assert "<title>Debrief · Oct 24</title>" in html and 'class="standfirst"' not in html
+
+
+def test_both_contents_list_the_sections_then_the_other_parts(tmp_path):
+    _, doc = written(tmp_path)
+    html = page.day_page(doc)
+    rail, folded = between(html, '<aside class="rail">', "</aside>"), between(html, '<details class="toc-inline">', "</details>")
+    expect = ["#s-1", "#s-2", "#what-happened", "#updates", "#scan"]
+    assert [h for h in hrefs(rail) if h.startswith("#")] == expect == hrefs(folded)
+    assert rail.index("Debrief") < rail.index("Saturday, October 24, 2026") < rail.index("#s-1")
+    assert "<summary" in folded and "In this issue" in folded and "open" not in between(html, "<details", ">")
+    assert text(folded).startswith("In this issue PHP2Shell was exploited")
+    assert html.index("</header>") < html.index('<details class="toc-inline">') < html.index('id="what-happened"')
+    doc["updates"] = []
+    html = page.day_page(doc)
+    assert "#updates" not in html and 'id="updates"' not in html
+
+
+def test_previous_and_next_issues_link_across_versions_and_stop_at_the_ends(tmp_path):
+    cfg, doc = written(tmp_path)
+    add_v1(cfg, {"2026-10-23": v1_page({"dek": "x"})})
+    two_v2_days(cfg, doc)
+    build.build(cfg, tmp_path / "out")
+    middle = (tmp_path / "out" / DATE / "index.html").read_text()
+    newest = (tmp_path / "out" / "2026-10-25" / "index.html").read_text()
+    foot = between(middle, '<footer class="foot">', "</footer>")
+    assert '<a rel="prev" href="../2026-10-23/">← Friday, October 23</a>' in foot
+    assert '<a rel="next" href="../2026-10-25/">Sunday, October 25 →</a>' in foot
+    assert 'rel="prev" href="../2026-10-23/"' in between(middle, '<aside class="rail">', "</aside>")
+    assert 'rel="prev" href="../2026-10-24/"' in newest and 'rel="next"' not in newest
+
+    cfg, doc = written(tmp_path / "alone")
+    build.build(cfg, tmp_path / "alone" / "out")
+    only = (tmp_path / "alone" / "out" / DATE / "index.html").read_text()
+    assert 'rel="prev"' not in only and 'rel="next"' not in only and 'class="issue-nav"' not in only
+
+
+def test_an_update_links_to_the_issue_that_first_reported_it_only_when_that_issue_exists(tmp_path):
+    _, doc = written(tmp_path)
+    assert doc["updates"][0]["prev_reported"] == "2026-10-23"
+    linked = page.day_page(doc, page.Neighbors(known=frozenset({"2026-10-23", DATE})))
+    assert '<p class="since">first reported <a href="../2026-10-23/">Oct 23</a></p>' in linked
+    unlinked = page.day_page(doc, page.Neighbors(known=frozenset({DATE})))
+    assert '<p class="since">first reported Oct 23</p>' in unlinked and "../2026-10-23/" not in unlinked
+
+
+def test_the_scan_marks_where_the_brief_covers_each_story(tmp_path):
+    _, doc = written(tmp_path)
+    spare = next(x for x in doc["scan"] if not x["covered"])
+    spare["covered"] = True
+    doc["updates"].append({"story": spare["id"], "text": "Still going.", "prev_reported": None})
+    scan = between(page.day_page(doc), '<section class="scan" id="scan">', "</section>")
+    rows = dict(re.findall(r'<li data-story="([^"]+)">(.*?)</li>', scan))
+    marks = {sid: re.findall(r'<a class="where" href="(#[^"]+)">([^<]+)</a>', row) for sid, row in rows.items()}
+    first_section = {sid: n for n, s in reversed(list(enumerate(doc["sections"], 1)))
+                     for sid in [*s["stories"], *(q["story"] for q in s["quotes"])]}
+    for x in doc["scan"]:
+        if not x["covered"]:
+            assert marks[page.esc(x["id"])] == [], x["id"]
+        elif x["id"] in first_section:
+            n = first_section[x["id"]]
+            assert marks[page.esc(x["id"])] == [(f"#s-{n}", f"§{n}")], x["id"]
+    assert marks[page.esc(spare["id"])] == [("#updates", "Updates")]
+    assert marks[page.esc("lesswrong:ie7bSp5ZDwYkCQxuv")] == [("#what-happened", "What happened")]
+    assert "Everything kept today" in text(scan) and "Papers" in text(scan)
+    assert "↑ in the brief" not in scan
+
+
+def test_the_footer_speaks_to_readers(tmp_path):
+    _, doc = written(tmp_path)
+    doc["meta"].update(triage_status="degraded", failed_sources=["lmarena", "no-such-source"])
+    doc["fetches"] = [{"url": "https://arxiv.org/abs/2610.28559", "allowed": True, "why": "to check the table"},
+                      {"url": "https://refused.example/x", "allowed": False, "why": None}]
+    html = page.day_page(doc, source_names={"lmarena": "LMArena leaderboard"})
+    foot = text(between(html, '<footer class="foot">', "</footer>"))
+    assert foot.startswith("8 stories kept today, 4 covered above. "
+                           "Some sources didn't load today: LMArena leaderboard, no-such-source. "
+                           "Pages checked for this issue arxiv.org/abs/2610.28559 (to check the table) "
+                           "Debrief is an automated daily briefing built by Alex Woodka. All issues · RSS")
+    assert "refused.example" not in html and "triage" not in text(html).lower() and "degraded" not in html
+    foot_html = between(html, '<footer class="foot">', "</footer>")
+    assert 'href="https://alexwoodka.com"' in foot_html and 'href="../"' in foot_html and 'href="../feed.xml"' in foot_html
+
+
+def test_a_scan_only_brief_gets_a_page_with_its_note(tmp_path):
+    cfg, day = setup_day(tmp_path)
+    write_draft(day, {"date": DATE})
+    doc, _ = finalize.finalize(day)
+    assert doc["mode"] == "scan_only"
+    html = page.day_page(doc)
+    assert 'class="notice"' in html and page.inline(doc["notes"][0]) in html
+    assert 'class="theme"' not in html and 'class="standfirst"' not in html
+    assert all(page.esc(x["title"]) in html for x in doc["scan"])
+    seen = text(html)
+    assert f"{doc['meta']['kept']} stories Saturday, October 24, 2026" in seen
+    assert f"{doc['meta']['kept']} stories kept today." in seen and "covered above" not in seen
+    assert "triage" not in seen.lower()
+    assert [h for h in hrefs(between(html, '<aside class="rail">', "</aside>")) if h.startswith("#")] == ["#scan"]
 
 
 def test_untrusted_text_is_escaped_and_only_http_links_are_kept(tmp_path):
@@ -73,17 +206,6 @@ def test_untrusted_text_is_escaped_and_only_http_links_are_kept(tmp_path):
     assert "&lt;b&gt;raw&lt;/b&gt;" in html
 
 
-def test_a_scan_only_brief_gets_a_page_with_its_note(tmp_path):
-    cfg, day = setup_day(tmp_path)
-    write_draft(day, {"date": DATE})
-    doc, _ = finalize.finalize(day)
-    assert doc["mode"] == "scan_only"
-    html = page.day_page(doc)
-    assert 'class="notice"' in html and page.inline(doc["notes"][0]) in html
-    assert 'class="theme"' not in html and "headline" not in html.split("<main", 1)[1]
-    assert all(page.esc(x["title"]) in html for x in doc["scan"])
-
-
 def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_path):
     cfg, doc = written(tmp_path)
     a, b = build.build(cfg, tmp_path / "a"), build.build(cfg, tmp_path / "b")
@@ -91,11 +213,22 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
     files = sorted(p.relative_to(tmp_path / "a") for p in (tmp_path / "a").rglob("*") if p.is_file())
     assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", "404.html", "favicon.svg",
                                        "feed.xml", "index.html", "site.css"]
-    assert all((tmp_path / "a" / f).read_bytes() == (tmp_path / "b" / f).read_bytes() for f in files)
     pub = json.loads((tmp_path / "a" / DATE / "brief.json").read_text())
     assert "session" not in pub["meta"] and "warnings" not in pub["meta"]
     assert all(f["allowed"] for f in pub["fetches"]) and pub["sections"] == doc["sections"]
     assert page.esc(doc["headline"]) in (tmp_path / "a" / "index.html").read_text()
+
+
+def test_two_builds_of_the_same_inputs_are_byte_identical(tmp_path):
+    cfg, doc = written(tmp_path)
+    add_v1(cfg, {d: v1_page({"dek": f"v1 on {d}"}) for d in ("2026-09-30", "2026-10-01", "2026-10-23")})
+    two_v2_days(cfg, doc)
+    build.build(cfg, tmp_path / "a")
+    build.build(cfg, tmp_path / "b")
+    def tree(root):
+        return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+    a = tree(tmp_path / "a")
+    assert len(a) == 12 and a == tree(tmp_path / "b")
 
 
 def test_v1_pages_are_copied_unchanged_and_a_v2_brief_wins_its_date(tmp_path):
@@ -150,7 +283,7 @@ def test_every_page_shares_one_stylesheet_under_a_strict_policy(tmp_path):
     add_v1(cfg, {"2026-09-14": v1_page({"dek": "x"})})
     build.build(cfg, tmp_path / "out")
     out = tmp_path / "out"
-    for f, root in (("index.html", ""), ("404.html", "/")):
+    for f, root in (("index.html", ""), ("404.html", "/"), (f"{DATE}/index.html", "../")):
         body = (out / f).read_text()
         assert f'content="{CSP}"' in body
         assert f'<link rel="stylesheet" href="{root}site.css">' in body and "<style" not in body and "style=" not in body

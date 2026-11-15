@@ -80,17 +80,20 @@ def build(cfg, out, validator=None, log=print):
     out.mkdir(parents=True, exist_ok=True)
     v2 = v2_days(cfg, validator or Validator(), log)
     v1 = {p.parent.name: p for p in sorted(v1_dir(cfg).glob("*/index.html")) if DATE.match(p.parent.name)}
+    dates, names = sorted(set(v2) | set(v1)), {src.id: src.name for src in cfg.sources}
     issues = []
-    for d in sorted(set(v2) | set(v1), reverse=True):
+    for i, d in enumerate(dates):
         (out / d).mkdir()
         if d in v2:
-            (out / d / "index.html").write_text(page.day_page(v2[d]))
+            nav = page.Neighbors(dates[i - 1] if i else None, dates[i + 1] if i + 1 < len(dates) else None, frozenset(dates))
+            (out / d / "index.html").write_text(page.day_page(v2[d], nav, names))
             (out / d / "brief.json").write_text(json.dumps(public(v2[d]), sort_keys=True, ensure_ascii=False, indent=1) + "\n")
             issues.append(page.Issue(d, "v2", v2[d]["headline"]))
         else:
             body = v1[d].read_bytes()
             (out / d / "index.html").write_bytes(body)
             issues.append(page.Issue(d, "v1", v1_summary(body.decode("utf-8", "replace"))))
+    issues.reverse()
     css = (page.TEMPLATES / "site.css").read_text()
     (out / "site.css").write_text(css)
     (out / "favicon.svg").write_text(page.favicon(css))

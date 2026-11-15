@@ -14,7 +14,7 @@ from itertools import groupby
 from string import Template
 from urllib.parse import urlsplit
 
-from ..brief.render import SECTION_NAMES
+from ..brief.render import SECTION_NAMES, SPLIT_LABELS
 from ..config import REPO
 
 TEMPLATES = REPO / "templates"
@@ -28,6 +28,8 @@ SOURCE_NAMES = {"hn": "Hacker News", "lesswrong": "LessWrong", "alignment-forum"
                 "hf-paper-comments": "Hugging Face"}
 SHORT_NAMES = {"hn": "HN", "lesswrong": "LessWrong", "alignment-forum": "AF", "hf-paper-comments": "HF"}
 KARMA = {"lesswrong", "alignment-forum"}
+LANDMARKS = {"what-happened": ("What happened", "what_happened"), "updates": ("Updates", "updates"),
+             "scan": ("Everything kept today", "scan")}
 _BOLD = re.compile(r"\*\*(\S(?:.*?\S)?)\*\*")
 _ITALIC = re.compile(r"(?<![\w*])\*(\S(?:.*?\S)?)\*(?![\w*])")
 
@@ -54,6 +56,15 @@ class Issue:
         return f"{SITE}/{self.date}/"
 
 
+@dataclass(frozen=True)
+class Neighbors:
+    """Where a day's page sits among all the issues, v1 and v2: the dates just before and after it
+    (None at either end), and every date that has an issue."""
+    prev: str | None = None
+    next: str | None = None
+    known: frozenset = frozenset()
+
+
 def esc(s):
     return html.escape("" if s is None else str(s))
 
@@ -72,12 +83,9 @@ def paras(s):
     return "".join(f"<p>{inline(p.strip())}</p>" for p in re.split(r"\n{2,}", s or "") if p.strip())
 
 
-def link(inner, url, cls=None):
+def link(inner, url):
     """`inner` (already HTML) as a link to url, or unlinked when url isn't http(s)."""
-    attr = f' class="{cls}"' if cls else ""
-    if not re.match(r"https?://", url or "", re.I):
-        return f"<span{attr}>{inner}</span>" if cls else inner
-    return f'<a{attr} href="{esc(url)}">{inner}</a>'
+    return f'<a href="{esc(url)}">{inner}</a>' if re.match(r"https?://", url or "", re.I) else inner
 
 
 def fmt_date(iso):
@@ -91,21 +99,59 @@ def short_date(iso):
     return f"{MONTHS[m - 1][:3]} {d}"
 
 
+def _count(n, one, many):
+    return f"{n:,} {one if n == 1 else many}"
+
+
+def _span(first, last):
+    """'September 14 to October 25, 2026', with the year once when both dates share it."""
+    a, b = fmt_date(first).split(", ", 1)[1], fmt_date(last).split(", ", 1)[1]
+    if first == last:
+        return b
+    return f"{a.rsplit(', ', 1)[0]} to {b}" if first[:4] == last[:4] else f"{a} to {b}"
+
+
 def _ids(xs):
     return esc(" ".join(xs))
 
 
-def _chips(story):
-    """A chip per thread with comments (at most 2), most discussed first."""
+def _cut(s, n=60):
+    """`s` cut at a word boundary to about n characters, with an ellipsis when it was cut."""
+    return s if len(s) <= n else s[:n + 1].rsplit(" ", 1)[0].rstrip(",;:·-") + "…"
+
+
+def _shell(title, root, body, head=""):
+    """A finished page in templates/page.html. `root` is the path from the page to the site's root."""
+    return Template((TEMPLATES / "page.html").read_text()).substitute(title=esc(title), root=root, head=head, body=body)
+
+
+def _head(description, url, og_title, og_type):
+    return "\n".join([
+        f'<meta name="description" content="{esc(description)}">',
+        f'<meta property="og:title" content="{esc(og_title)}">',
+        f'<meta property="og:description" content="{esc(description)}">',
+        f'<meta property="og:type" content="{og_type}">',
+        f'<meta property="og:url" content="{esc(url)}">',
+        '<meta property="og:site_name" content="Debrief">',
+        f'<link rel="canonical" href="{esc(url)}">',
+    ])
+
+
+def _credit(root):
+    return (f'<p>Debrief is an automated daily briefing built by <a href="https://alexwoodka.com">Alex Woodka</a>.</p>'
+            f'<p><a href="{root}">All issues</a> · <a href="{root}feed.xml">RSS</a></p>')
+
+
+def _thread_counts(story):
+    """Each thread with comments (at most 2), most discussed first: 'HN · 273 points · 84 comments'."""
     out = []
     for t in sorted((t for t in story["threads"] if t["comments"]), key=lambda t: -t["comments"])[:2]:
         bits = [SHORT_NAMES.get(t["source"], t["source"])]
         if t["points"] is not None:
-            bits.append(f"{t['points']:,} {'karma' if t['source'] in KARMA else 'pts'}")
-        if t["comments"] is not None:
-            bits.append(f"{t['comments']:,} comments")
-        out.append(link(esc(" · ".join(bits)), t["url"], "chip"))
-    return "".join(out)
+            bits.append(f"{t['points']:,} karma" if t["source"] in KARMA else _count(t["points"], "point", "points"))
+        bits.append(_count(t["comments"], "comment", "comments"))
+        out.append(link(esc(" · ".join(bits)), t["url"]))
+    return f' <span class="counts">{", ".join(out)}</span>' if out else ""
 
 
 def _story_link(doc, sid):
@@ -113,57 +159,95 @@ def _story_link(doc, sid):
     return link(esc(st["title"]), st["url"]) if st else ""
 
 
-def _masthead(doc):
-    head = (f'<a class="back" href="../">← all debriefs</a>\n<header class="top"><div class="brandrow">'
-            f'<div class="wordmark">Debrief</div><div class="rundate">{esc(fmt_date(doc["date"]))}</div></div>')
+def _landmarks(doc):
+    """The unnumbered parts this issue has, as (anchor, name), in contents order."""
+    return [(anchor, name) for anchor, (name, key) in LANDMARKS.items() if doc[key]]
+
+
+def _contents(doc):
+    """The list both contents renderings share: the numbered sections, then the other parts."""
+    sections = "".join(f'<li><a href="#s-{n}">{inline(s["heading"])}</a></li>' for n, s in enumerate(doc["sections"], 1))
+    others = "".join(f'<li><a href="#{a}">{name}</a></li>' for a, name in _landmarks(doc))
+    return (f'<ol class="toc">{sections}</ol>' if sections else "") + (f'<ul class="toc-more">{others}</ul>' if others else "")
+
+
+def _issue_nav(nav, label):
+    """Links to the issues before and after this one, each named by label(date)."""
+    links = []
+    if nav.prev:
+        links.append(f'<a rel="prev" href="../{nav.prev}/">← {esc(label(nav.prev))}</a>')
+    if nav.next:
+        links.append(f'<a rel="next" href="../{nav.next}/">{esc(label(nav.next))} →</a>')
+    return f'<nav class="issue-nav" aria-label="Other issues">{"".join(links)}</nav>' if links else ""
+
+
+def _rail(doc, nav):
+    return (f'<aside class="rail"><a class="wordmark" href="../">Debrief</a>'
+            f'<p class="rail-date">{esc(fmt_date(doc["date"]))}</p>'
+            f'<nav aria-label="Contents">{_contents(doc)}</nav>{_issue_nav(nav, short_date)}</aside>')
+
+
+def _title(doc):
+    m = doc["meta"]
+    stats = _count(m["kept"], "story", "stories")
+    if doc["mode"] == "written":
+        stats = f"{_count(m['words'], 'word', 'words')} · {stats}"
+    out = ['<header class="title"><div class="masthead"><a class="wordmark" href="../">Debrief</a></div>',
+           f'<p class="meta caps">{stats}</p><h1>{esc(fmt_date(doc["date"]))}</h1>']
     if doc["headline"]:
-        head += f'<h1 class="headline">{inline(doc["headline"])}</h1>'
-    return head + "</header>"
+        out.append(f'<p class="standfirst">{inline(doc["headline"])}</p>')
+    return "".join(out) + "</header>"
+
+
+def _inline_contents(doc):
+    return (f'<details class="toc-inline"><summary class="caps">In this issue</summary>'
+            f'<nav aria-label="Contents">{_contents(doc)}</nav></details>')
 
 
 def _what_happened(doc):
     if not doc["what_happened"]:
         return ""
     items = "".join(f'<li data-stories="{_ids(e["stories"])}">{inline(e["text"])}</li>' for e in doc["what_happened"])
-    return f'<section class="scan" id="what-happened"><div class="kicker">What happened</div><ul class="wh">{items}</ul></section>'
+    return f'<section class="what" id="what-happened"><h2 class="kicker caps">{LANDMARKS["what-happened"][0]}</h2><ul>{items}</ul></section>'
 
 
 def _lead(doc):
-    return f'<section class="lead">{paras(doc["lead"])}</section><hr class="div">' if doc["lead"] else ""
+    return f'<section class="lead">{paras(doc["lead"])}</section>' if doc["lead"] else ""
 
 
 def _quote(q):
     who = ", ".join(x for x in (q["author"], SOURCE_NAMES.get(q["source"], q["source"])) if x) or "source"
-    return (f'<blockquote class="q" data-story="{esc(q["story"])}"><p>{esc(q["text"])}</p>'
-            f'<span class="who">— {link(esc(who), q["url"])}</span></blockquote>')
+    return (f'<blockquote data-story="{esc(q["story"])}"><p>{esc(q["text"])}</p>'
+            f'<p class="who">— {link(esc(who), q["url"])}</p></blockquote>')
 
 
 def _section(doc, n, s):
     out = [f'<section class="theme" id="s-{n}" data-stories="{_ids(s["stories"])}">',
-           f"<h2>{inline(s['heading'])}</h2>", paras(s["body"])]
-    sp = s.get("split")
-    if sp:
-        out += ['<div class="split">',
-                f'<div class="pane bull"><span class="tag">For</span>{inline(sp["for"])}</div>',
-                f'<div class="pane bear"><span class="tag">Against</span>{inline(sp["against"])}</div></div>',
-                f'<div class="myread"><span class="tag">My read</span><div class="rd">{inline(sp["read"])}</div></div>']
+           f'<h2><span class="num">{n}</span> {inline(s["heading"])}</h2>', paras(s["body"])]
+    if s.get("split"):
+        out.append('<div class="split">' + "".join(f'<p class="label caps {key}">{label}</p><p>{inline(s["split"][key])}</p>'
+                                                   for key, label in SPLIT_LABELS.items()) + "</div>")
     out += [_quote(q) for q in s["quotes"]]
-    srcs = [f'<span class="src">{_story_link(doc, sid)}{_chips(doc["stories"][sid])}</span>'
-            for sid in s["stories"] if sid in doc["stories"]]
+    srcs = [f"<li>{_story_link(doc, sid)}{_thread_counts(doc['stories'][sid])}</li>" for sid in s["stories"] if sid in doc["stories"]]
     if srcs:
-        out.append(f'<div class="refs"><span class="rtag">Sources</span>{"".join(srcs)}</div>')
+        out.append(f'<div class="sources"><p class="label caps">Sources</p><ul>{"".join(srcs)}</ul></div>')
     return "".join(out) + "</section>"
 
 
-def _updates(doc):
+def _updates(doc, known):
     if not doc["updates"]:
         return ""
     rows = []
     for u in doc["updates"]:
-        since = f'<span class="since">first reported {esc(short_date(u["prev_reported"]))}</span>' if u["prev_reported"] else ""
-        rows.append(f'<div class="upd" data-story="{esc(u["story"])}"><div class="ut">{_story_link(doc, u["story"])}{since}</div>'
+        since, d = "", (u["prev_reported"] or "")[:10]
+        if d:
+            when = esc(short_date(d))
+            if d in known:
+                when = f'<a href="../{d}/">{when}</a>'
+            since = f'<p class="since">first reported {when}</p>'
+        rows.append(f'<div class="update" data-story="{esc(u["story"])}"><h3>{_story_link(doc, u["story"])}</h3>{since}'
                     f'<p>{inline(u["text"])}</p></div>')
-    return f'<section class="updates" id="updates"><div class="kicker">Updates</div>{"".join(rows)}</section>'
+    return f'<section class="updates" id="updates"><h2 class="kicker caps">{LANDMARKS["updates"][0]}</h2>{"".join(rows)}</section>'
 
 
 def _notes(doc):
@@ -172,7 +256,7 @@ def _notes(doc):
     if doc["mode"] == "scan_only":
         return '<div class="notice">' + "".join(f"<p>{inline(n)}</p>" for n in doc["notes"]) + "</div>"
     items = "".join(f"<li>{inline(n)}</li>" for n in doc["notes"])
-    return f'<section class="notes"><div class="kicker">Notes</div><ul>{items}</ul></section>'
+    return f'<section class="notes"><h2 class="kicker caps">Notes</h2><ul>{items}</ul></section>'
 
 
 def _anchors(doc):
@@ -189,88 +273,56 @@ def _anchors(doc):
     return out
 
 
+def _where(anchor):
+    """The mark a covered scan row carries: §N for a section, else the part's name."""
+    return f"§{anchor[2:]}" if anchor.startswith("s-") else LANDMARKS[anchor][0]
+
+
 def _scan(doc):
     if not doc["scan"]:
         return ""
-    anchors, out, current = _anchors(doc), [], None
-    out.append('<section class="index" id="scan"><div class="kicker">The scan · every story kept today</div>')
-    for x in doc["scan"]:
-        if x["section"] != current:
-            current = x["section"]
-            out.append(f'<div class="ixsec">{esc(SECTION_NAMES.get(current, current))}</div>')
-        mark = f'<a class="in" href="#{anchors[x["id"]]}">↑ in the brief</a>' if x["covered"] and x["id"] in anchors else ""
-        out.append(f'<div class="ix" data-story="{esc(x["id"])}">{link(esc(x["title"]), x["url"], "t")}{mark}'
-                   f'<span class="n">{inline(x["gist"])}</span></div>')
+    anchors = _anchors(doc)
+    out = [f'<section class="scan" id="scan"><h2 class="kicker caps">{LANDMARKS["scan"][0]}</h2>']
+    for section, rows in groupby(doc["scan"], key=lambda x: x["section"]):
+        out.append(f'<h3 class="group caps">{esc(SECTION_NAMES.get(section, section))}</h3><ul class="scan-list">')
+        for x in rows:
+            anchor = anchors.get(x["id"]) if x["covered"] else None
+            mark = f'<a class="where" href="#{anchor}">{_where(anchor)}</a>' if anchor else ""
+            out.append(f'<li data-story="{esc(x["id"])}"><div class="row">{link(esc(x["title"]), x["url"])}{mark}</div>'
+                       f'<p class="gist">{inline(x["gist"])}</p></li>')
+        out.append("</ul>")
     return "".join(out) + "</section>"
 
 
-def _footer(doc):
-    m, bits = doc["meta"], []
-    line = f"{m['covered']} of {m['kept']} stories in the article" if doc["mode"] == "written" else f"{m['kept']} stories kept"
-    if m["triage_status"] != "ok":
-        line += f" · triage {m['triage_status']}"
+def _footer(doc, nav, source_names):
+    m = doc["meta"]
+    kept = f"{_count(m['kept'], 'story', 'stories')} kept today"
+    out = [f"<p>{kept}, {m['covered']:,} covered above.</p>" if doc["mode"] == "written" else f"<p>{kept}.</p>"]
     if m["failed_sources"]:
-        line += " · sources down: " + ", ".join(m["failed_sources"])
-    bits.append(esc(line))
+        names = ", ".join(source_names.get(s, s) for s in m["failed_sources"])
+        out.append(f"<p>Some sources didn't load today: {esc(names)}.</p>")
     fetched = [f for f in doc["fetches"] if f["allowed"]]
     if fetched:
-        pages = "; ".join(link(esc((urlsplit(f["url"]).netloc + urlsplit(f["url"]).path)[:80]), f["url"])
-                          + (f" ({esc(f['why'])})" if f["why"] else "") for f in fetched)
-        bits.append(f"<b>Pages checked</b>{pages}")
-    bits.append("Your morning read on the AI/ML landscape.")
-    return '<footer class="foot">' + "".join(f"<div>{b}</div>" for b in bits) + "</footer>"
+        pages = "".join(f"<li>{link(esc((urlsplit(f['url']).netloc + urlsplit(f['url']).path)[:80]), f['url'])}"
+                        + (f" ({esc(f['why'])})" if f["why"] else "") + "</li>" for f in fetched)
+        out.append(f'<p class="label caps">Pages checked for this issue</p><ul class="checked">{pages}</ul>')
+    out += [_credit("../"), _issue_nav(nav, lambda d: fmt_date(d).rsplit(", ", 1)[0])]
+    return '<footer class="foot">' + "".join(out) + "</footer>"
 
 
-def _template(name):
-    return Template((TEMPLATES / name).read_text())
-
-
-def day_page(doc):
-    """The page for one brief.json document (written or scan_only)."""
-    parts = [_masthead(doc)]
-    if doc["mode"] == "written":
-        parts += [_what_happened(doc), _lead(doc), *(_section(doc, n, s) for n, s in enumerate(doc["sections"], 1)),
-                  _updates(doc), _notes(doc)]
-    else:
-        parts.append(_notes(doc))
-    parts += [_scan(doc), _footer(doc)]
-    return _template("day.html").substitute(title=esc(f"Debrief · {fmt_date(doc['date'])}"),
-                                            content="\n".join(p for p in parts if p))
-
-
-def _count(n, one, many):
-    return f"{n:,} {one if n == 1 else many}"
-
-
-def _span(first, last):
-    """'September 14 to October 25, 2026', with the year once when both dates share it."""
-    a, b = fmt_date(first).split(", ", 1)[1], fmt_date(last).split(", ", 1)[1]
-    if first == last:
-        return b
-    return f"{a.rsplit(', ', 1)[0]} to {b}" if first[:4] == last[:4] else f"{a} to {b}"
-
-
-def _shell(title, root, body, head=""):
-    """A finished page in templates/page.html. `root` is the path from the page to the site's root."""
-    return _template("page.html").substitute(title=esc(title), root=root, head=head, body=body)
-
-
-def _head(description, url, og_title, og_type):
-    return "\n".join([
-        f'<meta name="description" content="{esc(description)}">',
-        f'<meta property="og:title" content="{esc(og_title)}">',
-        f'<meta property="og:description" content="{esc(description)}">',
-        f'<meta property="og:type" content="{og_type}">',
-        f'<meta property="og:url" content="{esc(url)}">',
-        '<meta property="og:site_name" content="Debrief">',
-        f'<link rel="canonical" href="{esc(url)}">',
-    ])
-
-
-def _credit(root):
-    return (f'<footer class="credit"><p>Debrief is an automated daily briefing built by '
-            f'<a href="https://alexwoodka.com">Alex Woodka</a>. <a href="{root}">All issues</a> · '
-            f'<a href="{root}feed.xml">RSS</a></p></footer>')
+def day_page(doc, nav=Neighbors(), source_names=None):
+    """The page for one brief.json document (written or scan_only). `nav` places it among the other
+    issues; `source_names` maps a source id to the name sources.yml gives it."""
+    date = doc["date"]
+    parts = [_title(doc), _inline_contents(doc), _what_happened(doc), _lead(doc),
+             *(_section(doc, n, s) for n, s in enumerate(doc["sections"], 1)),
+             _updates(doc, nav.known), _notes(doc), _scan(doc)]
+    main = "\n".join(p for p in parts if p)
+    title = f"Debrief · {short_date(date)}" + (f" · {_cut(plain(doc['headline']))}" if doc["headline"] else "")
+    head = _head(plain(doc["headline"]) or NO_BRIEF, f"{SITE}/{date}/", f"Debrief · {fmt_date(date)}", "article")
+    return _shell(title, "../", head=head, body=(
+        f'<a class="skip" href="#issue">Skip to the issue</a>\n<div class="page day">\n{_rail(doc, nav)}\n'
+        f'<main id="issue">\n{main}\n</main>\n{_footer(doc, nav, source_names or {})}\n</div>'))
 
 
 def index_page(issues):
@@ -298,22 +350,20 @@ def index_page(issues):
     main = "\n".join(body) or "<p>No issues yet.</p>"
     return _shell("Debrief", "", head=_head(TAGLINE, f"{SITE}/", "Debrief", "website"), body=(
         f'<div class="page">\n<header class="archive-head"><h1 class="wordmark">Debrief</h1>'
-        f'<p class="tagline">{esc(TAGLINE)}</p></header>\n<main>\n{main}\n</main>\n{_credit("")}\n</div>'))
+        f'<p class="tagline">{esc(TAGLINE)}</p></header>\n<main>\n{main}\n</main>\n<footer class="foot">{_credit("")}</footer>\n</div>'))
 
 
 def feed(issues):
     """feed.xml: an Atom feed of `issues`, newest first. Updated is each issue's date at midnight UTC,
     and the feed's is the newest issue's, so the same issues give the same bytes."""
-    def stamp(d):
-        return f"{d}T00:00:00Z"
     entries = "".join(
         f'<entry>\n<title>{esc(e.title)}</title>\n<id>{esc(e.url)}</id>\n<link rel="alternate" type="text/html" href="{esc(e.url)}"/>\n'
-        f'<updated>{stamp(e.date)}</updated>\n<summary>{esc(plain(e.summary))}</summary>\n</entry>\n' for e in issues)
+        f'<updated>{e.date}T00:00:00Z</updated>\n<summary>{esc(plain(e.summary))}</summary>\n</entry>\n' for e in issues)
     return ('<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom">\n'
             f'<title>Debrief</title>\n<subtitle>{esc(TAGLINE)}</subtitle>\n<id>{SITE}/</id>\n'
             f'<link rel="self" type="application/atom+xml" href="{SITE}/feed.xml"/>\n'
             f'<link rel="alternate" type="text/html" href="{SITE}/"/>\n'
-            f'<updated>{stamp(issues[0].date if issues else "1970-01-01")}</updated>\n'
+            f'<updated>{issues[0].date if issues else "1970-01-01"}T00:00:00Z</updated>\n'
             f'<author><name>Debrief</name><uri>{SITE}/</uri></author>\n{entries}</feed>\n')
 
 

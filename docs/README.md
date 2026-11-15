@@ -193,15 +193,17 @@ The session's stream is kept in `brief_session.jsonl` and summarized in `brief_s
 
 `debrief site build --out DIR` (`src/debrief/site/`) is deterministic and stdlib only. It needs no network and no Claude, and the same briefs always give the same bytes:
 
-- **`<date>/index.html`:** each day's page. `page.py` fills `templates/day.html`, which carries v1's look (its CSS, light and dark), with the brief:
-  - the headline, then `what_happened` as the arrow list;
-  - the lead with its drop cap;
-  - the sections, each with its for/against/my-read panes, its quotes (attributed and linked to the thread), and a Sources line of links with discussion chips;
-  - Updates and Notes;
-  - the scan of every story kept, grouped by section. A covered story links to where the brief covers it.
+- **`<date>/index.html`:** each day's page. `page.py` fills the shared shell (`templates/page.html`) with the brief:
+  - the date as the title, a line with the article's words and the stories kept, and the headline under it;
+  - the contents, twice from one list: the numbered sections, then What happened, Updates (when there are any) and Everything kept today. From 1100px wide they sit in a rail on the left that stays in view, with the previous and next issues; below that, in a collapsed "In this issue" right under the title. Neither needs a script;
+  - `what_happened` as a plain list, then the lead;
+  - the sections, numbered, each with its case for, case against and what the analysis suggests as labeled paragraphs, its quotes (attributed and linked to the thread), and a Sources list whose threads show their points and comments as plain text;
+  - Updates, where "first reported" links to that issue when the archive has it, and Notes;
+  - the scan of every story kept, grouped by section. A covered story shows where: its section's number (§2), Updates or What happened;
+  - a footer for readers: how many stories were kept and covered, the sources that didn't load by their names in `sources.yml`, the pages checked for the issue, who built Debrief, and the previous and next issues.
 
   A scan-only brief gets a note in place of the article.
-- **Safety:** every string is escaped. Prose gets only `**bold**` and `*italic*`. Links come only from the data's url fields, and only http(s). The page has no script, and a Content-Security-Policy says so.
+- **Safety:** every string is escaped. Prose gets only `**bold**` and `*italic*`. Links come only from the data's url fields, and only http(s). No page has a script or inline styles, and a Content-Security-Policy allows only the site's own stylesheet, fonts and images.
 - **For later features:** each section has `id="s-N"` and `data-stories` (its story ids), and each story row has `data-story`.
 - **`<date>/brief.json`:** the day as data, the brief minus what's only for us (the session, the check's warnings, refused fetches).
 - **`index.html`:** the archive, newest first, grouped by month, each month with its count. Where the v2 issues give way to v1's, a divider gives the first version's dates and says those pages keep their original layout.
@@ -293,7 +295,7 @@ src/debrief/triage/     candidates.py, merge.py, ledger.py, score.py, output.py,
 src/debrief/brief/      day.py, context.py, check.py, hooks.py, finalize.py, render.py, run.py
 src/debrief/site/       page.py (a day's page, the archive list), build.py (the site)
 skill/           the brief skill, a Claude Code plugin: skills/brief/SKILL.md and references/
-templates/       the site's pages: day.html and index.html (v1's look)
+templates/       the site's page shell (page.html) and its one stylesheet (site.css)
 config/          settings.yml (UA, timeouts, rate buckets, collect), sources.yml (every source),
                  triage.yml (windows, caps, merge and blocklist rules, scoring), relevance.md (what's relevant)
 prompts/         score_v1.md: the scoring call's instructions (relevance.md is appended)
