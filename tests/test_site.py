@@ -6,7 +6,7 @@ import re
 import xml.etree.ElementTree as ET
 
 import pytest
-from test_brief import DATE, FIGURE, LW, UPDATE, good_draft, setup_day, write_draft
+from test_brief import CHART, DATE, FIGURE, LW, UPDATE, good_draft, setup_day, write_draft
 
 from debrief.brief import finalize
 from debrief.site import build, page
@@ -149,10 +149,10 @@ def test_an_update_links_to_the_issue_that_first_reported_it_only_when_that_issu
     assert '<p class="since">first reported Oct 23</p>' in unlinked and "../2026-10-23/" not in unlinked
 
 
-def test_a_day_page_shows_no_figure_when_the_brief_has_none(tmp_path):
+def test_a_day_page_shows_no_figure_or_chart_when_the_brief_has_none(tmp_path):
     _, doc = written(tmp_path)
     html = page.day_page(doc)
-    assert "Figure of the day" not in html and 'class="fig"' not in html
+    assert "Figure of the day" not in html and 'class="fig"' not in html and 'class="chart"' not in html
 
 
 def test_the_figure_of_the_day_sits_above_what_happened_and_links_the_section_on_its_story(tmp_path):
@@ -166,6 +166,43 @@ def test_the_figure_of_the_day_sits_above_what_happened_and_links_the_section_on
     doc["figure"]["story"] = LW                                      # only What happened mentions it
     fig = between(page.day_page(doc), '<section class="fig">', "</section>")
     assert hrefs(fig) == [] and text(fig).endswith("a record.")
+
+
+def bars(chart_html):
+    """(label, bar width class, value) for each bar, as a reader meets them, in order."""
+    return [(text(lab), w, htmllib.unescape(v)) for lab, w, v in re.findall(
+        r'<span class="lab">(.*?)</span><span class="track"><span class="fill (w\d+)"></span></span><span class="val">([^<]*)</span>',
+        chart_html)]
+
+
+def test_a_chart_is_drawn_as_html_bars_inside_its_section(tmp_path):
+    _, doc = written(tmp_path)
+    doc["chart"] = {"section": 2, "caption": "Push-T success on goals 75 steps away.", "unit": "%",
+                    "bars": [{"label": "As published", "value": 22}, {"label": "Only the planning changed", "value": 85}]}
+    html = page.day_page(doc)
+    assert html.count('<figure class="chart">') == 1 and "<svg" not in html
+    second = between(html, '<section class="theme" id="s-2"', "</section>")
+    chart = between(second, '<figure class="chart">', "</figure>")
+    assert bars(chart) == [("As published", "w22", "22%"), ("Only the planning changed", "w85", "85%")]
+    assert text(chart).endswith("85% Push-T success on goals 75 steps away.")
+    assert second.index("</p>") < second.index('<figure class="chart">') < second.index('class="sources"')
+
+    doc["chart"].update(unit="", bars=[{"label": "Sites", "value": 7403}, {"label": "Tables", "value": 10560},
+                                       {"label": "Breaches", "value": 0}])
+    assert bars(between(page.day_page(doc), '<figure class="chart">', "</figure>")) == [
+        ("Sites", "w70", "7,403"), ("Tables", "w100", "10,560"), ("Breaches", "w0", "0")]
+    doc["chart"].update(unit="%", bars=[{"label": "Growth", "value": 150}, {"label": "Last year", "value": 50.5}])
+    assert bars(between(page.day_page(doc), '<figure class="chart">', "</figure>")) == [
+        ("Growth", "w100", "150%"), ("Last year", "w34", "50.5%")]
+    doc["chart"].update(unit="ms", section=9)
+    assert 'class="chart"' not in page.day_page(doc)
+
+
+def test_every_bar_width_the_page_uses_is_that_share_of_the_track_in_the_stylesheet():
+    css = (page.TEMPLATES / "site.css").read_text()
+    widths = {int(n): w for n, w in re.findall(r"\.w(\d+) \{ width: (\d+%|0); \}", css)}
+    assert widths == {n: f"{n}%" if n else "0" for n in range(101)}
+    assert ".fill { display: block; height: 100%; background: var(--accent); }" in css
 
 
 def test_the_scan_marks_where_the_brief_covers_each_story(tmp_path):
@@ -289,7 +326,7 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
 
 def test_two_builds_of_the_same_inputs_are_byte_identical(tmp_path):
     cfg, doc = written(tmp_path)
-    doc = {**doc, "figure": {**FIGURE, "story": UPDATE}}
+    doc = {**doc, "figure": {**FIGURE, "story": UPDATE}, "chart": CHART}
     (cfg.data_dir / "runs" / DATE / "brief.json").write_text(json.dumps(doc))
     add_v1(cfg, {d: v1_page({"dek": f"v1 on {d}"}) for d in ("2026-09-30", "2026-10-01", "2026-10-23")})
     two_v2_days(cfg, doc)
@@ -299,7 +336,7 @@ def test_two_builds_of_the_same_inputs_are_byte_identical(tmp_path):
         return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
     a = tree(tmp_path / "a")
     assert len(a) == 19 and a == tree(tmp_path / "b")
-    assert b'<section class="fig">' in a[f"{DATE}/index.html"]
+    assert b'<section class="fig">' in a[f"{DATE}/index.html"] and b'<figure class="chart">' in a[f"{DATE}/index.html"]
 
 
 PICTURES = {"endpaper": "an endpaper", "map": "a map of the day", "spines": "a shelf of book spines",

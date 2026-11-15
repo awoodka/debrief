@@ -18,7 +18,7 @@ from string import Template
 from urllib.parse import urlsplit
 
 from ..brief.day import host
-from ..brief.render import SECTION_NAMES, SPLIT_LABELS
+from ..brief.render import SECTION_NAMES, SPLIT_LABELS, chart_value
 from ..config import REPO
 
 TEMPLATES = REPO / "templates"
@@ -259,9 +259,29 @@ def _quote(q):
     return f'<blockquote data-story="{esc(q["story"])}"><p>{esc(q["text"])}</p>{sign}</blockquote>'
 
 
+def _width(value, top):
+    """A bar's length in whole percent of the track, never 0 for a value above 0."""
+    return max(1, round(100 * value / top)) if value else 0
+
+
+def _chart(chart):
+    """The chart as HTML bars: each label above its bar, the value at the bar's end, the caption
+    under them. Bars are scaled to the largest value, or to 100 when the unit is "%". The page can't
+    set a width inline (its Content-Security-Policy allows no inline styles), so a bar takes the
+    class wN, which site.css makes N% of the track."""
+    values = [b["value"] for b in chart["bars"]]
+    top = max(100, *values) if chart["unit"] == "%" else max(values) or 1
+    bars = "".join(f'<span class="lab">{inline(b["label"])}</span><span class="track"><span class="fill w{_width(b["value"], top)}">'
+                   f'</span></span><span class="val">{esc(chart_value(b["value"], chart["unit"]))}</span>' for b in chart["bars"])
+    return f'<figure class="chart"><div class="bars">{bars}</div><figcaption>{inline(chart["caption"])}</figcaption></figure>'
+
+
 def _section(doc, n, s):
     out = [f'<section class="theme" id="s-{n}" data-stories="{_ids(s["stories"])}">',
            f'<h2><span class="num">{n}</span> {inline(s["heading"])}</h2>', paras(s["body"])]
+    chart = doc.get("chart")
+    if chart and chart["section"] == n:
+        out.append(_chart(chart))
     if s.get("split"):
         out.append('<div class="split">' + "".join(f'<div class="arg {key}"><p class="label caps">{label}</p><p>{inline(s["split"][key])}</p></div>'
                                                    for key, label in SPLIT_LABELS.items()) + "</div>")
