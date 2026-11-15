@@ -57,6 +57,27 @@
       }
     },
     "notes": {"type": "array", "items": {"type": "string"}},
+    "figure": {
+      "type": "object", "additionalProperties": false, "required": ["value", "caption", "story"],
+      "description": "Optional: the figure of the day, a number verbatim from its story's text. story is an index line's id.",
+      "properties": {"value": {"type": "string"}, "caption": {"type": "string"}, "story": {"type": "string"}}
+    },
+    "chart": {
+      "type": "object", "additionalProperties": false, "required": ["section", "caption", "unit", "bars"],
+      "description": "Optional, one per brief: bars drawn in sections[section - 1], each value in the text of a story that section cites.",
+      "properties": {
+        "section": {"type": "integer", "minimum": 1},
+        "caption": {"type": "string"},
+        "unit": {"type": "string", "description": "\"%\" draws the bars out of 100"},
+        "bars": {
+          "type": "array", "minItems": 2, "maxItems": 5,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["label", "value"],
+            "properties": {"label": {"type": "string"}, "value": {"type": "number", "minimum": 0}}
+          }
+        }
+      }
+    },
     "scan": {
       "type": "array",
       "description": "Every story triage kept, in index order (section, then score, then newest): headline and gist, for scanning.",

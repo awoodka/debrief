@@ -173,15 +173,17 @@ The brief is layer 3: the day's triage output becomes an article-style brief, wr
    - **Denied:** reading `triage_log.jsonl` (triage's drops are never shown to the skill), the collect reports, the session's own logs and old drafts.
    - **WebFetch:** a hook allows at most 5 per run (the 6th is refused), and only to sites today's stories link to, so a link planted in a comment can't be fetched. Every call is logged in `brief_fetches.jsonl`.
    - **A Stop hook** runs the check (`debrief brief check`). While the draft fails it, the session can't end, and the errors go back to the model.
-3. **The draft.** The model writes only `brief.draft.json` (`schemas/brief_draft.schema.json`): headline, `what_happened` (3–6 events tied to story ids), lead, sections (heading, body, stories, an optional for/against/read split, verbatim quotes), updates, notes, and why it fetched each page. The check rejects:
+3. **The draft.** The model writes only `brief.draft.json` (`schemas/brief_draft.schema.json`): headline, `what_happened` (3–6 events tied to story ids), lead, sections (heading, body, stories, an optional for/against/read split, verbatim quotes), updates, notes, why it fetched each page, and two optional parts: a figure of the day (one number, a caption and the story it's from) and one chart of 2 to 5 bars in a section. The check rejects:
    - ids that aren't in today's index;
    - quotes that aren't word for word in the detail files;
+   - a figure whose number isn't in its story's detail file as written, or is only part of a longer number there ("453" in "1,453");
+   - a chart in a section that doesn't exist, with fewer than 2 or more than 5 bars, or with a number that isn't in the detail file of a story its section cites;
    - links or ids inside prose;
    - item counts out of range;
    - long headings;
    - an article far over the length aim (1,500–2,500 words).
 4. **finalize.** Writes three files:
-   - **`brief.json`** (`schemas/brief.schema.json`): the draft, plus the **scan** (every story triage kept, headline and gist, marked when the article covers it), each story's links and threads, quote attributions, the fetch log, and the session's model, tokens and time. Every link comes from the data, never from the model.
+   - **`brief.json`** (`schemas/brief.schema.json`): the draft, plus the **scan** (every story triage kept, headline and gist, marked when the article covers it), each story's links and threads, quote attributions, the figure and the chart when there are any, the fetch log, and the session's model, tokens and time. Every link comes from the data, never from the model.
    - **`brief.md`**, the same as plain text.
    - **`reported.json`**, the ledger, written last: every story in the scan.
 

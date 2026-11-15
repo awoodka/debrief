@@ -6,6 +6,16 @@ SECTION_NAMES = {"papers": "Papers", "releases": "Releases", "announcements": "A
 SPLIT_LABELS = {"for": "The case for", "against": "The case against", "read": "The analysis suggests"}
 
 
+def number(value):
+    """A number as printed: 7403 -> "7,403", 2.54 -> "2.54"."""
+    return f"{int(value) if float(value).is_integer() else value:,}"
+
+
+def chart_value(value, unit):
+    """A chart bar's value with its unit: "7,403", "85%", "120 ms"."""
+    return number(value) + ("%" if unit == "%" else f" {unit}" if unit else "")
+
+
 def _link(title, url):
     return f"[{title}]({url})" if url else title
 
@@ -18,12 +28,18 @@ def markdown(doc):
     L = [f"# Debrief, {doc['date']}", ""]
     if doc["headline"]:
         L += [f"## {doc['headline']}", ""]
+    if doc.get("figure"):
+        L += [f"**Figure of the day: {doc['figure']['value']}.** {doc['figure']['caption']}", ""]
     if doc["what_happened"]:
         L += ["**What happened**", ""] + [f"- {e['text']}" for e in doc["what_happened"]] + [""]
     if doc["lead"]:
         L += [doc["lead"].strip(), ""]
-    for s in doc["sections"]:
+    chart = doc.get("chart")
+    for n, s in enumerate(doc["sections"], 1):
         L += [f"### {s['heading']}", "", s["body"].strip(), ""]
+        if chart and chart["section"] == n:
+            L += [f"_Chart: {chart['caption']}_", ""] + [f"- {b['label']}: {chart_value(b['value'], chart['unit'])}"
+                                                       for b in chart["bars"]] + [""]
         if s.get("split"):
             L += [f"- **{label}:** {s['split'][key]}" for key, label in SPLIT_LABELS.items()] + [""]
         for q in s["quotes"]:

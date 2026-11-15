@@ -14,6 +14,7 @@ from debrief.brief import context, finalize, hooks
 from debrief.brief.check import check, norm
 from debrief.brief.day import Day
 from debrief.triage import ledger
+from debrief.triage.output import Validator
 
 DATE = "2026-10-24"
 UPDATE, MEMBER = "url:01440c58175255e5", "url:128c778d038c2534"   # PHP2Shell, and a story merged into it
@@ -64,6 +65,17 @@ def write_draft(day, draft):
     day.draft_path.write_text(json.dumps(draft))
 
 
+FIGURE = {"value": "1,453", "caption": "Security flaws in Microsoft's patches this month, a record.", "story": MEMBER}
+CHART = {"section": 1, "caption": "Flaws Microsoft patched this month, and the consultants Bank of America hired to fix "
+                                  "flaws Mythos found, as Ars Technica reports them.",
+         "unit": "", "bars": [{"label": "Flaws Microsoft patched in October", "value": 1453},
+                              {"label": "Consultants Bank of America hired", "value": 1000}]}
+
+
+def with_extras(draft, figure=FIGURE, chart=CHART):
+    return {**draft, "figure": figure, "chart": chart}
+
+
 # ---------------------------------------------------------------------------------------- check
 
 def test_a_good_draft_passes(tmp_path):
@@ -85,6 +97,24 @@ def test_a_good_draft_passes(tmp_path):
     (lambda d: d["sections"][1].update(body="word " * 4000), "cut it to under 3750"),
     (lambda d: d.update(date="2026-10-23"), "this is the brief for 2026-10-24"),
     (lambda d: d.pop("lead"), "schema: (top): 'lead' is a required property"),
+    (lambda d: d.update(figure={**FIGURE, "value": "1,454"}),
+     "figure.value: '1,454' isn't in url:128c778d038c2534's detail file (a picked comment, the full text or the summary); "
+     "use the number exactly as the source prints it, or leave the figure out"),
+    (lambda d: d.update(figure={**FIGURE, "value": "453"}), "figure.value: '453' isn't in"),
+    (lambda d: d.update(figure={**FIGURE, "story": "arxiv:9999.99999"}),
+     "figure.story: 'arxiv:9999.99999' isn't a story in today's index"),
+    (lambda d: d.update(figure={**FIGURE, "caption": "See https://example.com"}), "figure.caption: has a URL"),
+    (lambda d: d.update(chart={**CHART, "section": 3}),
+     "chart.section is 3, but the draft's sections run 1 to 2; use the number of the one the chart belongs in"),
+    (lambda d: d.update(chart={**CHART, "bars": CHART["bars"] * 3}), "chart.bars has 6 items; it needs 2 to 5"),
+    (lambda d: d.update(chart={**CHART, "bars": CHART["bars"][:1]}), "chart.bars has 1 items; it needs 2 to 5"),
+    (lambda d: d.update(chart={**CHART, "bars": [CHART["bars"][0], {"label": "Throughput", "value": 2.54}]}),
+     "chart.bars[1].value: 2.54 isn't in any story section 1 cites (sections[0].stories); use numbers exactly as the "
+     "source states them, or leave the chart out"),
+    (lambda d: d.update(chart={**CHART, "bars": [{"label": "x", "value": 1454}, CHART["bars"][1]]}),
+     "chart.bars[0].value: 1,454 or 1454 isn't in any story section 1 cites"),
+    (lambda d: d.update(chart={**CHART, "bars": [{"label": "x", "value": "1,453"}, CHART["bars"][1]]}),
+     "schema: chart/bars/0/value: '1,453' is not of type 'number'"),
 ])
 def test_each_rule_fails_the_draft(tmp_path, change, expect):
     cfg, day = setup_day(tmp_path)
@@ -93,6 +123,16 @@ def test_each_rule_fails_the_draft(tmp_path, change, expect):
     write_draft(day, draft)
     r = check(day)
     assert not r["ok"] and any(expect in e for e in r["errors"]), r["errors"]
+
+
+def test_a_figure_and_a_chart_pass_when_their_numbers_are_in_the_sources(tmp_path):
+    cfg, day = setup_day(tmp_path)
+    paper_chart = {"section": 2, "caption": "Lafa's throughput and training tokens.", "unit": "",
+                   "bars": [{"label": "Throughput against an AR model", "value": 2.54}, {"label": "Tokens", "value": 30}]}
+    for draft in (with_extras(good_draft(day)), with_extras(good_draft(day), chart=paper_chart)):
+        write_draft(day, draft)
+        r = check(day)
+        assert r["ok"], r["errors"]
 
 
 def test_a_missing_or_broken_draft_says_what_to_do(tmp_path):
@@ -128,6 +168,28 @@ def test_finalize_resolves_ids_builds_the_scan_and_writes_the_ledger(tmp_path):
     assert md.startswith("# Debrief, 2026-10-24") and "## The scan" in md and "> So from what I gather" in md
     assert ("- **The case for:** Coordinated disclosure worked.\n- **The case against:** Four days is a long time.\n"
             "- **The analysis suggests:** Both, and the second matters more.") in md and "My read" not in md
+
+
+def test_finalize_copies_the_figure_and_the_chart_and_old_briefs_without_them_stay_valid(tmp_path):
+    cfg, day = setup_day(tmp_path)
+    write_draft(day, good_draft(day))
+    old, _ = finalize.finalize(day)
+    assert "figure" not in old and "chart" not in old
+    write_draft(day, with_extras(good_draft(day)))
+    doc, r = finalize.finalize(Day(cfg, DATE))
+    assert doc["mode"] == "written", r["errors"]
+    assert doc["figure"] == {**FIGURE, "story": UPDATE} and doc["chart"] == CHART       # the member became its story
+    assert {k: v for k, v in doc.items() if k not in ("figure", "chart")} == old
+    validator = Validator()
+    for brief in (old, doc, json.loads((day.dir / "brief.json").read_text())):
+        validator.validate("brief", brief)
+    with pytest.raises(ValueError):
+        validator.validate("brief", {**doc, "chart": {**CHART, "bars": CHART["bars"] * 3}})
+    md = (day.dir / "brief.md").read_text()
+    assert "**Figure of the day: 1,453.** Security flaws in Microsoft's patches this month, a record." in md
+    assert (f"_Chart: {CHART['caption']}_\n\n- Flaws Microsoft patched in October: 1,453\n"
+            "- Consultants Bank of America hired: 1,000\n") in md
+    assert md.index("Figure of the day") < md.index("**What happened**") < md.index("_Chart:") < md.index("### Flow")
 
 
 def test_finalize_is_byte_stable(tmp_path):

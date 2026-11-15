@@ -7,6 +7,10 @@ where it is and what to do. Errors:
   - a quote that isn't verbatim in its story's detail file: a picked comment, the full text or the
     summary. Whitespace, curly quotes, dashes and markdown emphasis are normalized first, and "…" may
     stand for omitted words, as long as the pieces appear in order in one text.
+  - a figure whose value isn't in those texts of its story, normalized the same way and not as part
+    of a longer number ("7,403" isn't in "17,403")
+  - a chart in a section the draft doesn't have, with fewer than 2 or more than 5 bars, or with a
+    bar whose value (printed "7,403" or "7403") isn't in the texts of any story that section cites
   - a URL or a story id inside a prose field (links and ids come from the data at finalize)
   - more what_happened items than brief.what_happened.max, or fewer than its min (or than the number
     of stories, on a day with fewer)
@@ -18,6 +22,7 @@ or over brief.words.max.
 import re
 
 from ..triage.output import Validator
+from .render import number
 
 _URL = re.compile(r"https?://|\bwww\.\w")
 _ID = re.compile(r"\b(?:arxiv|hf-model|hf-dataset|hf-space|gh-repo|gh-release|pkg|url|hn|lesswrong|alignment-forum)"
@@ -26,6 +31,7 @@ _WORD = re.compile(r"\w[\w'\u2019-]*")
 _NORM = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-",
                        "\u2014": "-", "\u00a0": " ", "*": None, "_": None, "`": None})
 _ELLIPSIS = re.compile(r"…|\.\.\.")
+CHART_BARS = (2, 5)
 
 
 def norm(text):
@@ -65,6 +71,22 @@ def find_quote(detail, quote):
     return None
 
 
+def story_texts(detail):
+    return [src[1] for src in quotable(detail)]
+
+
+def has_number(value, texts):
+    """Whether `value` ("7,403", "85%") is in one of `texts`, normalized as quotes are, and not as
+    part of a longer number."""
+    pattern = re.compile(rf"(?<!\d)(?<!\d[.,]){re.escape(norm(value))}(?![.,]?\d)")
+    return any(pattern.search(norm(t)) for t in texts)
+
+
+def printed(value):
+    """The ways a source prints a chart's number: 7403 -> ["7,403", "7403"], 2.54 -> ["2.54"]."""
+    return list(dict.fromkeys([number(value), number(value).replace(",", "")]))
+
+
 def words(text):
     return len(_WORD.findall(text or ""))
 
@@ -78,6 +100,11 @@ def prose_fields(draft):
         out += [(f"sections[{i}].split.{k}", v) for k, v in (s.get("split") or {}).items()]
     out += [(f"updates[{i}]", u.get("text", "")) for i, u in enumerate(draft.get("updates", []))]
     out += [(f"notes[{i}]", n) for i, n in enumerate(draft.get("notes", []))]
+    if draft.get("figure"):
+        out.append(("figure.caption", draft["figure"].get("caption", "")))
+    if draft.get("chart"):
+        out.append(("chart.caption", draft["chart"].get("caption", "")))
+        out += [(f"chart.bars[{i}].label", b.get("label", "")) for i, b in enumerate(draft["chart"].get("bars", []))]
     return out
 
 
@@ -99,7 +126,33 @@ def referenced(draft):
         out += [(f"sections[{i}].stories", sid) for sid in s.get("stories", [])]
         out += [(f"sections[{i}].quotes[{j}].story", q.get("story")) for j, q in enumerate(s.get("quotes", []))]
     out += [(f"updates[{i}].story", u.get("story")) for i, u in enumerate(draft.get("updates", []))]
+    if draft.get("figure"):
+        out.append(("figure.story", draft["figure"].get("story")))
     return out
+
+
+def check_figure(day, figure):
+    if figure["story"] in day.rep and not has_number(figure["value"], story_texts(day.detail(figure["story"]))):
+        return [f"figure.value: {figure['value']!r} isn't in {figure['story']}'s detail file (a picked comment, the "
+                f"full text or the summary); use the number exactly as the source prints it, or leave the figure out"]
+    return []
+
+
+def check_chart(day, chart, sections):
+    n, (lo, hi) = len(chart["bars"]), CHART_BARS
+    errors = [] if lo <= n <= hi else [f"chart.bars has {n} items; it needs {lo} to {hi}"]
+    if chart["section"] > len(sections):
+        return errors + [f"chart.section is {chart['section']}, but the draft's sections run 1 to {len(sections)}; "
+                         f"use the number of the one the chart belongs in"]
+    i = chart["section"] - 1
+    cited = [t for sid in sections[i]["stories"] if sid in day.rep for t in story_texts(day.detail(sid))]
+    for j, bar in enumerate(chart["bars"]):
+        forms = printed(bar["value"])
+        if not any(has_number(f, cited) for f in forms):
+            errors.append(f"chart.bars[{j}].value: {' or '.join(forms)} isn't in any story section {chart['section']} "
+                          f"cites (sections[{i}].stories); use numbers exactly as the source states them, or leave the "
+                          f"chart out")
+    return errors
 
 
 def check(day, validator=None):
@@ -130,6 +183,10 @@ def check(day, validator=None):
             if q["story"] in day.rep and not find_quote(day.detail(q["story"]), q["text"]):
                 errors.append(f"sections[{i}].quotes[{j}]: not found word for word in {q['story']}'s detail file "
                               f"(a picked comment, the full text or the summary); quote it exactly, or drop it")
+    if draft.get("figure"):
+        errors += check_figure(day, draft["figure"])
+    if draft.get("chart"):
+        errors += check_chart(day, draft["chart"], draft["sections"])
     ids = set(day.rep)
     for where, text in prose_fields(draft):
         if _URL.search(text):

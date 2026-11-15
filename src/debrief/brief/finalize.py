@@ -8,6 +8,8 @@ Writes to runs/<date>/, in this order:
                    stories   for every story the brief references: title, org, link, sources, code
                              links and threads, copied from the detail files
                    quotes    with author, source and thread link, from where the check found them
+                   figure    the figure of the day, when the draft has one, its story id resolved
+                   chart     the chart, when the draft has one, as the draft gives it
                    fetches   from the fetch hook's log (the record), with the skill's reason for each
                    meta      triage status, failed sources, counts, warnings, and the session
   brief.md       the same, as plain markdown, to read without a page
@@ -73,9 +75,14 @@ def build(day, result):
     fetches = [{"url": f["url"], "allowed": f["allowed"], "why": notes_by_url.get(f["url"])}
                for f in day.fetches(_session_id(day))]
     covered = set(referenced)
+    extras = {}
+    if draft.get("figure"):
+        extras["figure"] = {**draft["figure"], "story": rep[draft["figure"]["story"]]}
+    if draft.get("chart"):
+        extras["chart"] = draft["chart"]
     return {"date": day.date, "mode": "written", "headline": draft["headline"], "what_happened": what,
             "lead": draft["lead"], "sections": sections, "updates": updates, "notes": draft.get("notes", []),
-            "scan": _scan(day, covered), "stories": {sid: _story(day, sid) for sid in sorted(covered)},
+            **extras, "scan": _scan(day, covered), "stories": {sid: _story(day, sid) for sid in sorted(covered)},
             "fetches": fetches, "meta": _meta(day, covered, result["words"], result["warnings"])}
 
 

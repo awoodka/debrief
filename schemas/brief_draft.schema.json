@@ -37,6 +37,31 @@
     "fetch_notes": {
       "type": "object", "additionalProperties": {"type": "string", "minLength": 1},
       "description": "url -> why it was fetched. The fetch log is the record; these explain it."
+    },
+    "figure": {
+      "type": "object", "additionalProperties": false, "required": ["value", "caption", "story"],
+      "description": "The figure of the day: the issue's most telling number, verbatim from its story's text.",
+      "properties": {
+        "value": {"type": "string", "minLength": 1, "maxLength": 24, "description": "as the source prints it: \"7,403\", \"85%\""},
+        "caption": {"type": "string", "minLength": 1, "description": "one plain sentence: what the number counts"},
+        "story": {"$ref": "#/$defs/id"}
+      }
+    },
+    "chart": {
+      "type": "object", "additionalProperties": false, "required": ["section", "caption", "unit", "bars"],
+      "description": "At most one per brief: bars for a numeric comparison one section turns on. The check wants 2 to 5 bars, each value in the text of a story that section cites.",
+      "properties": {
+        "section": {"type": "integer", "minimum": 1, "description": "the section it goes in, counting from 1"},
+        "caption": {"type": "string", "minLength": 1},
+        "unit": {"type": "string", "maxLength": 24, "description": "\"%\" (bars drawn out of 100), a word such as \"ms\", or \"\" for a count"},
+        "bars": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["label", "value"],
+            "properties": {"label": {"type": "string", "minLength": 1}, "value": {"type": "number", "minimum": 0}}
+          }
+        }
+      }
     }
   },
   "$defs": {
