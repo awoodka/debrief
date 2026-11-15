@@ -20,6 +20,8 @@ Claude, Anthropic's model, reads the kept stories, their discussion threads and,
 
 ## What you'll see
 
+- **Figure of the day.** The one number that best sums up the issue, on days when one stands out. The check confirms it appears in its story's source.
+- **Charts.** At most one per issue, when a section turns on a clear comparison. Every value comes from a source the section cites.
 - **The case for, the case against, and what the analysis suggests.** These appear when a story is genuinely two-sided. "The analysis suggests" is the writer's judgment, made from the sources.
 - **Everything kept today.** Every story that passed, with a § mark pointing to where the issue covers it.
 - **"Some sources didn't load today."** A source failed that night, so some of its stories may be missing.
