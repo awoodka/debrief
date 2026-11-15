@@ -82,7 +82,7 @@ def build(day, result):
 def scan_only(day, why):
     """The fallback brief: only the scan. `why` goes to meta.warnings, not to the reader."""
     return {"date": day.date, "mode": "scan_only", "headline": "", "what_happened": [], "lead": "", "sections": [],
-            "updates": [], "notes": ["The brief couldn't be written today. Below is every story triage kept."],
+            "updates": [], "notes": ["The brief couldn't be written today. Below is every story kept today."],
             "scan": _scan(day, set()), "stories": {},
             "fetches": [{"url": f["url"], "allowed": f["allowed"], "why": None} for f in day.fetches(_session_id(day))],
             "meta": _meta(day, set(), 0, [f"scan only: {why}"])}

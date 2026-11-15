@@ -149,7 +149,7 @@ def test_a_failing_draft_gives_a_scan_only_brief_and_no_ledger(tmp_path):
     write_draft(day, bad)
     doc, r = finalize.finalize(Day(cfg, DATE))                # ...then a rerun whose draft fails
     assert doc["mode"] == "scan_only" and not r["ok"] and len(doc["scan"]) == 8
-    assert doc["notes"] == ["The brief couldn't be written today. Below is every story triage kept."]
+    assert doc["notes"] == ["The brief couldn't be written today. Below is every story kept today."]
     assert doc["meta"]["warnings"][0].startswith("scan only: lead: has a URL")
     assert not (day.dir / "reported.json").exists()
 
