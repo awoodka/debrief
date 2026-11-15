@@ -17,6 +17,7 @@ from itertools import groupby
 from string import Template
 from urllib.parse import urlsplit
 
+from ..brief.day import host
 from ..brief.render import SECTION_NAMES, SPLIT_LABELS
 from ..config import REPO
 
@@ -229,9 +230,13 @@ def _lead(doc):
 
 
 def _quote(q):
-    who = ", ".join(x for x in (q["author"], SOURCE_NAMES.get(q["source"], q["source"])) if x) or "source"
-    return (f'<blockquote data-story="{esc(q["story"])}"><p>{esc(q["text"])}</p>'
-            f'<p class="who">— {link(esc(who), q["url"])}</p></blockquote>')
+    """A quote signed by its author and source, else by the site it came from ("wired.com"), else
+    not signed."""
+    who = ", ".join(x for x in (q["author"], SOURCE_NAMES.get(q["source"], q["source"])) if x)
+    if not who and re.match(r"https?://", q["url"] or "", re.I):
+        who = host(q["url"])
+    sign = f'<p class="who">— {link(esc(who), q["url"])}</p>' if who else ""
+    return f'<blockquote data-story="{esc(q["story"])}"><p>{esc(q["text"])}</p>{sign}</blockquote>'
 
 
 def _section(doc, n, s):

@@ -188,6 +188,18 @@ def test_the_footer_speaks_to_readers(tmp_path):
     assert "automated daily briefing" not in html and 'href="https://alexwoodka.com"' not in html
 
 
+def test_a_quote_from_a_page_is_signed_by_its_site_and_one_with_no_link_is_not_signed(tmp_path):
+    _, doc = written(tmp_path)
+    q = doc["sections"][0]["quotes"][0]
+    page_quote = {**q, "kind": "text", "author": None, "source": None,
+                  "url": "https://www.wired.com/story/beware-the-new-ai-fueled-ransomware-boom"}
+    doc["sections"][0]["quotes"] = [q, page_quote, {**page_quote, "url": None}, {**page_quote, "url": "file:///etc/passwd"}]
+    quotes = re.findall(r"<blockquote\b.*?</blockquote>", page.day_page(doc))
+    assert [text(b) for b in quotes] == [f"{q['text']} — fwlr, Hacker News", f"{q['text']} — wired.com", q["text"], q["text"]]
+    assert ('<p class="who">— <a href="https://www.wired.com/story/beware-the-new-ai-fueled-ransomware-boom">'
+            'wired.com</a></p>') in quotes[1]
+
+
 def test_a_scan_only_brief_gets_a_page_with_its_note(tmp_path):
     cfg, day = setup_day(tmp_path)
     write_draft(day, {"date": DATE})
