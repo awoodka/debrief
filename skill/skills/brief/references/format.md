@@ -23,7 +23,8 @@ A section is `{heading, body, stories, split?, quotes?}`:
   `*italic*`) is fine.
 - **`stories`:** the ids of every story the section covers, the most important first. At least one.
 - **`split`:** optional, only for a genuinely two-sided call. `{for, against, read}`, a few
-  sentences each, in your voice.
+  sentences each. The page labels them "The case for", "The case against" and "The analysis
+  suggests", so `read` is the analysis's call, with no "I" or "my".
 - **`quotes`:** optional. `{story, text}`, where `text` is word for word from that story's detail
   file: a picked comment, the full text or the summary. "…" may stand for omitted words. Code
   finds the author and the thread.

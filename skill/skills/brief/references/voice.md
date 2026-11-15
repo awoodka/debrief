@@ -48,15 +48,16 @@ Every heading names the concrete event in roughly its first six words, then the 
   generalization is the payoff, not the setup.
 - **Vary the rhythm.** Mix developed sentences with short ones. A one-line paragraph is fine
   when a point earns it.
-- **Use strong verbs and plain words, in one confident voice.** State opinions as opinions: "my
-  read is", "I'd bet". You're an advisor, not a wire service.
+- **Use strong verbs and plain words, in one confident voice.** Never write "I" or "my". State a
+  judgment as the analysis's, without hedging: "the likelier reading is", "the better bet is",
+  "expect". You're an advisor, not a wire service.
 - **Cut hedging and filler:** "it's worth noting", "arguably", "in many ways", "that said",
   "interestingly", "notably", "it remains to be seen".
-- **Calibrate honestly, in one clause:** how sure you are, and what would change your mind. Say
-  it once, where it matters.
+- **Calibrate honestly, in one clause:** how sure the call is, and what would change it. Say it
+  once, where it matters.
 - **Turn disagreement into depth.** Where the evidence or the commenters split, give the richer
-  take. Use a section's `split` (for, against, your read) only for a genuinely two-sided call,
-  at most once or twice a brief.
+  take. Use a section's `split` (for, against, the analysis) only for a genuinely two-sided
+  call, at most once or twice a brief.
 - **Attribute discussion plainly:** "a Hacker News commenter who maintains a PHP framework",
   "LessWrong readers pushed back". Use the quote itself only when the exact words matter.
 
