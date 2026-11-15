@@ -3,6 +3,7 @@ Styling belongs to the page; this is only a faithful text rendering."""
 
 SECTION_NAMES = {"papers": "Papers", "releases": "Releases", "announcements": "Announcements",
                  "press_policy": "Press and policy", "discussion": "Discussion"}
+SPLIT_LABELS = {"for": "The case for", "against": "The case against", "read": "The analysis suggests"}
 
 
 def _link(title, url):
@@ -24,8 +25,7 @@ def markdown(doc):
     for s in doc["sections"]:
         L += [f"### {s['heading']}", "", s["body"].strip(), ""]
         if s.get("split"):
-            sp = s["split"]
-            L += [f"- **For:** {sp['for']}", f"- **Against:** {sp['against']}", f"- **My read:** {sp['read']}", ""]
+            L += [f"- **{label}:** {s['split'][key]}" for key, label in SPLIT_LABELS.items()] + [""]
         for q in s["quotes"]:
             who = ", ".join(x for x in (q["author"], q["source"]) if x) or ("source" if q["url"] else "")
             L += [f"> {q['text']}" + (f" ({_link(who, q['url'])})" if who else ""), ""]

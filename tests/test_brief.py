@@ -126,6 +126,8 @@ def test_finalize_resolves_ids_builds_the_scan_and_writes_the_ledger(tmp_path):
     assert reported["date"] == DATE and MEMBER in reported["story_ids"] and len(reported["story_ids"]) == 10
     md = (day.dir / "brief.md").read_text()
     assert md.startswith("# Debrief, 2026-10-24") and "## The scan" in md and "> So from what I gather" in md
+    assert ("- **The case for:** Coordinated disclosure worked.\n- **The case against:** Four days is a long time.\n"
+            "- **The analysis suggests:** Both, and the second matters more.") in md and "My read" not in md
 
 
 def test_finalize_is_byte_stable(tmp_path):
