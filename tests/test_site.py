@@ -3,6 +3,7 @@ the feed, and the published copy of the data. On the brief fixture day (tests/fi
 import html as htmllib
 import json
 import re
+import xml.etree.ElementTree as ET
 
 import pytest
 from test_brief import DATE, good_draft, setup_day, write_draft
@@ -89,7 +90,7 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
     assert a == b == {"v2": [DATE], "v1": []}
     files = sorted(p.relative_to(tmp_path / "a") for p in (tmp_path / "a").rglob("*") if p.is_file())
     assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", "404.html", "favicon.svg",
-                                       "index.html", "site.css"]
+                                       "feed.xml", "index.html", "site.css"]
     assert all((tmp_path / "a" / f).read_bytes() == (tmp_path / "b" / f).read_bytes() for f in files)
     pub = json.loads((tmp_path / "a" / DATE / "brief.json").read_text())
     assert "session" not in pub["meta"] and "warnings" not in pub["meta"]
@@ -192,6 +193,34 @@ def test_every_text_color_reads_at_4_5_to_1_on_the_paper(theme):
     t = themes()[theme]
     for name in ("ink", "muted", "accent", "for", "against"):
         assert contrast(rgb(t[name], t), rgb(t["paper"], t)) >= 4.5, name
+
+
+def test_the_feed_lists_the_newest_30_issues_newest_first(tmp_path):
+    cfg, doc = written(tmp_path)
+    add_v1(cfg, {f"2026-08-{d:02}": v1_page({"dek": f'Day {d}: "quotes" & <tags>'}) for d in range(1, 32)})
+    build.build(cfg, tmp_path / "out")
+    atom = "{http://www.w3.org/2005/Atom}"
+    feed = ET.parse(tmp_path / "out" / "feed.xml").getroot()
+    entries = feed.findall(f"{atom}entry")
+    assert len(entries) == 30
+    ids = [e.findtext(f"{atom}id") for e in entries]
+    assert ids[:2] == [f"https://debrief.alexwoodka.com/{DATE}/", "https://debrief.alexwoodka.com/2026-08-31/"]
+    assert ids[-1] == "https://debrief.alexwoodka.com/2026-08-03/"
+    first, second = entries[0], entries[1]
+    assert first.findtext(f"{atom}title") == page.plain(doc["headline"])
+    assert first.find(f"{atom}link").get("href") == ids[0]
+    assert first.findtext(f"{atom}updated") == f"{DATE}T00:00:00Z" == feed.findtext(f"{atom}updated")
+    assert second.findtext(f"{atom}summary") == 'Day 31: "quotes" & <tags>'
+    assert 'type="application/atom+xml"' in (tmp_path / "out" / "index.html").read_text()
+
+
+def test_an_issue_with_no_headline_is_titled_by_its_date_in_the_feed(tmp_path):
+    cfg, doc = written(tmp_path)
+    doc["headline"] = ""
+    (cfg.data_dir / "runs" / DATE / "brief.json").write_text(json.dumps(doc))
+    build.build(cfg, tmp_path / "out")
+    entry = ET.parse(tmp_path / "out" / "feed.xml").getroot().find("{http://www.w3.org/2005/Atom}entry")
+    assert entry.findtext("{http://www.w3.org/2005/Atom}title") == "Saturday, October 24, 2026"
 
 
 def test_the_build_refuses_a_folder_with_files_in_it(tmp_path):

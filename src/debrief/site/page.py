@@ -301,6 +301,22 @@ def index_page(issues):
         f'<p class="tagline">{esc(TAGLINE)}</p></header>\n<main>\n{main}\n</main>\n{_credit("")}\n</div>'))
 
 
+def feed(issues):
+    """feed.xml: an Atom feed of `issues`, newest first. Updated is each issue's date at midnight UTC,
+    and the feed's is the newest issue's, so the same issues give the same bytes."""
+    def stamp(d):
+        return f"{d}T00:00:00Z"
+    entries = "".join(
+        f'<entry>\n<title>{esc(e.title)}</title>\n<id>{esc(e.url)}</id>\n<link rel="alternate" type="text/html" href="{esc(e.url)}"/>\n'
+        f'<updated>{stamp(e.date)}</updated>\n<summary>{esc(plain(e.summary))}</summary>\n</entry>\n' for e in issues)
+    return ('<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom">\n'
+            f'<title>Debrief</title>\n<subtitle>{esc(TAGLINE)}</subtitle>\n<id>{SITE}/</id>\n'
+            f'<link rel="self" type="application/atom+xml" href="{SITE}/feed.xml"/>\n'
+            f'<link rel="alternate" type="text/html" href="{SITE}/"/>\n'
+            f'<updated>{stamp(issues[0].date if issues else "1970-01-01")}</updated>\n'
+            f'<author><name>Debrief</name><uri>{SITE}/</uri></author>\n{entries}</feed>\n')
+
+
 def not_found_page():
     """404.html: served at any path, so its links start at the site's root."""
     return _shell("Debrief · Not found", "/", head='<meta name="robots" content="noindex">', body=(

@@ -8,6 +8,7 @@
   site.css            the one stylesheet (templates/site.css), with every color and face as a token
   favicon.svg         a D in the tokens' accent and paper colors
   404.html            the page for an address with no issue
+  feed.xml            an Atom feed of the newest 30 issues, v1 and v2
 
 v2 days are the runs/<date>/brief.json files that validate. The v1 pipeline's pages (2026-09-14
 to 2026-10-25) were copied byte for byte into <data>/site/v1/ when v2 took over the site, and are
@@ -22,6 +23,7 @@ from ..triage.output import Validator
 from . import page
 
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}$")
+FEED_SIZE = 30
 V1_DATA = re.compile(r'<script id="debrief-data" type="application/json">(.*?)</script>', re.S)
 
 
@@ -94,4 +96,5 @@ def build(cfg, out, validator=None, log=print):
     (out / "favicon.svg").write_text(page.favicon(css))
     (out / "404.html").write_text(page.not_found_page())
     (out / "index.html").write_text(page.index_page(issues))
+    (out / "feed.xml").write_text(page.feed(issues[:FEED_SIZE]))
     return {"v2": sorted(v2), "v1": sorted(set(v1) - set(v2))}
