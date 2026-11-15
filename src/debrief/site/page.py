@@ -137,9 +137,8 @@ def _head(description, url, og_title, og_type):
     ])
 
 
-def _credit(root):
-    return (f'<p>Debrief is an automated daily briefing built by <a href="https://alexwoodka.com">Alex Woodka</a>.</p>'
-            f'<p><a href="{root}">All issues</a> · <a href="{root}feed.xml">RSS</a></p>')
+def _links(root):
+    return f'<p><a href="{root}">All issues</a> · <a href="{root}feed.xml">RSS</a></p>'
 
 
 def _thread_counts(story):
@@ -306,7 +305,7 @@ def _footer(doc, nav, source_names):
         pages = "".join(f"<li>{link(esc((urlsplit(f['url']).netloc + urlsplit(f['url']).path)[:80]), f['url'])}"
                         + (f" ({esc(f['why'])})" if f["why"] else "") + "</li>" for f in fetched)
         out.append(f'<p class="label caps">Pages checked for this issue</p><ul class="checked">{pages}</ul>')
-    out += [_credit("../"), _issue_nav(nav, lambda d: fmt_date(d).rsplit(", ", 1)[0])]
+    out += [_links("../"), _issue_nav(nav, lambda d: fmt_date(d).rsplit(", ", 1)[0])]
     return '<footer class="foot">' + "".join(out) + "</footer>"
 
 
@@ -350,7 +349,7 @@ def index_page(issues):
     main = "\n".join(body) or "<p>No issues yet.</p>"
     return _shell("Debrief", "", head=_head(TAGLINE, f"{SITE}/", "Debrief", "website"), body=(
         f'<div class="page">\n<header class="archive-head"><h1 class="wordmark">Debrief</h1>'
-        f'<p class="tagline">{esc(TAGLINE)}</p></header>\n<main>\n{main}\n</main>\n<footer class="foot">{_credit("")}</footer>\n</div>'))
+        f'<p class="tagline">{esc(TAGLINE)}</p></header>\n<main>\n{main}\n</main>\n<footer class="foot">{_links("")}</footer>\n</div>'))
 
 
 def feed(issues):

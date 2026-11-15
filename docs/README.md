@@ -200,7 +200,7 @@ The session's stream is kept in `brief_session.jsonl` and summarized in `brief_s
   - the sections, numbered, each with its case for, case against and what the analysis suggests as labeled paragraphs, its quotes (attributed and linked to the thread), and a Sources list whose threads show their points and comments as plain text;
   - Updates, where "first reported" links to that issue when the archive has it, and Notes;
   - the scan of every story kept, grouped by section. A covered story shows where: its section's number (§2), Updates or What happened;
-  - a footer for readers: how many stories were kept and covered, the sources that didn't load by their names in `sources.yml`, the pages checked for the issue, who built Debrief, and the previous and next issues.
+  - a footer for readers: how many stories were kept and covered, the sources that didn't load by their names in `sources.yml`, the pages checked for the issue, links to all issues and the feed, and the previous and next issues.
 
   A scan-only brief gets a note in place of the article.
 - **Safety:** every string is escaped. Prose gets only `**bold**` and `*italic*`. Links come only from the data's url fields, and only http(s). No page has a script or inline styles, and a Content-Security-Policy allows only the site's own stylesheet, fonts and images.

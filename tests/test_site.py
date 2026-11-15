@@ -173,10 +173,11 @@ def test_the_footer_speaks_to_readers(tmp_path):
     assert foot.startswith("8 stories kept today, 4 covered above. "
                            "Some sources didn't load today: LMArena leaderboard, no-such-source. "
                            "Pages checked for this issue arxiv.org/abs/2610.28559 (to check the table) "
-                           "Debrief is an automated daily briefing built by Alex Woodka. All issues · RSS")
+                           "All issues · RSS")
     assert "refused.example" not in html and "triage" not in text(html).lower() and "degraded" not in html
     foot_html = between(html, '<footer class="foot">', "</footer>")
-    assert 'href="https://alexwoodka.com"' in foot_html and 'href="../"' in foot_html and 'href="../feed.xml"' in foot_html
+    assert 'href="../"' in foot_html and 'href="../feed.xml"' in foot_html
+    assert "automated daily briefing" not in html and 'href="https://alexwoodka.com"' not in html
 
 
 def test_a_scan_only_brief_gets_a_page_with_its_note(tmp_path):
@@ -268,8 +269,8 @@ def test_the_archive_groups_issues_by_month_and_marks_where_the_first_version_be
     assert seen.count(divider) == 1
     assert seen.index(f"Sat 24 {page.plain(doc['headline'])}") < seen.index(divider) < seen.index("Fri 2 v1 on 2026-10-02")
     assert "Your morning read on the AI/ML landscape." in seen
-    assert "Debrief is an automated daily briefing built by Alex Woodka." in seen
-    assert 'href="feed.xml"' in index and 'href="https://alexwoodka.com"' in index
+    assert "automated daily briefing" not in seen and 'href="https://alexwoodka.com"' not in index
+    assert 'href="feed.xml"' in index and 'href="">All issues</a>' in index
 
 
 def test_an_archive_with_no_first_version_issues_has_no_divider(tmp_path):
