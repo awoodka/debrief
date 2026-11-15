@@ -3,6 +3,7 @@
 `debrief site build --out DIR` writes:
   index.html          the archive, newest first, grouped by month
   <date>/index.html   a v2 day's page (site/page.py), or a frozen v1 page
+  <date>/picture.svg  a v2 day's picture, drawn from the shape of its brief (site/picture.py)
   <date>/brief.json   a v2 day's brief.json minus what's only for us (the session, the check's
                       warnings, refused fetches): the day as data, for anything that wants it
   site.css            the one stylesheet (templates/site.css), with every color and face as a token
@@ -22,7 +23,7 @@ import shutil
 from pathlib import Path
 
 from ..triage.output import Validator
-from . import page
+from . import page, picture
 
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}$")
 FEED_SIZE = 30
@@ -83,12 +84,14 @@ def build(cfg, out, validator=None, log=print):
     v2 = v2_days(cfg, validator or Validator(), log)
     v1 = {p.parent.name: p for p in sorted(v1_dir(cfg).glob("*/index.html")) if DATE.match(p.parent.name)}
     dates, names = sorted(set(v2) | set(v1)), {src.id: src.name for src in cfg.sources}
-    issues = []
+    css = (page.TEMPLATES / "site.css").read_text()
+    pictures, issues = picture.pictures(v2, css), []
     for i, d in enumerate(dates):
         (out / d).mkdir()
         if d in v2:
             nav = page.Neighbors(dates[i - 1] if i else None, dates[i + 1] if i + 1 < len(dates) else None, frozenset(dates))
-            (out / d / "index.html").write_text(page.day_page(v2[d], nav, names))
+            (out / d / "picture.svg").write_text(pictures[d].svg)
+            (out / d / "index.html").write_text(page.day_page(v2[d], nav, names, pictures[d]))
             (out / d / "brief.json").write_text(json.dumps(public(v2[d]), sort_keys=True, ensure_ascii=False, indent=1) + "\n")
             issues.append(page.Issue(d, "v2", v2[d]["headline"]))
         else:
@@ -96,7 +99,6 @@ def build(cfg, out, validator=None, log=print):
             (out / d / "index.html").write_bytes(body)
             issues.append(page.Issue(d, "v1", v1_summary(body.decode("utf-8", "replace"))))
     issues.reverse()
-    css = (page.TEMPLATES / "site.css").read_text()
     (out / "site.css").write_text(css)
     shutil.copytree(page.TEMPLATES / "fonts", out / "fonts")
     (out / "favicon.svg").write_text(page.favicon(css))

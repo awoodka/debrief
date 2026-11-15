@@ -114,6 +114,9 @@ p { margin: 0 0 1em; text-wrap: pretty; }
 .title { margin: 0 0 2rem; }
 .meta { margin: 0 0 .35rem; color: var(--muted); font-size: .9375rem; font-variant-numeric: tabular-nums; }
 .standfirst { margin: 1rem 0 0; font-size: 1.375rem; line-height: 1.4; }
+.picture { margin: 0 0 2rem; }
+.picture img { display: block; width: 100%; max-width: 100%; height: auto; border-radius: 3px; }
+.picture figcaption { margin-top: .5rem; font-size: .9375rem; line-height: 1.45; color: var(--muted); }
 .toc-inline { margin: 0 0 2rem; border-block: 1px solid var(--line); }
 .toc-inline summary { padding: .4rem 0; cursor: pointer; color: var(--muted); }
 .toc-inline nav { padding: 0 0 1rem; }

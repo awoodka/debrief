@@ -218,7 +218,7 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
     a, b = build.build(cfg, tmp_path / "a"), build.build(cfg, tmp_path / "b")
     assert a == b == {"v2": [DATE], "v1": []}
     files = sorted(p.relative_to(tmp_path / "a") for p in (tmp_path / "a").rglob("*") if p.is_file())
-    assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", "404.html", "favicon.svg",
+    assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", f"{DATE}/picture.svg", "404.html", "favicon.svg",
                                        "feed.xml", "fonts/OFL.txt", "fonts/newsreader-italic.woff2",
                                        "fonts/newsreader.woff2", "index.html", "site.css"]
     pub = json.loads((tmp_path / "a" / DATE / "brief.json").read_text())
@@ -236,7 +236,86 @@ def test_two_builds_of_the_same_inputs_are_byte_identical(tmp_path):
     def tree(root):
         return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
     a = tree(tmp_path / "a")
-    assert len(a) == 15 and a == tree(tmp_path / "b")
+    assert len(a) == 17 and a == tree(tmp_path / "b")
+
+
+PICTURES = {"endpaper": "an endpaper", "map": "a map of the day", "spines": "a shelf of book spines",
+            "strata": "a cut through layers of rock", "contours": "a contour map", "weave": "a weave",
+            "constellation": "a constellation"}
+
+
+def v2_days_on(cfg, doc, dates):
+    for d in dates:
+        (cfg.data_dir / "runs" / d).mkdir(exist_ok=True)
+        (cfg.data_dir / "runs" / d / "brief.json").write_text(json.dumps({**doc, "date": d}))
+
+
+def picture_on(page_html):
+    """The day's picture as a reader meets it: (alt text, caption, the style the caption names)."""
+    fig = between(page_html, '<figure class="picture">', "</figure>")
+    alt = re.fullmatch(r'<img src="picture.svg" width="1200" height="500" alt="([^"]+)"><figcaption>.*', fig)[1]
+    caption = text(between(fig, "<figcaption>", "</figcaption>"))
+    style = next(s for s, name in PICTURES.items() if caption.startswith(f"Today's picture is {name}. "))
+    return htmllib.unescape(alt), caption, style
+
+
+def test_every_v2_day_gets_a_picture_under_the_standfirst_and_v1_days_get_none(tmp_path):
+    cfg, doc = written(tmp_path)
+    add_v1(cfg, {"2026-10-23": v1_page({"dek": "x"})})
+    build.build(cfg, tmp_path / "out")
+    out = tmp_path / "out"
+    html = (out / DATE / "index.html").read_text()
+    alt, caption, _ = picture_on(html)
+    assert len(alt) > 20 and len(caption.split(". ")) == 2
+    assert html.index('class="standfirst"') < html.index('<figure class="picture">') < html.index('id="what-happened"')
+    svg = ET.parse(out / DATE / "picture.svg").getroot()
+    assert svg.tag == "{http://www.w3.org/2000/svg}svg" and svg.get("viewBox") == "0 0 1200 500"
+    assert not (out / "2026-10-23" / "picture.svg").exists() and "picture" not in (out / "2026-10-23" / "index.html").read_text()
+
+
+def test_each_day_draws_the_style_its_date_picks_and_never_the_style_of_the_day_before(tmp_path):
+    """The expected styles are what the approved design's script picks for these dates. 11-29 and
+    11-30 hash to the same style, so 11-30 moves on, wrapping to the start of the list; 12-01 then
+    hashes to the style 11-30 moved to; 12-03 and 12-04 hash alike too."""
+    cfg, doc = written(tmp_path)
+    expect = {DATE: "strata", "2026-11-27": "spines", "2026-11-28": "contours", "2026-11-29": "constellation",
+              "2026-11-30": "endpaper", "2026-12-01": "map", "2026-12-02": "weave", "2026-12-03": "strata",
+              "2026-12-04": "contours"}
+    v2_days_on(cfg, doc, list(expect)[1:])
+    build.build(cfg, tmp_path / "out")
+    got = {d: picture_on((tmp_path / "out" / d / "index.html").read_text())[2] for d in expect}
+    assert got == expect
+    styles = list(got.values())
+    assert all(a != b for a, b in zip(styles, styles[1:]))
+
+
+def test_every_style_draws_a_small_self_contained_svg_in_the_light_and_dark_colors(tmp_path):
+    cfg, doc = written(tmp_path)
+    busy = {**doc, "sections": doc["sections"] * 4, "scan": doc["scan"] * 6, "updates": doc["updates"] * 8}
+    dates = [DATE, "2026-11-27", "2026-11-28", "2026-11-29", "2026-11-30", "2026-12-01", "2026-12-02"]
+    v2_days_on(cfg, busy, dates)
+    build.build(cfg, tmp_path / "out")
+    light, dark = themes()
+    seen = set()
+    for d in dates:
+        seen.add(picture_on((tmp_path / "out" / d / "index.html").read_text())[2])
+        svg = (tmp_path / "out" / d / "picture.svg").read_text()
+        assert len(svg.encode()) < 40_000, d
+        light_part, dark_part = svg.split("@media (prefers-color-scheme:dark)")
+        assert f"fill:{light['accent']}" in light_part and f"fill:{dark['accent']}" in dark_part and light["accent"] not in dark_part
+        assert "href" not in svg and "url(" not in svg
+        assert all(t.isdigit() for t in re.findall(r"<text\b[^>]*>([^<]*)</text>", svg)), d
+    assert seen == set(PICTURES)
+
+
+def test_a_scan_only_day_gets_a_picture_of_its_stories(tmp_path):
+    cfg, day = setup_day(tmp_path)
+    write_draft(day, {"date": DATE})
+    assert finalize.finalize(day)[0]["mode"] == "scan_only"
+    build.build(cfg, tmp_path / "out")
+    alt, caption, style = picture_on((tmp_path / "out" / DATE / "index.html").read_text())
+    assert style not in ("spines", "strata", "contours") and alt and caption
+    assert (tmp_path / "out" / DATE / "picture.svg").stat().st_size > 1000
 
 
 def test_v1_pages_are_copied_unchanged_and_a_v2_brief_wins_its_date(tmp_path):

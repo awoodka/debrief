@@ -1,5 +1,5 @@
-"""The site's pages as finished HTML: a day's page from its brief.json, the archive list, the 404
-page, and the Atom feed. The pages run no script. templates/page.html is the shell every page
+"""The site's pages as finished HTML: a day's page from its brief.json (and its picture, picture.py),
+the archive list, the 404 page, and the Atom feed. The pages run no script. templates/page.html is the shell every page
 shares (its head, the Content-Security-Policy), and templates/site.css the one stylesheet.
 
 Every string from the data is escaped. Prose gets only **bold** and *italic*. Links come only from
@@ -198,6 +198,13 @@ def _title(doc):
     return "".join(out) + "</header>"
 
 
+def _figure(picture):
+    if not picture:
+        return ""
+    return (f'<figure class="picture"><img src="picture.svg" width="1200" height="500" alt="{esc(picture.alt)}">'
+            f'<figcaption>{esc(picture.caption)}</figcaption></figure>')
+
+
 def _inline_contents(doc):
     return (f'<details class="toc-inline"><summary class="caps">In this issue</summary>'
             f'<nav aria-label="Contents">{_contents(doc)}</nav></details>')
@@ -309,11 +316,12 @@ def _footer(doc, nav, source_names):
     return '<footer class="foot">' + "".join(out) + "</footer>"
 
 
-def day_page(doc, nav=Neighbors(), source_names=None):
+def day_page(doc, nav=Neighbors(), source_names=None, picture=None):
     """The page for one brief.json document (written or scan_only). `nav` places it among the other
-    issues; `source_names` maps a source id to the name sources.yml gives it."""
+    issues; `source_names` maps a source id to the name sources.yml gives it; `picture` is the
+    day's picture.Picture, shown under the standfirst."""
     date = doc["date"]
-    parts = [_title(doc), _inline_contents(doc), _what_happened(doc), _lead(doc),
+    parts = [_title(doc), _figure(picture), _inline_contents(doc), _what_happened(doc), _lead(doc),
              *(_section(doc, n, s) for n, s in enumerate(doc["sections"], 1)),
              _updates(doc, nav.known), _notes(doc), _scan(doc)]
     main = "\n".join(p for p in parts if p)
