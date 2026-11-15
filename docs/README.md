@@ -204,7 +204,8 @@ The session's stream is kept in `brief_session.jsonl` and summarized in `brief_s
 - **Safety:** every string is escaped. Prose gets only `**bold**` and `*italic*`. Links come only from the data's url fields, and only http(s). The page has no script, and a Content-Security-Policy says so.
 - **For later features:** each section has `id="s-N"` and `data-stories` (its story ids), and each story row has `data-story`.
 - **`<date>/brief.json`:** the day as data, the brief minus what's only for us (the session, the check's warnings, refused fetches).
-- **`index.html`:** the archive list, newest first, from `templates/index.html`.
+- **`index.html`:** the archive, newest first, grouped by month, each month with its count. Where the v2 issues give way to v1's, a divider gives the first version's dates and says those pages keep their original layout.
+- **`site.css`, `favicon.svg`, `404.html`:** every page links the one stylesheet (`templates/site.css`), whose first block holds every color and face as a token, light and dark. The favicon is a D in the light tokens' accent and paper colors. `404.html` is the page for an address with no issue; its links start at the site's root.
 - **The old briefs:** v1's built pages (2026-09-14 to 2026-10-25), copied once into `<data>/site/v1/` when v2 took over the site, are listed alongside unchanged. A v2 brief wins a date that both have.
 
 `deploy/run.sh` publishes the site as a new release in `/srv/www/debrief`, which Caddy serves (deploy/README.md, "The site").

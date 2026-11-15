@@ -1,6 +1,6 @@
-"""One day's page, and the archive list, as finished HTML from a brief.json. The page runs no
-script: templates/day.html and templates/index.html hold v1's look (its CSS and skeleton), and this
-fills them in.
+"""The site's pages as finished HTML: a day's page from its brief.json, the archive list, the 404
+page, and the Atom feed. The pages run no script. templates/page.html is the shell every page
+shares (its head, the Content-Security-Policy), and templates/site.css the one stylesheet.
 
 Every string from the data is escaped. Prose gets only **bold** and *italic*. Links come only from
 the data's url fields, and only http(s) ones. Each section has id="s-N" and data-stories (its story
@@ -8,7 +8,9 @@ ids), and every story row data-story, so later features can point at a part of t
 """
 import html
 import re
+from dataclasses import dataclass
 from datetime import date as _date
+from itertools import groupby
 from string import Template
 from urllib.parse import urlsplit
 
@@ -16,6 +18,9 @@ from ..brief.render import SECTION_NAMES
 from ..config import REPO
 
 TEMPLATES = REPO / "templates"
+SITE = "https://debrief.alexwoodka.com"
+TAGLINE = "Your morning read on the AI/ML landscape."
+NO_BRIEF = "The brief didn't run; every story kept is listed."
 MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
           "November", "December"]
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -27,8 +32,35 @@ _BOLD = re.compile(r"\*\*(\S(?:.*?\S)?)\*\*")
 _ITALIC = re.compile(r"(?<![\w*])\*(\S(?:.*?\S)?)\*(?![\w*])")
 
 
+@dataclass(frozen=True)
+class Issue:
+    """One issue in the archive. `version` is "v2" (a validated runs/<date>/brief.json) or "v1" (a
+    frozen page from <data>/site/v1/). `headline` is v2's headline or the line v1's build chose, and
+    may be "". An Issue is also a feed entry: date, title, url and summary."""
+    date: str
+    version: str
+    headline: str
+
+    @property
+    def summary(self):
+        return self.headline or (NO_BRIEF if self.version == "v2" else "")
+
+    @property
+    def title(self):
+        return plain(self.headline) or fmt_date(self.date)
+
+    @property
+    def url(self):
+        return f"{SITE}/{self.date}/"
+
+
 def esc(s):
     return html.escape("" if s is None else str(s))
+
+
+def plain(s):
+    """Prose without its **bold** and *italic* markers, for titles, feeds and the archive."""
+    return _ITALIC.sub(r"\1", _BOLD.sub(r"\1", s or ""))
 
 
 def inline(s):
@@ -206,8 +238,81 @@ def day_page(doc):
                                             content="\n".join(p for p in parts if p))
 
 
-def index_page(entries):
-    """The archive list. `entries` are {date, summary}, newest first."""
-    rows = [f'    <li><a href="{esc(e["date"])}/"><span class="d">{esc(fmt_date(e["date"]))}</span>'
-            f'<span class="k">{esc(e["summary"])}</span></a></li>' for e in entries]
-    return _template("index.html").substitute(rows="\n".join(rows) or '    <li><a><span class="k">No debriefs yet.</span></a></li>')
+def _count(n, one, many):
+    return f"{n:,} {one if n == 1 else many}"
+
+
+def _span(first, last):
+    """'September 14 to October 25, 2026', with the year once when both dates share it."""
+    a, b = fmt_date(first).split(", ", 1)[1], fmt_date(last).split(", ", 1)[1]
+    if first == last:
+        return b
+    return f"{a.rsplit(', ', 1)[0]} to {b}" if first[:4] == last[:4] else f"{a} to {b}"
+
+
+def _shell(title, root, body, head=""):
+    """A finished page in templates/page.html. `root` is the path from the page to the site's root."""
+    return _template("page.html").substitute(title=esc(title), root=root, head=head, body=body)
+
+
+def _head(description, url, og_title, og_type):
+    return "\n".join([
+        f'<meta name="description" content="{esc(description)}">',
+        f'<meta property="og:title" content="{esc(og_title)}">',
+        f'<meta property="og:description" content="{esc(description)}">',
+        f'<meta property="og:type" content="{og_type}">',
+        f'<meta property="og:url" content="{esc(url)}">',
+        '<meta property="og:site_name" content="Debrief">',
+        f'<link rel="canonical" href="{esc(url)}">',
+    ])
+
+
+def _credit(root):
+    return (f'<footer class="credit"><p>Debrief is an automated daily briefing built by '
+            f'<a href="https://alexwoodka.com">Alex Woodka</a>. <a href="{root}">All issues</a> · '
+            f'<a href="{root}feed.xml">RSS</a></p></footer>')
+
+
+def index_page(issues):
+    """The archive: `issues` newest first, grouped by month. Where the v2 issues give way to v1's,
+    a divider says those keep their original layout."""
+    v1 = [e.date for e in issues if e.version == "v1"]
+    body, divided = [], False
+    for month, group in groupby(issues, key=lambda e: e.date[:7]):
+        group = list(group)
+        body.append(f'<section class="month"><h2>{MONTHS[int(month[5:]) - 1]} {month[:4]} '
+                    f'<span class="count">{_count(len(group), "issue", "issues")}</span></h2>')
+        rows = []
+        for e in group:
+            if e.version == "v1" and not divided:
+                if rows:
+                    body.append(f'<ul class="issues">{"".join(rows)}</ul>')
+                    rows = []
+                body.append(f'<div class="divider"><p>The first version · {esc(_span(min(v1), max(v1)))} · '
+                            f'These issues keep their original layout.</p></div>')
+                divided = True
+            y, m, d = (int(x) for x in e.date.split("-"))
+            rows.append(f'<li><a href="{esc(e.date)}/"><span class="d">{DAYS[_date(y, m, d).weekday()][:3]} {d}</span>'
+                        f'<span class="k">{esc(plain(e.summary))}</span></a></li>')
+        body.append(f'<ul class="issues">{"".join(rows)}</ul></section>')
+    main = "\n".join(body) or "<p>No issues yet.</p>"
+    return _shell("Debrief", "", head=_head(TAGLINE, f"{SITE}/", "Debrief", "website"), body=(
+        f'<div class="page">\n<header class="archive-head"><h1 class="wordmark">Debrief</h1>'
+        f'<p class="tagline">{esc(TAGLINE)}</p></header>\n<main>\n{main}\n</main>\n{_credit("")}\n</div>'))
+
+
+def not_found_page():
+    """404.html: served at any path, so its links start at the site's root."""
+    return _shell("Debrief · Not found", "/", head='<meta name="robots" content="noindex">', body=(
+        '<div class="page"><main class="notfound">\n<div class="masthead"><a class="wordmark" href="/">Debrief</a></div>\n'
+        '<h1>No issue at this address.</h1>\n<p><a href="/">All issues</a></p>\n</main></div>'))
+
+
+def favicon(css):
+    """favicon.svg: a serif D in the accent color on the paper color, both read from site.css's
+    first (light) token block, so the icon follows the tokens."""
+    paper, accent = (re.search(rf"--{name}:\s*([^;]+);", css).group(1).strip() for name in ("paper", "accent"))
+    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+            f'<rect width="32" height="32" rx="6" fill="{esc(paper)}"/>'
+            f'<text x="16" y="24.5" text-anchor="middle" font-family="Charter, Georgia, serif" font-size="24" '
+            f'font-weight="700" fill="{esc(accent)}">D</text></svg>\n')

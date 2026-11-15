@@ -1,6 +1,8 @@
 """The site (src/debrief/site/): a day's page from its brief.json, the archive, v1's frozen pages,
-and the published copy of the data. On the brief fixture day (tests/fixtures/brief/)."""
+the feed, and the published copy of the data. On the brief fixture day (tests/fixtures/brief/)."""
+import html as htmllib
 import json
+import re
 
 import pytest
 from test_brief import DATE, good_draft, setup_day, write_draft
@@ -21,6 +23,21 @@ def written(tmp_path):
 
 def v1_page(data):
     return V1_PAGE.replace("{}", json.dumps(data).replace("</", "<\\/"))
+
+
+def add_v1(cfg, pages):
+    for d, body in pages.items():
+        (build.v1_dir(cfg) / d).mkdir(parents=True)
+        (build.v1_dir(cfg) / d / "index.html").write_text(body)
+
+
+def text(page_html):
+    """What a reader sees: the body's text, tags dropped, entities decoded, spaces collapsed."""
+    body = re.sub(r"</?(?:a|em|strong)\b[^>]*>", "", page_html.split("<body>", 1)[-1])
+    return " ".join(htmllib.unescape(re.sub(r"<[^>]+>", " ", body)).split())
+
+
+CSP = "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'"
 
 
 def test_a_day_page_has_every_part_of_the_brief(tmp_path):
@@ -71,7 +88,8 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
     a, b = build.build(cfg, tmp_path / "a"), build.build(cfg, tmp_path / "b")
     assert a == b == {"v2": [DATE], "v1": []}
     files = sorted(p.relative_to(tmp_path / "a") for p in (tmp_path / "a").rglob("*") if p.is_file())
-    assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", "index.html"]
+    assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", "404.html", "favicon.svg",
+                                       "index.html", "site.css"]
     assert all((tmp_path / "a" / f).read_bytes() == (tmp_path / "b" / f).read_bytes() for f in files)
     pub = json.loads((tmp_path / "a" / DATE / "brief.json").read_text())
     assert "session" not in pub["meta"] and "warnings" not in pub["meta"]
@@ -99,6 +117,81 @@ def test_v1_pages_are_copied_unchanged_and_a_v2_brief_wins_its_date(tmp_path):
     assert order == sorted(order)
     for line in ("The dek line", "The old through-line", "First event &lt;/script&gt; and more"):
         assert line in index
+
+
+def test_the_archive_groups_issues_by_month_and_marks_where_the_first_version_begins(tmp_path):
+    cfg, doc = written(tmp_path)
+    add_v1(cfg, {d: v1_page({"dek": f"v1 on {d}"}) for d in ("2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02")})
+    build.build(cfg, tmp_path / "out")
+    index = (tmp_path / "out" / "index.html").read_text()
+    months = {m.split("</h2>")[0]: m for m in index.split("<h2>")[1:]}
+    assert [text(h) for h in months] == ["October 2026 3 issues", "September 2026 2 issues"]
+    october, september = months.values()
+    assert re.findall(r'href="(\d{4}-\d{2}-\d{2})/"', october) == [DATE, "2026-10-02", "2026-10-01"]
+    assert re.findall(r'href="(\d{4}-\d{2}-\d{2})/"', september) == ["2026-09-30", "2026-09-29"]
+    divider = "The first version · September 29 to October 2, 2026 · These issues keep their original layout."
+    seen = text(index)
+    assert seen.count(divider) == 1
+    assert seen.index(f"Sat 24 {page.plain(doc['headline'])}") < seen.index(divider) < seen.index("Fri 2 v1 on 2026-10-02")
+    assert "Your morning read on the AI/ML landscape." in seen
+    assert "Debrief is an automated daily briefing built by Alex Woodka." in seen
+    assert 'href="feed.xml"' in index and 'href="https://alexwoodka.com"' in index
+
+
+def test_an_archive_with_no_first_version_issues_has_no_divider(tmp_path):
+    cfg, _ = written(tmp_path)
+    build.build(cfg, tmp_path / "out")
+    assert "The first version" not in (tmp_path / "out" / "index.html").read_text()
+
+
+def test_every_page_shares_one_stylesheet_under_a_strict_policy(tmp_path):
+    cfg, _ = written(tmp_path)
+    add_v1(cfg, {"2026-09-14": v1_page({"dek": "x"})})
+    build.build(cfg, tmp_path / "out")
+    out = tmp_path / "out"
+    for f, root in (("index.html", ""), ("404.html", "/")):
+        body = (out / f).read_text()
+        assert f'content="{CSP}"' in body
+        assert f'<link rel="stylesheet" href="{root}site.css">' in body and "<style" not in body and "style=" not in body
+        assert f'href="{root}favicon.svg"' in body and "<script" not in body
+    assert (out / "site.css").read_text() == (page.TEMPLATES / "site.css").read_text()
+    assert "No issue at this address." in text((out / "404.html").read_text())
+    assert 'href="/">All issues</a>' in (out / "404.html").read_text()
+    icon, light = (out / "favicon.svg").read_text(), themes()[0]
+    assert icon.startswith("<svg") and ">D</text>" in icon
+    assert f'fill="{light["paper"]}"' in icon and f'fill="{light["accent"]}"' in icon
+
+
+def themes():
+    """site.css's tokens: (light, dark), each {name: value}, dark falling back to light."""
+    css = (page.TEMPLATES / "site.css").read_text()
+    light_part, dark_part = css.split("@media (prefers-color-scheme: dark)", 1)
+    token = re.compile(r"--([\w-]+):\s*([^;]+);")
+    light = dict(token.findall(light_part))
+    return light, {**light, **dict(token.findall(dark_part.split("}", 1)[0]))}
+
+
+def rgb(value, theme):
+    mix = re.fullmatch(r"color-mix\(in srgb, var\(--([\w-]+)\) (\d+)%, var\(--([\w-]+)\)\)", value)
+    if mix:
+        w = int(mix[2]) / 100
+        return tuple(w * a + (1 - w) * b for a, b in zip(rgb(theme[mix[1]], theme), rgb(theme[mix[3]], theme)))
+    return tuple(int(value[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def contrast(a, b):
+    def lum(c):
+        lin = [(v / 255) / 12.92 if v / 255 <= 0.04045 else ((v / 255 + 0.055) / 1.055) ** 2.4 for v in c]
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+@pytest.mark.parametrize("theme", [0, 1], ids=["light", "dark"])
+def test_every_text_color_reads_at_4_5_to_1_on_the_paper(theme):
+    t = themes()[theme]
+    for name in ("ink", "muted", "accent", "for", "against"):
+        assert contrast(rgb(t[name], t), rgb(t["paper"], t)) >= 4.5, name
 
 
 def test_the_build_refuses_a_folder_with_files_in_it(tmp_path):

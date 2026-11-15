@@ -1,0 +1,96 @@
+/* Every color and face the site uses. Light values here, dark values in the block below.
+   The build also reads the first --paper and --accent for favicon.svg. */
+:root {
+  color-scheme: light dark;
+  --paper: #f6f3ec;
+  --ink: #23211d;
+  --accent: #2b4c7e;
+  --for: #3d6b3a;
+  --against: #9a3b28;
+  --muted: color-mix(in srgb, var(--ink) 64%, var(--paper));
+  --line: color-mix(in srgb, var(--ink) 15%, var(--paper));
+  --serif: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1b1a17;
+    --ink: #e6e1d6;
+    --accent: #9db6dd;
+    --for: #8fb87f;
+    --against: #e0917a;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.1875rem;
+  line-height: 1.6;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+  hanging-punctuation: first;
+  overflow-wrap: break-word;
+}
+::selection { background: color-mix(in srgb, var(--accent) 22%, var(--paper)); }
+
+a { color: inherit; text-decoration: none; }
+a:hover { color: var(--accent); }
+p a {
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .18em;
+}
+p a:hover { text-decoration-color: currentColor; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.skip { position: absolute; left: -9999px; top: .5rem; padding: .5rem .75rem; background: var(--paper); }
+.skip:focus { left: 16px; }
+
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 2rem; line-height: 1.2; font-weight: 700; }
+h2 { font-size: 1.375rem; line-height: 1.3; font-weight: 700; }
+h3 { font-size: inherit; line-height: inherit; font-weight: 700; }
+p { margin: 0 0 1em; text-wrap: pretty; }
+.caps { font-variant-caps: all-small-caps; letter-spacing: .05em; }
+
+.page { max-width: 36rem; margin: 0 auto; padding: 2.5rem 16px 5rem; }
+.wordmark {
+  color: var(--accent);
+  font-weight: 700;
+  font-variant-caps: all-small-caps;
+  letter-spacing: .12em;
+}
+.masthead { margin: 0 0 2rem; }
+.masthead .wordmark { display: inline-flex; align-items: center; min-height: 24px; }
+
+.credit { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line);
+  font-size: .9375rem; line-height: 1.55; color: var(--muted); }
+.credit p { margin: 0 0 .75em; }
+
+.archive-head { margin: 0 0 2.5rem; }
+.archive-head h1 { font-size: 2rem; }
+.tagline { margin: .25rem 0 0; font-style: italic; color: var(--muted); }
+.month { margin: 0 0 2.5rem; }
+.month h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+  padding-bottom: .4rem; margin-bottom: .5rem; border-bottom: 1px solid var(--line); }
+.count { font-size: .9375rem; font-weight: 400; color: var(--muted); }
+.issues { list-style: none; margin: 0; padding: 0; }
+.issues a { display: grid; grid-template-columns: 4rem 1fr; gap: .75rem; padding: .5rem 0; }
+.issues .d { color: var(--muted); font-size: .9375rem; font-variant-numeric: tabular-nums; padding-top: .1em; }
+.issues a:hover .d { color: inherit; }
+.divider { margin: 1.5rem 0; padding: 1rem 0; border-block: 1px solid var(--line);
+  text-align: center; color: var(--muted); font-size: .9375rem; }
+.divider p { margin: 0; }
+
+.notfound h1 { margin-bottom: 1rem; }
+
+@media (pointer: coarse) {
+  .masthead .wordmark, .issues a { min-height: 44px; }
+}

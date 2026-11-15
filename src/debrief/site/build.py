@@ -1,10 +1,13 @@
 """The site: every day's page as static files, which deploy/run.sh publishes to debrief.alexwoodka.com.
 
 `debrief site build --out DIR` writes:
-  index.html          the archive list, newest first
+  index.html          the archive, newest first, grouped by month
   <date>/index.html   a v2 day's page (site/page.py), or a frozen v1 page
   <date>/brief.json   a v2 day's brief.json minus what's only for us (the session, the check's
                       warnings, refused fetches): the day as data, for anything that wants it
+  site.css            the one stylesheet (templates/site.css), with every color and face as a token
+  favicon.svg         a D in the tokens' accent and paper colors
+  404.html            the page for an address with no issue
 
 v2 days are the runs/<date>/brief.json files that validate. The v1 pipeline's pages (2026-09-14
 to 2026-10-25) were copied byte for byte into <data>/site/v1/ when v2 took over the site, and are
@@ -75,17 +78,20 @@ def build(cfg, out, validator=None, log=print):
     out.mkdir(parents=True, exist_ok=True)
     v2 = v2_days(cfg, validator or Validator(), log)
     v1 = {p.parent.name: p for p in sorted(v1_dir(cfg).glob("*/index.html")) if DATE.match(p.parent.name)}
-    entries = []
+    issues = []
     for d in sorted(set(v2) | set(v1), reverse=True):
         (out / d).mkdir()
         if d in v2:
             (out / d / "index.html").write_text(page.day_page(v2[d]))
             (out / d / "brief.json").write_text(json.dumps(public(v2[d]), sort_keys=True, ensure_ascii=False, indent=1) + "\n")
-            entries.append({"date": d, "summary": v2[d]["headline"] or "The brief didn't run; every story kept is listed."})
+            issues.append(page.Issue(d, "v2", v2[d]["headline"]))
         else:
             body = v1[d].read_bytes()
             (out / d / "index.html").write_bytes(body)
-            entries.append({"date": d, "summary": v1_summary(body.decode("utf-8", "replace"))})
-    (out / "index.html").write_text(page.index_page(entries))
+            issues.append(page.Issue(d, "v1", v1_summary(body.decode("utf-8", "replace"))))
+    css = (page.TEMPLATES / "site.css").read_text()
+    (out / "site.css").write_text(css)
+    (out / "favicon.svg").write_text(page.favicon(css))
+    (out / "404.html").write_text(page.not_found_page())
+    (out / "index.html").write_text(page.index_page(issues))
     return {"v2": sorted(v2), "v1": sorted(set(v1) - set(v2))}
-
