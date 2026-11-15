@@ -213,7 +213,8 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
     assert a == b == {"v2": [DATE], "v1": []}
     files = sorted(p.relative_to(tmp_path / "a") for p in (tmp_path / "a").rglob("*") if p.is_file())
     assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", "404.html", "favicon.svg",
-                                       "feed.xml", "index.html", "site.css"]
+                                       "feed.xml", "fonts/OFL.txt", "fonts/newsreader-italic.woff2",
+                                       "fonts/newsreader.woff2", "index.html", "site.css"]
     pub = json.loads((tmp_path / "a" / DATE / "brief.json").read_text())
     assert "session" not in pub["meta"] and "warnings" not in pub["meta"]
     assert all(f["allowed"] for f in pub["fetches"]) and pub["sections"] == doc["sections"]
@@ -229,7 +230,7 @@ def test_two_builds_of_the_same_inputs_are_byte_identical(tmp_path):
     def tree(root):
         return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
     a = tree(tmp_path / "a")
-    assert len(a) == 12 and a == tree(tmp_path / "b")
+    assert len(a) == 15 and a == tree(tmp_path / "b")
 
 
 def test_v1_pages_are_copied_unchanged_and_a_v2_brief_wins_its_date(tmp_path):
@@ -295,6 +296,23 @@ def test_every_page_shares_one_stylesheet_under_a_strict_policy(tmp_path):
     icon, light = (out / "favicon.svg").read_text(), themes()[0]
     assert icon.startswith("<svg") and ">D</text>" in icon
     assert f'fill="{light["paper"]}"' in icon and f'fill="{light["accent"]}"' in icon
+
+
+def test_the_typeface_ships_with_the_site_and_every_page_preloads_the_upright_face(tmp_path):
+    cfg, _ = written(tmp_path)
+    add_v1(cfg, {"2026-09-14": v1_page({"dek": "x"})})
+    build.build(cfg, tmp_path / "out")
+    out = tmp_path / "out"
+    css = (out / "site.css").read_text()
+    faces = {re.search(r"font-style:\s*(\w+)", f)[1]: re.search(r"url\(([^)]+)\)", f)[1]
+             for f in re.findall(r"@font-face\s*\{([^}]*)\}", css)}
+    assert faces == {"normal": "fonts/newsreader.woff2", "italic": "fonts/newsreader-italic.woff2"}
+    assert all((out / src).read_bytes()[:4] == b"wOF2" for src in faces.values())
+    assert "SIL Open Font License" in (out / "fonts" / "OFL.txt").read_text()
+    assert "--serif: Newsreader, Georgia, serif;" in css and "font-family: var(--serif);" in css
+    for f, root in (("index.html", ""), ("404.html", "/"), (f"{DATE}/index.html", "../")):
+        body = (out / f).read_text()
+        assert f'<link rel="preload" href="{root}fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>' in body
 
 
 def themes():

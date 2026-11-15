@@ -208,7 +208,7 @@ The session's stream is kept in `brief_session.jsonl` and summarized in `brief_s
 - **`<date>/brief.json`:** the day as data, the brief minus what's only for us (the session, the check's warnings, refused fetches).
 - **`index.html`:** the archive, newest first, grouped by month, each month with its count. Where the v2 issues give way to v1's, a divider gives the first version's dates and says those pages keep their original layout.
 - **`feed.xml`:** an Atom feed of the newest 30 issues, v1 and v2. Each entry's id is the issue's URL, its updated time is the issue's date at midnight UTC, and its title and summary are the headline (the date when there is none).
-- **`site.css`, `favicon.svg`, `404.html`:** every page links the one stylesheet (`templates/site.css`), whose first block holds every color and face as a token, light and dark. The favicon is a D in the light tokens' accent and paper colors. `404.html` is the page for an address with no issue; its links start at the site's root.
+- **`site.css`, `favicon.svg`, `404.html`:** every page links the one stylesheet (`templates/site.css`), whose first block holds every color and face as a token, light and dark. The favicon is a D in the light tokens' accent and paper colors. The typeface is Newsreader, upright and italic, served from `fonts/` (copied from `templates/fonts/` with its SIL Open Font License, `OFL.txt`); every page preloads the upright file. `404.html` is the page for an address with no issue; its links start at the site's root.
 - **The old briefs:** v1's built pages (2026-09-14 to 2026-10-25), copied once into `<data>/site/v1/` when v2 took over the site, are listed alongside unchanged. A v2 brief wins a date that both have.
 
 `deploy/run.sh` publishes the site as a new release in `/srv/www/debrief`, which Caddy serves (deploy/README.md, "The site").
@@ -295,7 +295,7 @@ src/debrief/triage/     candidates.py, merge.py, ledger.py, score.py, output.py,
 src/debrief/brief/      day.py, context.py, check.py, hooks.py, finalize.py, render.py, run.py
 src/debrief/site/       page.py (a day's page, the archive list), build.py (the site)
 skill/           the brief skill, a Claude Code plugin: skills/brief/SKILL.md and references/
-templates/       the site's page shell (page.html) and its one stylesheet (site.css)
+templates/       the site's page shell (page.html), its one stylesheet (site.css) and its typeface (fonts/)
 config/          settings.yml (UA, timeouts, rate buckets, collect), sources.yml (every source),
                  triage.yml (windows, caps, merge and blocklist rules, scoring), relevance.md (what's relevant)
 prompts/         score_v1.md: the scoring call's instructions (relevance.md is appended)

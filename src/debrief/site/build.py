@@ -7,6 +7,7 @@
                       warnings, refused fetches): the day as data, for anything that wants it
   site.css            the one stylesheet (templates/site.css), with every color and face as a token
   favicon.svg         a D in the tokens' accent and paper colors
+  fonts/              the typeface, Newsreader, upright and italic (templates/fonts/, with its license)
   404.html            the page for an address with no issue
   feed.xml            an Atom feed of the newest 30 issues, v1 and v2
 
@@ -17,6 +18,7 @@ inputs give the same bytes.
 """
 import json
 import re
+import shutil
 from pathlib import Path
 
 from ..triage.output import Validator
@@ -96,6 +98,7 @@ def build(cfg, out, validator=None, log=print):
     issues.reverse()
     css = (page.TEMPLATES / "site.css").read_text()
     (out / "site.css").write_text(css)
+    shutil.copytree(page.TEMPLATES / "fonts", out / "fonts")
     (out / "favicon.svg").write_text(page.favicon(css))
     (out / "404.html").write_text(page.not_found_page())
     (out / "index.html").write_text(page.index_page(issues))
