@@ -222,6 +222,17 @@ def _figure(picture):
             f'<figcaption>{esc(picture.caption)}</figcaption></figure>')
 
 
+def _figure_of_the_day(doc):
+    """The figure's value, large, then its caption with a § link to the section that covers its story."""
+    fig = doc.get("figure")
+    if not fig:
+        return ""
+    anchor = _anchors(doc).get(fig["story"], "")
+    where = f' <a href="#{anchor}">§{anchor[2:]}</a>' if anchor.startswith("s-") else ""
+    return (f'<section class="fig"><h2 class="kicker caps">Figure of the day</h2><p class="value">{esc(fig["value"])}</p>'
+            f'<p class="caption">{inline(fig["caption"])}{where}</p></section>')
+
+
 def _inline_contents(doc):
     return (f'<details class="toc-inline"><summary class="caps">In this issue</summary>'
             f'<nav aria-label="Contents">{_contents(doc)}</nav></details>')
@@ -342,7 +353,7 @@ def day_page(doc, nav=Neighbors(), source_names=None, picture=None):
     issues; `source_names` maps a source id to the name sources.yml gives it; `picture` is the
     day's picture.Picture, shown under the standfirst."""
     date = doc["date"]
-    parts = [_title(doc), _figure(picture), _inline_contents(doc), _what_happened(doc), _lead(doc),
+    parts = [_title(doc), _figure(picture), _inline_contents(doc), _figure_of_the_day(doc), _what_happened(doc), _lead(doc),
              *(_section(doc, n, s) for n, s in enumerate(doc["sections"], 1)),
              _updates(doc, nav.known), _notes(doc), _scan(doc)]
     main = "\n".join(p for p in parts if p)

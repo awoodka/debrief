@@ -6,7 +6,7 @@ import re
 import xml.etree.ElementTree as ET
 
 import pytest
-from test_brief import DATE, good_draft, setup_day, write_draft
+from test_brief import DATE, FIGURE, LW, UPDATE, good_draft, setup_day, write_draft
 
 from debrief.brief import finalize
 from debrief.site import build, page
@@ -149,6 +149,25 @@ def test_an_update_links_to_the_issue_that_first_reported_it_only_when_that_issu
     assert '<p class="since">first reported Oct 23</p>' in unlinked and "../2026-10-23/" not in unlinked
 
 
+def test_a_day_page_shows_no_figure_when_the_brief_has_none(tmp_path):
+    _, doc = written(tmp_path)
+    html = page.day_page(doc)
+    assert "Figure of the day" not in html and 'class="fig"' not in html
+
+
+def test_the_figure_of_the_day_sits_above_what_happened_and_links_the_section_on_its_story(tmp_path):
+    _, doc = written(tmp_path)
+    doc["figure"] = {**FIGURE, "caption": "Security flaws in Microsoft's patches this month, a *record*.", "story": UPDATE}
+    html = page.day_page(doc)
+    fig = between(html, '<section class="fig">', "</section>")
+    assert text(fig) == "Figure of the day 1,453 Security flaws in Microsoft's patches this month, a record. §1"
+    assert '<p class="value">1,453</p>' in fig and "<em>record</em>" in fig and hrefs(fig) == ["#s-1"]
+    assert html.index('<details class="toc-inline">') < html.index('<section class="fig">') < html.index('id="what-happened"')
+    doc["figure"]["story"] = LW                                      # only What happened mentions it
+    fig = between(page.day_page(doc), '<section class="fig">', "</section>")
+    assert hrefs(fig) == [] and text(fig).endswith("a record.")
+
+
 def test_the_scan_marks_where_the_brief_covers_each_story(tmp_path):
     _, doc = written(tmp_path)
     spare = next(x for x in doc["scan"] if not x["covered"])
@@ -270,6 +289,8 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
 
 def test_two_builds_of_the_same_inputs_are_byte_identical(tmp_path):
     cfg, doc = written(tmp_path)
+    doc = {**doc, "figure": {**FIGURE, "story": UPDATE}}
+    (cfg.data_dir / "runs" / DATE / "brief.json").write_text(json.dumps(doc))
     add_v1(cfg, {d: v1_page({"dek": f"v1 on {d}"}) for d in ("2026-09-30", "2026-10-01", "2026-10-23")})
     two_v2_days(cfg, doc)
     build.build(cfg, tmp_path / "a")
@@ -278,6 +299,7 @@ def test_two_builds_of_the_same_inputs_are_byte_identical(tmp_path):
         return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
     a = tree(tmp_path / "a")
     assert len(a) == 19 and a == tree(tmp_path / "b")
+    assert b'<section class="fig">' in a[f"{DATE}/index.html"]
 
 
 PICTURES = {"endpaper": "an endpaper", "map": "a map of the day", "spines": "a shelf of book spines",

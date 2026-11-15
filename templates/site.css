@@ -147,6 +147,18 @@ p { margin: 0 0 1em; text-wrap: pretty; }
 .rail .wordmark { display: inline-flex; align-items: center; min-height: 24px; }
 .rail .issue-nav { margin-top: 1.75rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 
+.fig { margin: 0 0 2rem; padding: 1.1rem 0 1.25rem; border-block: 1px solid var(--line); }
+.fig .kicker { margin: 0 0 .4rem; }
+.fig .value { margin: 0; font-size: 3rem; font-weight: 500; line-height: 1; letter-spacing: -.02em;
+  font-variant-numeric: lining-nums; }
+.fig .caption { margin: .65rem 0 0; font-size: 1.0625rem; line-height: 1.45; }
+.fig .caption a { color: var(--accent); text-decoration: none; }
+@media (min-width: 34rem) {
+  .fig { display: grid; grid-template-columns: auto 1fr; gap: .4rem 1.5rem; align-items: center; }
+  .fig .kicker { grid-column: 1 / -1; }
+  .fig .caption { margin: 0; }
+}
+
 main section[id] { scroll-margin-top: 1.5rem; }
 .kicker { margin: 3rem 0 .75rem; font-size: inherit; color: var(--muted); }
 .what .kicker { margin-top: 2rem; }
