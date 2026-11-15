@@ -224,7 +224,7 @@ def _section(doc, n, s):
     out = [f'<section class="theme" id="s-{n}" data-stories="{_ids(s["stories"])}">',
            f'<h2><span class="num">{n}</span> {inline(s["heading"])}</h2>', paras(s["body"])]
     if s.get("split"):
-        out.append('<div class="split">' + "".join(f'<p class="label caps {key}">{label}</p><p>{inline(s["split"][key])}</p>'
+        out.append('<div class="split">' + "".join(f'<div class="arg {key}"><p class="label caps">{label}</p><p>{inline(s["split"][key])}</p></div>'
                                                    for key, label in SPLIT_LABELS.items()) + "</div>")
     out += [_quote(q) for q in s["quotes"]]
     srcs = [f"<li>{_story_link(doc, sid)}{_thread_counts(doc['stories'][sid])}</li>" for sid in s["stories"] if sid in doc["stories"]]

@@ -70,6 +70,12 @@ def test_a_day_page_has_every_part_of_the_brief(tmp_path):
     split = doc["sections"][0]["split"]
     assert (f"The case for {split['for']} The case against {split['against']} "
             f"The analysis suggests {split['read']}") in seen
+    css = (page.TEMPLATES / "site.css").read_text()
+    for key, label in (("for", "The case for"), ("against", "The case against"), ("read", "The analysis suggests")):
+        assert f'<div class="arg {key}"><p class="label caps">{label}</p><p>{page.inline(split[key])}</p></div>' in html
+        cue = re.search(rf"\.arg\.{key} {{ --cue: var\(--(\w+)\); }}", css)[1]
+        assert cue == {"read": "accent"}.get(key, key)
+    assert ".arg { padding-left: 16px; border-left: 2px solid var(--cue); }" in css and "background" not in between(css, ".split", ".sources")
     q = doc["sections"][0]["quotes"][0]
     assert page.esc(q["text"]) in html and f'href="{page.esc(q["url"])}"' in html
     assert page.inline(doc["updates"][0]["text"]) in html
