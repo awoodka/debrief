@@ -143,8 +143,9 @@ def _head(description, url, og_title, og_type):
     ])
 
 
-def _links(root):
-    return f'<p><a href="{root}">All issues</a> · <a href="{root}feed.xml">RSS</a></p>'
+def _links(root, about=True):
+    how = f' · <a href="{root}about/">How Debrief works</a>' if about else ""
+    return f'<p><a href="{root}">All issues</a> · <a href="{root}feed.xml">RSS</a>{how}</p>'
 
 
 def _thread_counts(story):
@@ -384,7 +385,7 @@ def not_found_page():
     """404.html: served at any path, so its links start at the site's root."""
     return _shell("Debrief · Not found", "/", head='<meta name="robots" content="noindex">', body=(
         '<div class="page"><main class="notfound">\n<div class="masthead"><a class="wordmark" href="/">Debrief</a></div>\n'
-        '<h1>No issue at this address.</h1>\n<p><a href="/">All issues</a></p>\n</main></div>'))
+        '<h1>No issue at this address.</h1>\n<p><a href="/">All issues</a> · <a href="/about/">How Debrief works</a></p>\n</main></div>'))
 
 
 def _markdown(md):
@@ -411,7 +412,7 @@ def about_page():
     title = title.removeprefix("# ")
     return _shell(title, "../", head=_head(plain(first), f"{SITE}/about/", title, "website"), body=(
         '<div class="page">\n<div class="masthead"><a class="wordmark" href="../">Debrief</a></div>\n'
-        f'<main class="about">\n{_markdown(md)}\n</main>\n<footer class="foot">{_links("../")}</footer>\n</div>'))
+        f'<main class="about">\n{_markdown(md)}\n</main>\n<footer class="foot">{_links("../", about=False)}</footer>\n</div>'))
 
 
 def favicon(css):

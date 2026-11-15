@@ -382,7 +382,6 @@ def test_every_page_shares_one_stylesheet_and_one_deferred_script_under_a_strict
     assert (out / "site.css").read_text() == (page.TEMPLATES / "site.css").read_text()
     assert (out / "progress.js").read_text() == (page.TEMPLATES / "progress.js").read_text()
     assert "No issue at this address." in text((out / "404.html").read_text())
-    assert 'href="/">All issues</a>' in (out / "404.html").read_text()
     icon, light = (out / "favicon.svg").read_text(), themes()[0]
     assert icon.startswith("<svg") and ">D</text>" in icon
     assert f'fill="{light["paper"]}"' in icon and f'fill="{light["accent"]}"' in icon
@@ -476,6 +475,22 @@ def test_how_debrief_works_is_a_page_of_its_own_in_the_shared_shell(tmp_path):
     assert '<link rel="canonical" href="https://debrief.alexwoodka.com/about/">' in html
     assert '<meta name="description" content="Debrief is a daily briefing on AI and machine learning. An automated' in html
     assert '<a class="wordmark" href="../">Debrief</a>' in html
+
+
+def test_every_page_links_how_debrief_works_beside_all_issues_and_rss(tmp_path):
+    cfg, _ = written(tmp_path)
+    build.build(cfg, tmp_path / "out")
+    out = tmp_path / "out"
+    about = (out / "about" / "index.html").read_text()
+    for f in (f"{DATE}/index.html", "index.html", "404.html"):
+        html = (out / f).read_text()
+        how = re.findall(r'<a href="([^"]+)">How Debrief works</a>', html)
+        assert len(how) == 1, f
+        target = out / how[0].lstrip("/") if how[0].startswith("/") else (out / f).parent / how[0]
+        assert (target / "index.html").read_text() == about, f
+        line = text(re.search(r"<p>(<a href[^\n]*?How Debrief works</a>)</p>", html)[1])
+        assert line == ("All issues · How Debrief works" if f == "404.html" else "All issues · RSS · How Debrief works"), f
+    assert text(between(about, '<footer class="foot">', "</footer>")) == "All issues · RSS"
 
 
 def test_the_feed_lists_the_newest_30_issues_newest_first(tmp_path):
