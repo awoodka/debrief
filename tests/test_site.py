@@ -38,7 +38,8 @@ def text(page_html):
     return " ".join(htmllib.unescape(re.sub(r"<[^>]+>", " ", body)).split())
 
 
-CSP = "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'"
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; "
+       "form-action 'none'")
 
 
 def between(html, start, end):
@@ -82,7 +83,8 @@ def test_a_day_page_has_every_part_of_the_brief(tmp_path):
     assert all(page.esc(x["title"]) in html for x in doc["scan"])
     assert re.search(r"HN · [\d,]+ points · [\d,]+ comments", seen)
     assert "My read" not in seen and "chip" not in html
-    assert f'content="{CSP}"' in html and "<script" not in html and "<style" not in html and "style=" not in html
+    assert f'content="{CSP}"' in html and "<style" not in html and "style=" not in html
+    assert re.findall(r"<script\b[^>]*>", html) == ['<script src="../progress.js" defer>']
     assert "1.2345" not in html and "a session error" not in html and "under the aim" not in html
 
 
@@ -220,7 +222,7 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
     files = sorted(p.relative_to(tmp_path / "a") for p in (tmp_path / "a").rglob("*") if p.is_file())
     assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", f"{DATE}/picture.svg", "404.html", "favicon.svg",
                                        "feed.xml", "fonts/OFL.txt", "fonts/newsreader-italic.woff2",
-                                       "fonts/newsreader.woff2", "index.html", "site.css"]
+                                       "fonts/newsreader.woff2", "index.html", "progress.js", "site.css"]
     pub = json.loads((tmp_path / "a" / DATE / "brief.json").read_text())
     assert "session" not in pub["meta"] and "warnings" not in pub["meta"]
     assert all(f["allowed"] for f in pub["fetches"]) and pub["sections"] == doc["sections"]
@@ -236,7 +238,7 @@ def test_two_builds_of_the_same_inputs_are_byte_identical(tmp_path):
     def tree(root):
         return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
     a = tree(tmp_path / "a")
-    assert len(a) == 17 and a == tree(tmp_path / "b")
+    assert len(a) == 18 and a == tree(tmp_path / "b")
 
 
 PICTURES = {"endpaper": "an endpaper", "map": "a map of the day", "spines": "a shelf of book spines",
@@ -365,7 +367,7 @@ def test_an_archive_with_no_first_version_issues_has_no_divider(tmp_path):
     assert "The first version" not in (tmp_path / "out" / "index.html").read_text()
 
 
-def test_every_page_shares_one_stylesheet_under_a_strict_policy(tmp_path):
+def test_every_page_shares_one_stylesheet_and_one_deferred_script_under_a_strict_policy(tmp_path):
     cfg, _ = written(tmp_path)
     add_v1(cfg, {"2026-09-14": v1_page({"dek": "x"})})
     build.build(cfg, tmp_path / "out")
@@ -374,8 +376,10 @@ def test_every_page_shares_one_stylesheet_under_a_strict_policy(tmp_path):
         body = (out / f).read_text()
         assert f'content="{CSP}"' in body
         assert f'<link rel="stylesheet" href="{root}site.css">' in body and "<style" not in body and "style=" not in body
-        assert f'href="{root}favicon.svg"' in body and "<script" not in body
+        assert f'href="{root}favicon.svg"' in body
+        assert re.findall(r"<script\b[^>]*>", body) == [f'<script src="{root}progress.js" defer>']
     assert (out / "site.css").read_text() == (page.TEMPLATES / "site.css").read_text()
+    assert (out / "progress.js").read_text() == (page.TEMPLATES / "progress.js").read_text()
     assert "No issue at this address." in text((out / "404.html").read_text())
     assert 'href="/">All issues</a>' in (out / "404.html").read_text()
     icon, light = (out / "favicon.svg").read_text(), themes()[0]
@@ -398,6 +402,25 @@ def test_the_typeface_ships_with_the_site_and_every_page_preloads_the_upright_fa
     for f, root in (("index.html", ""), ("404.html", "/"), (f"{DATE}/index.html", "../")):
         body = (out / f).read_text()
         assert f'<link rel="preload" href="{root}fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>' in body
+
+
+def test_a_day_page_gives_the_script_what_it_marks_and_reads(tmp_path):
+    """progress.js marks the rail link whose part of the page is being read, and draws the bar the
+    body names. Every rail link must point at a part that's on the page."""
+    _, doc = written(tmp_path)
+    html = page.day_page(doc)
+    rail = between(html, '<aside class="rail">', "</aside>")
+    targets = [h[1:] for h in hrefs(between(rail, "<nav", "</nav>"))]
+    assert targets == ["s-1", "s-2", "what-happened", "updates", "scan"]
+    assert all(html.count(f'id="{t}"') == 1 for t in targets)
+    assert '<body data-progress="continuous">' in html and '<main id="issue">' in html
+    assert "aria-current" not in html and 'class="progress"' not in html
+    css = (page.TEMPLATES / "site.css").read_text()
+    assert ".rail a[aria-current] { color: var(--accent); border-left-color: var(--accent); }" in css
+    assert ".rail .toc a, .rail .toc-more a { padding-left: 10px; border-left: 2px solid transparent; }" in css
+    assert "transition" not in css.split("@media (prefers-reduced-motion: no-preference)")[0]
+    script = (page.TEMPLATES / "progress.js").read_text()
+    assert len(script.splitlines()) <= 60 and "import" not in script and "http" not in script
 
 
 def themes():

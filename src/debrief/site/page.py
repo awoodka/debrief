@@ -1,6 +1,8 @@
 """The site's pages as finished HTML: a day's page from its brief.json (and its picture, picture.py),
-the archive list, the 404 page, and the Atom feed. The pages run no script. templates/page.html is the shell every page
-shares (its head, the Content-Security-Policy), and templates/site.css the one stylesheet.
+the archive list, the 404 page, and the Atom feed. templates/page.html is the shell every page
+shares (its head, the Content-Security-Policy), templates/site.css the one stylesheet, and
+templates/progress.js the one script: on a day's page it marks the rail's link to the part being
+read and draws the reading-progress bar. Without it the pages read the same.
 
 Every string from the data is escaped. Prose gets only **bold** and *italic*. Links come only from
 the data's url fields, and only http(s) ones. Each section has id="s-N" and data-stories (its story
@@ -20,6 +22,7 @@ from ..config import REPO
 TEMPLATES = REPO / "templates"
 SITE = "https://debrief.alexwoodka.com"
 TAGLINE = "Your morning read on the AI/ML landscape."
+PROGRESS = "continuous"   # the bar across the top of a day's page while reading: "continuous" or "none"
 NO_BRIEF = "The brief didn't run; every story kept is listed."
 MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
           "November", "December"]
@@ -122,7 +125,8 @@ def _cut(s, n=60):
 
 def _shell(title, root, body, head=""):
     """A finished page in templates/page.html. `root` is the path from the page to the site's root."""
-    return Template((TEMPLATES / "page.html").read_text()).substitute(title=esc(title), root=root, head=head, body=body)
+    return Template((TEMPLATES / "page.html").read_text()).substitute(title=esc(title), root=root, head=head, body=body,
+                                                                      progress=PROGRESS)
 
 
 def _head(description, url, og_title, og_type):

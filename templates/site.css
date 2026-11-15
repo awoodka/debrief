@@ -125,6 +125,18 @@ p { margin: 0 0 1em; text-wrap: pretty; }
 .toc-more { list-style: none; margin: .75em 0 0; padding: 0; }
 .toc a, .toc-more a { display: block; min-height: 24px; padding: .15em 0; }
 .rail { display: none; }
+.rail .toc { list-style: none; padding: 0; counter-reset: section; }
+.rail .toc li { counter-increment: section; }
+.rail .toc a { display: grid; grid-template-columns: 1.6em 1fr; }
+.rail .toc a::before { content: counter(section); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rail .toc a, .rail .toc-more a { padding-left: 10px; border-left: 2px solid transparent; }
+.rail a[aria-current] { color: var(--accent); border-left-color: var(--accent); }
+.rail a[aria-current]::before { color: inherit; }
+@media (prefers-reduced-motion: no-preference) {
+  .rail .toc a, .rail .toc-more a { transition: color .15s, border-color .15s; }
+}
+.progress { position: fixed; top: 0; left: 0; right: 0; z-index: 10; height: 3px; pointer-events: none; }
+.progress i { display: block; height: 100%; background: var(--accent); transform: scaleX(0); transform-origin: 0 0; }
 .rail-date { margin: .25rem 0 1.75rem; color: var(--muted); }
 .rail .wordmark { display: inline-flex; align-items: center; min-height: 24px; }
 .rail .issue-nav { margin-top: 1.75rem; padding-top: 1rem; border-top: 1px solid var(--line); }

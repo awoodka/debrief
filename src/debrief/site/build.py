@@ -7,6 +7,8 @@
   <date>/brief.json   a v2 day's brief.json minus what's only for us (the session, the check's
                       warnings, refused fetches): the day as data, for anything that wants it
   site.css            the one stylesheet (templates/site.css), with every color and face as a token
+  progress.js         the one script (templates/progress.js): the rail marks the part being read,
+                      and a bar across the top shows how far through the issue the reader is
   favicon.svg         a D in the tokens' accent and paper colors
   fonts/              the typeface, Newsreader, upright and italic (templates/fonts/, with its license)
   404.html            the page for an address with no issue
@@ -100,6 +102,7 @@ def build(cfg, out, validator=None, log=print):
             issues.append(page.Issue(d, "v1", v1_summary(body.decode("utf-8", "replace"))))
     issues.reverse()
     (out / "site.css").write_text(css)
+    shutil.copyfile(page.TEMPLATES / "progress.js", out / "progress.js")
     shutil.copytree(page.TEMPLATES / "fonts", out / "fonts")
     (out / "favicon.svg").write_text(page.favicon(css))
     (out / "404.html").write_text(page.not_found_page())
