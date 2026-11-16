@@ -1,5 +1,6 @@
 """The site (src/debrief/site/): a day's page from its brief.json, the archive, v1's frozen pages,
 the feed, and the published copy of the data. On the brief fixture day (tests/fixtures/brief/)."""
+import hashlib
 import html as htmllib
 import json
 import re
@@ -50,6 +51,10 @@ def hrefs(fragment):
     return re.findall(r'href="([^"]+)"', fragment)
 
 
+def unversioned(page_html):
+    return re.sub(r'\?v=[0-9a-f]{10}"', '"', page_html)
+
+
 def two_v2_days(cfg, doc, later="2026-10-25"):
     """A second v2 brief, the day after the fixture day."""
     (cfg.data_dir / "runs" / later).mkdir()
@@ -84,7 +89,7 @@ def test_a_day_page_has_every_part_of_the_brief(tmp_path):
     assert re.search(r"HN · [\d,]+ points · [\d,]+ comments", seen)
     assert "My read" not in seen and "chip" not in html
     assert f'content="{CSP}"' in html and "<style" not in html and "style=" not in html
-    assert re.findall(r"<script\b[^>]*>", html) == ['<script src="../progress.js" defer>']
+    assert re.findall(r"<script\b[^>]*>", unversioned(html)) == ['<script src="../progress.js" defer>']
     assert "1.2345" not in html and "a session error" not in html and "under the aim" not in html
 
 
@@ -100,7 +105,7 @@ def test_a_day_page_head_names_the_issue_for_tabs_feeds_and_link_previews(tmp_pa
                 '<meta property="og:site_name" content="Debrief">', f'<link rel="canonical" href="{url}">',
                 '<link rel="alternate" type="application/atom+xml" title="Debrief" href="../feed.xml">',
                 '<link rel="icon" href="../favicon.svg" type="image/svg+xml">', '<link rel="stylesheet" href="../site.css">'):
-        assert tag in html, tag
+        assert tag in unversioned(html), tag
     doc["headline"] = ""
     html = page.day_page(doc)
     assert "<title>Debrief · Oct 24</title>" in html and 'class="standfirst"' not in html
@@ -566,7 +571,7 @@ def test_every_page_shares_one_stylesheet_and_one_deferred_script_under_a_strict
     out = tmp_path / "out"
     for f, root, script in (("index.html", "", "calendar.js"), ("404.html", "/", "progress.js"),
                             (f"{DATE}/index.html", "../", "progress.js"), ("about/index.html", "../", "progress.js")):
-        body = (out / f).read_text()
+        body = unversioned((out / f).read_text())
         assert f'content="{CSP}"' in body
         assert f'<link rel="stylesheet" href="{root}site.css">' in body and "<style" not in body and "style=" not in body
         assert f'href="{root}favicon.svg"' in body
@@ -577,6 +582,23 @@ def test_every_page_shares_one_stylesheet_and_one_deferred_script_under_a_strict
     icon, light = (out / "favicon.svg").read_text(), themes()[0]
     assert icon.startswith("<svg") and ">D</text>" in icon
     assert f'fill="{light["paper"]}"' in icon and f'fill="{light["accent"]}"' in icon
+
+
+def test_every_page_asks_for_its_stylesheet_and_script_by_a_url_that_names_their_published_bytes(tmp_path):
+    """A changed site.css or script gets a new URL, so no cache hands a reader a new page with the old file."""
+    cfg, _ = written(tmp_path)
+    add_v1(cfg, {"2026-09-14": v1_page({"dek": "x"})})
+    build.build(cfg, tmp_path / "out")
+    out, seen = tmp_path / "out", set()
+    for f in out.rglob("*.html"):
+        for url in re.findall(r'<(?:link rel="stylesheet" href|script src)="([^"]+)"', f.read_text()):
+            path, _, v = url.partition("?v=")
+            asset = out / path[1:] if path.startswith("/") else f.parent / path
+            assert v == hashlib.sha256(asset.read_bytes()).hexdigest()[:10], (str(f.relative_to(out)), url)
+            seen.add((str(f.relative_to(out)), asset.name))
+    assert seen == {(f, a) for f, script in (("index.html", "calendar.js"), ("404.html", "progress.js"),
+                                             (f"{DATE}/index.html", "progress.js"), ("about/index.html", "progress.js"))
+                    for a in ("site.css", script)}
 
 
 def test_the_typeface_ships_with_the_site_and_every_page_preloads_the_upright_face(tmp_path):
@@ -691,7 +713,8 @@ def test_how_debrief_works_is_a_page_of_its_own_in_the_shared_shell(tmp_path):
     assert "Issues before October 26, 2026 come from the first version of the pipeline" in seen
     assert "first person" not in seen and "[the date" not in seen
     assert '<a href="mailto:alexwoodka@gmail.com">alexwoodka@gmail.com</a>.' in html
-    assert f'content="{CSP}"' in html and '<link rel="stylesheet" href="../site.css">' in html and "style=" not in html
+    assert f'content="{CSP}"' in html and '<link rel="stylesheet" href="../site.css">' in unversioned(html)
+    assert "style=" not in html
     assert '<link rel="canonical" href="https://debrief.alexwoodka.com/about/">' in html
     assert '<meta name="description" content="Debrief is a daily briefing on AI and machine learning. An automated' in html
     assert '<a class="wordmark" href="../">Debrief</a>' in html

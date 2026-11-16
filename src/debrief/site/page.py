@@ -10,6 +10,7 @@ Every string from the data is escaped. Prose gets only **bold** and *italic*. Li
 the data's url fields, and only http(s) ones. Each section has id="s-N" and data-stories (its story
 ids), and every story row data-story, so later features can point at a part of the page.
 """
+import hashlib
 import html
 import re
 from bisect import bisect_left
@@ -143,10 +144,17 @@ def _cut(s, n=60):
     return s if len(s) <= n else s[:n + 1].rsplit(" ", 1)[0].rstrip(",;:·-") + "…"
 
 
+def _fingerprinted(name):
+    """templates/<name>'s URL with ?v= the start of its sha256. build.py publishes the file byte for byte, so a
+    changed file gets a new URL and no cache can serve the old one under a new page."""
+    return f"{name}?v={hashlib.sha256((TEMPLATES / name).read_bytes()).hexdigest()[:10]}"
+
+
 def _shell(title, root, body, head="", script="progress.js"):
     """A finished page in templates/page.html. `root` is the path from the page to the site's root."""
     return Template((TEMPLATES / "page.html").read_text()).substitute(title=esc(title), root=root, head=head, body=body,
-                                                                      progress=PROGRESS, script=script)
+                                                                      progress=PROGRESS, css=_fingerprinted("site.css"),
+                                                                      script=_fingerprinted(script))
 
 
 def _head(description, url, og_title, og_type):
