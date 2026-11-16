@@ -1,7 +1,8 @@
 """The site: every day's page as static files, which deploy/run.sh publishes to debrief.alexwoodka.com.
 
 `debrief site build --out DIR` writes:
-  index.html          the archive, newest first, grouped by month
+  index.html          the newest issue, then the archive of the rest, newest first, grouped by month;
+                      on a wide screen, a calendar shaded by each day's comments
   <date>/index.html   a v2 day's page (site/page.py), or a frozen v1 page
   <date>/picture.svg  a v2 day's picture, drawn from the shape of its brief (site/picture.py)
   <date>/brief.json   a v2 day's brief.json minus what's only for us (the session, the check's
@@ -50,6 +51,18 @@ def public(doc):
     return doc
 
 
+def comments(doc):
+    """How many comments the threads of a brief's stories had."""
+    return sum(t["comments"] or 0 for s in doc["stories"].values() for t in s["threads"])
+
+
+def scored(cfg, date):
+    """False when the night's triage ran on rules alone, as runs/<date>/brief_context.json records
+    (the published brief.json doesn't say). A day without that file counts as scored."""
+    p = cfg.data_dir / "runs" / date / "brief_context.json"
+    return not p.is_file() or json.loads(p.read_text())["triage"]["mode"] != "rules_only"
+
+
 def v1_summary(page_html):
     """A v1 page's line in the archive, as v1's build_site.py chose it: the dek, else the old
     through-line, else the first event. "" when the page has no embedded data."""
@@ -96,7 +109,7 @@ def build(cfg, out, validator=None, log=print):
             (out / d / "picture.svg").write_text(pictures[d].svg)
             (out / d / "index.html").write_text(page.day_page(v2[d], nav, names, pictures[d]))
             (out / d / "brief.json").write_text(json.dumps(public(v2[d]), sort_keys=True, ensure_ascii=False, indent=1) + "\n")
-            issues.append(page.Issue(d, "v2", v2[d]["headline"]))
+            issues.append(page.Issue(d, "v2", v2[d]["headline"], comments(v2[d]) if scored(cfg, d) else None))
         else:
             body = v1[d].read_bytes()
             (out / d / "index.html").write_bytes(body)

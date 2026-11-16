@@ -11,6 +11,8 @@ ids), and every story row data-story, so later features can point at a part of t
 """
 import html
 import re
+from bisect import bisect_left
+from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date as _date
 from itertools import groupby
@@ -26,6 +28,8 @@ SITE = "https://debrief.alexwoodka.com"
 TAGLINE = "Your morning read on the AI/ML landscape."
 PROGRESS = "continuous"   # the bar across the top of a day's page while reading: "continuous" or "none"
 NO_BRIEF = "The brief didn't run; every story kept is listed."
+LEGEND = ('<p class="legend"><span class="on-light">Darker</span><span class="on-dark">Brighter</span> days drew more '
+          "discussion. Striped days weren't measured.</p>")
 MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
           "November", "December"]
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -53,10 +57,13 @@ _JUNK = re.compile("|".join(f"(?:{p})" for p in JUNK_GISTS.values()), re.I)
 class Issue:
     """One issue in the archive. `version` is "v2" (a validated runs/<date>/brief.json) or "v1" (a
     frozen page from <data>/site/v1/). `headline` is v2's headline or the line v1's build chose, and
-    may be "". An Issue is also a feed entry: date, title, url and summary."""
+    may be "". `comments` is the count on the threads of the day's stories, or None when the day
+    wasn't measured: every v1 day, and a night whose triage ran on rules alone. An Issue is also a
+    feed entry: date, title, url and summary."""
     date: str
     version: str
     headline: str
+    comments: int | None = None
 
     @property
     def summary(self):
@@ -394,10 +401,60 @@ def _today(e, picture):
             f'<p class="read-today"><a href="{e.date}/">Read today\'s issue →</a></p></section>')
 
 
+def _shades(issues):
+    """date -> the day's shade in the calendar: 1, 2 or 3 as its comments rank in the lower, middle
+    or upper third of every measured day's, or None when the day wasn't measured."""
+    counts = sorted(e.comments for e in issues if e.comments is not None)
+    return {e.date: None if e.comments is None else bisect_left(counts, e.comments) * 3 // len(counts) + 1
+            for e in issues}
+
+
+def _discussion(e):
+    if e.version == "v1":
+        return "first version, not measured"
+    return "not measured" if e.comments is None else _count(e.comments, "comment", "comments")
+
+
+def _calendar(issues):
+    """The rail's calendar, a month at a time, Monday first. Only the newest month shows; the others
+    wait, hidden, for calendar.js. A day with an issue links to it, shaded by its discussion or
+    striped when that wasn't measured, and its label is the line the popover heads with."""
+    by_date, shades, months = {e.date: e for e in issues}, _shades(issues), sorted({e.date[:7] for e in issues})
+    out = []
+    for ym in months:
+        y, m = int(ym[:4]), int(ym[5:])
+        lead, days = monthrange(y, m)
+        cells = [f'<span class="wd" aria-hidden="true">{w}</span>' for w in "MTWTFSS"] + ["<span></span>"] * lead
+        for d in range(1, days + 1):
+            e = by_date.get(f"{ym}-{d:02d}")
+            if not e:
+                cells.append(f'<span class="cell" aria-hidden="true">{d}</span>')
+                continue
+            shade = f"shade-{shades[e.date]}" if shades[e.date] else "unmeasured"
+            label = f"{DAYS[_date.fromisoformat(e.date).weekday()][:3]}, {short_date(e.date)} · {_discussion(e)}"
+            current = ' aria-current="date"' if e.date == issues[0].date else ""
+            cells.append(f'<a class="cell {shade}" href="{e.date}/" aria-label="{esc(label)}" '
+                         f'data-title="{esc(plain(e.summary))}"{current}>{d}</a>')
+        hidden = "" if ym == months[-1] else " hidden"
+        out.append(f'<div class="cal-month" data-month="{ym}"{hidden}><h2>{MONTHS[m - 1]} {y}</h2>'
+                   f'<div class="cal-grid">{"".join(cells)}</div></div>')
+    return f'<nav class="cal" aria-label="Calendar">{"".join(out)}</nav>'
+
+
+def _since(issues):
+    """The line under the calendar. It claims an issue every day only when no date between the
+    first issue and the newest is missing one."""
+    first, newest = (_date.fromisoformat(issues[i].date) for i in (-1, 0))
+    when = fmt_date(issues[-1].date).split(", ", 1)[1]
+    every = (newest - first).days + 1 == len(issues)
+    return f'<p class="since-line">{"An issue every day since" if every else "Since"} {when}.</p>'
+
+
 def index_page(issues, pictures=None):
     """The front page: the newest of `issues` (newest first), with its picture from `pictures`
     ({date: picture.Picture}), then the archive of the rest grouped by month. Where the v2 issues
-    give way to v1's, a divider says those keep their original layout."""
+    give way to v1's, a divider says those keep their original layout. On a wide screen the header
+    is a rail with a calendar of every issue."""
     v1 = [e.date for e in issues if e.version == "v1"]
     body = [_today(issues[0], (pictures or {}).get(issues[0].date))] if issues else []
     divided = False
@@ -417,9 +474,11 @@ def index_page(issues, pictures=None):
                         f'<span class="k">{esc(plain(e.summary))}</span></a></li>')
         body.append(f'<ul class="issues">{"".join(rows)}</ul></section>')
     main = "\n".join(body) or "<p>No issues yet.</p>"
+    rail = f"{_calendar(issues)}{LEGEND}{_since(issues)}" if issues else ""
     return _shell("Debrief", "", head=_head(TAGLINE, f"{SITE}/", "Debrief", "website"), body=(
-        f'<div class="page">\n<header class="archive-head"><h1 class="wordmark">Debrief</h1>'
-        f'<p class="tagline">{esc(TAGLINE)}</p></header>\n<main>\n{main}\n</main>\n<footer class="foot">{_links("")}</footer>\n</div>'))
+        f'<div class="page front">\n<header class="archive-head"><h1 class="wordmark">Debrief</h1>'
+        f'<p class="tagline">{esc(TAGLINE)}</p>{rail}</header>\n<main>\n{main}\n</main>\n'
+        f'<footer class="foot">{_links("")}</footer>\n</div>'))
 
 
 def feed(issues):

@@ -474,6 +474,85 @@ def test_the_front_page_leads_with_the_newest_issue_and_its_picture_and_the_arch
     assert re.findall(r'href="([\d-]+)/"', between(index, '<section class="month"', "</main>")) == [DATE]
 
 
+def with_comments(cfg, doc, date, n):
+    """Write `doc` as the brief on `date`, its threads holding n comments in all: split across the
+    first threads of two stories, every other thread without a count."""
+    doc = json.loads(json.dumps({**doc, "date": date}))
+    for st in doc["stories"].values():
+        for t in st["threads"]:
+            t["comments"] = None
+    first, second = [st["threads"][0] for st in doc["stories"].values() if st["threads"]][:2]
+    first["comments"], second["comments"] = n - n // 2, n // 2
+    (cfg.data_dir / "runs" / date).mkdir(exist_ok=True)
+    (cfg.data_dir / "runs" / date / "brief.json").write_text(json.dumps(doc))
+
+
+def calendar_days(index):
+    """The calendar's days that link to an issue: {date: (its shade, the line the popover heads with)}."""
+    return {d: (shade, htmllib.unescape(label))
+            for shade, d, label in re.findall(r'<a class="cell ([\w-]+)" href="([\d-]+)/" aria-label="([^"]+)"', index)}
+
+
+def test_the_calendar_shades_each_measured_day_by_the_third_its_comments_rank_in(tmp_path):
+    cfg, doc = written(tmp_path)
+    counts = {"2026-10-20": 3000, "2026-10-21": 100, "2026-10-22": 5, "2026-10-23": 100, DATE: 7}
+    for d, n in counts.items():
+        with_comments(cfg, doc, d, n)
+    build.build(cfg, tmp_path / "out")
+    assert calendar_days((tmp_path / "out" / "index.html").read_text()) == {
+        "2026-10-20": ("shade-3", "Tue, Oct 20 · 3,000 comments"),
+        "2026-10-21": ("shade-2", "Wed, Oct 21 · 100 comments"),
+        "2026-10-22": ("shade-1", "Thu, Oct 22 · 5 comments"),
+        "2026-10-23": ("shade-2", "Fri, Oct 23 · 100 comments"),
+        DATE: ("shade-1", "Sat, Oct 24 · 7 comments"),
+    }
+
+
+def test_first_version_days_and_nights_the_scoring_failed_are_striped_and_left_out_of_the_thirds(tmp_path):
+    cfg, doc = written(tmp_path)
+    add_v1(cfg, {"2026-09-30": v1_page({"dek": "x"}), "2026-10-19": v1_page({"dek": "y"})})
+    for d, n in {"2026-10-21": 9999, "2026-10-22": 10, "2026-10-23": 20, DATE: 30}.items():
+        with_comments(cfg, doc, d, n)
+    for d, mode in (("2026-10-21", "rules_only"), ("2026-10-22", "scored")):
+        (cfg.data_dir / "runs" / d / "brief_context.json").write_text(json.dumps({"triage": {"mode": mode}}))
+    build.build(cfg, tmp_path / "out")
+    index = (tmp_path / "out" / "index.html").read_text()
+    assert calendar_days(index) == {
+        "2026-09-30": ("unmeasured", "Wed, Sep 30 · first version, not measured"),
+        "2026-10-19": ("unmeasured", "Mon, Oct 19 · first version, not measured"),
+        "2026-10-21": ("unmeasured", "Wed, Oct 21 · not measured"),
+        "2026-10-22": ("shade-1", "Thu, Oct 22 · 10 comments"),
+        "2026-10-23": ("shade-2", "Fri, Oct 23 · 20 comments"),
+        DATE: ("shade-3", "Sat, Oct 24 · 30 comments"),
+    }
+    assert re.findall(r'<div class="cal-month" data-month="([\d-]+)"( hidden)?>', index) == [("2026-09", " hidden"), ("2026-10", "")]
+    assert re.findall(r'<a [^>]*href="([\d-]+)/"[^>]* aria-current="date"', index) == [DATE]
+
+
+def test_the_legend_names_the_busier_days_darker_in_the_light_theme_and_brighter_in_the_dark(tmp_path):
+    cfg, _ = written(tmp_path)
+    build.build(cfg, tmp_path / "out")
+    legend = between((tmp_path / "out" / "index.html").read_text(), '<p class="legend">', "</p>")
+    def seen(hidden):
+        return text(re.sub(rf'<span class="{hidden}">[^<]*</span>', "", legend))
+    assert seen("on-dark") == "Darker days drew more discussion. Striped days weren't measured."
+    assert seen("on-light") == "Brighter days drew more discussion. Striped days weren't measured."
+    css = (page.TEMPLATES / "site.css").read_text()
+    assert ".on-dark { display: none; }" in css
+    assert re.search(r"@media \(prefers-color-scheme: dark\) \{\s*\.on-light \{ display: none; \}\s*\.on-dark \{ display: inline; \}", css)
+
+
+def test_the_rail_claims_an_issue_every_day_only_when_no_day_is_missing(tmp_path):
+    cfg, _ = written(tmp_path)
+    add_v1(cfg, {d: v1_page({"dek": d}) for d in ("2026-10-22", "2026-10-23")})
+    build.build(cfg, tmp_path / "every")
+    since = text(between((tmp_path / "every" / "index.html").read_text(), '<p class="since-line">', "</p>"))
+    assert since == "An issue every day since October 22, 2026."
+    add_v1(cfg, {"2026-10-20": v1_page({"dek": "a day before a missing one"})})
+    build.build(cfg, tmp_path / "gap")
+    assert text(between((tmp_path / "gap" / "index.html").read_text(), '<p class="since-line">', "</p>")) == "Since October 20, 2026."
+
+
 def test_an_archive_with_no_first_version_issues_has_no_divider(tmp_path):
     cfg, _ = written(tmp_path)
     build.build(cfg, tmp_path / "out")
@@ -565,6 +644,14 @@ def test_every_text_color_reads_at_4_5_to_1_on_the_paper(theme):
     t = themes()[theme]
     for name in ("ink", "muted", "accent", "for", "against"):
         assert contrast(rgb(t[name], t), rgb(t["paper"], t)) >= 4.5, name
+
+
+@pytest.mark.parametrize("theme", [0, 1], ids=["light", "dark"])
+def test_every_calendar_day_reads_at_4_5_to_1_on_its_shade(theme):
+    t = themes()[theme]
+    for ink, shade in (("ink", "shade-1"), ("ink", "shade-2"), ("paper", "shade-3")):
+        assert contrast(rgb(t[ink], t), rgb(t[shade], t)) >= 4.5, shade
+    assert ".shade-3 { background: var(--shade-3); --cell-ink: var(--paper); }" in (page.TEMPLATES / "site.css").read_text()
 
 
 def test_how_debrief_works_is_a_page_of_its_own_in_the_shared_shell(tmp_path):

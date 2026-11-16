@@ -9,6 +9,11 @@
   --against: #9a3b28;
   --muted: color-mix(in srgb, var(--ink) 64%, var(--paper));
   --line: color-mix(in srgb, var(--ink) 15%, var(--paper));
+  --faint: color-mix(in srgb, var(--ink) 28%, var(--paper));
+  --hatch: color-mix(in srgb, var(--ink) 16%, var(--paper));
+  --shade-1: color-mix(in srgb, var(--accent) 16%, var(--paper));
+  --shade-2: color-mix(in srgb, var(--accent) 42%, var(--paper));
+  --shade-3: color-mix(in srgb, var(--accent) 80%, var(--paper));
   --serif: Newsreader, Georgia, serif;
 }
 @media (prefers-color-scheme: dark) {
@@ -115,6 +120,30 @@ p { margin: 0 0 1em; text-wrap: pretty; }
 .divider { margin: 1.5rem 0; padding: 1rem 0; border-block: 1px solid var(--line);
   text-align: center; color: var(--muted); font-size: .9375rem; }
 .divider p { margin: 0; }
+
+.cal, .legend, .since-line { display: none; }
+.cal { position: relative; margin: 1.75rem 0 0; }
+.cal-month h2 { margin: 0 0 .4rem; font-size: 1.0625rem; line-height: 28px; text-align: center; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.wd { text-align: center; font-size: .75rem; color: var(--muted); padding-bottom: .1rem; }
+.cell { display: grid; place-items: center; aspect-ratio: 1; min-height: 28px; border-radius: 3px;
+  font-size: .8125rem; font-variant-numeric: tabular-nums lining-nums; color: var(--cell-ink, var(--ink)); }
+span.cell { color: var(--faint); }
+a.cell:hover { color: var(--cell-ink, var(--ink)); box-shadow: 0 0 0 1.5px var(--paper), 0 0 0 3px var(--ink); }
+.shade-1 { background: var(--shade-1); }
+.shade-2 { background: var(--shade-2); }
+.shade-3 { background: var(--shade-3); --cell-ink: var(--paper); }
+.unmeasured { background: repeating-linear-gradient(135deg, var(--hatch) 0 1px, transparent 1px 5px); }
+.cell[aria-current="date"] { box-shadow: inset 0 0 0 1px var(--ink), inset 0 0 0 2px var(--paper); }
+a.cell[aria-current="date"]:hover {
+  box-shadow: inset 0 0 0 1px var(--ink), inset 0 0 0 2px var(--paper), 0 0 0 1.5px var(--paper), 0 0 0 3px var(--ink); }
+.legend { margin: 1rem 0 0; font-size: .8125rem; line-height: 1.4; color: var(--muted); }
+.on-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  .on-light { display: none; }
+  .on-dark { display: inline; }
+}
+.since-line { margin: 1.25rem 0 0; font-style: italic; color: var(--muted); }
 
 .notfound h1 { margin-bottom: 1rem; }
 
@@ -239,14 +268,18 @@ blockquote .who { margin-top: .4rem; font-size: .9375rem; font-style: normal; co
 .w100 { width: 100%; }
 
 @media (min-width: 1100px) {
-  .day { max-width: none; display: grid; grid-template-columns: 15rem 36rem; column-gap: 4rem;
+  .day, .front { max-width: none; display: grid; grid-template-columns: 15rem 36rem; column-gap: 4rem;
     justify-content: center; padding-top: 0; padding-bottom: 0; }
-  .day > .foot { padding-bottom: 5rem; }
-  .day > main, .day > .foot { grid-column: 2; }
-  .day > main { padding-top: 2.5rem; }
-  .day .rail { display: block; grid-column: 1; grid-row: 1 / span 2; align-self: start; position: sticky; top: 0;
+  .day > .foot, .front > .foot { padding-bottom: 5rem; }
+  .day > main, .day > .foot, .front > main, .front > .foot { grid-column: 2; }
+  .day > main, .front > main { padding-top: 2.5rem; }
+  .day .rail, .front > .archive-head { display: block; grid-column: 1; grid-row: 1 / span 2; align-self: start; position: sticky; top: 0;
     max-height: 100vh; overflow-y: auto; padding: 2.5rem 0 2rem; font-size: .875rem; line-height: 1.4; }
   .day .masthead, .toc-inline { display: none; }
+  .front > .archive-head { padding-inline: 4px; margin: 0 -4px; }
+  .front h1 { display: inline-flex; align-items: center; min-height: 24px; font-size: 1.2rem; line-height: 1.4; }
+  .front .tagline { font-size: .875rem; line-height: 1.4; }
+  .cal, .legend, .since-line { display: block; }
 }
 
 @media (max-width: 700px) {
@@ -254,7 +287,10 @@ blockquote .who { margin-top: .4rem; font-size: .9375rem; font-style: normal; co
 }
 
 @media (pointer: coarse) {
-  .masthead .wordmark, .rail .wordmark, .issues a, .read-today a, .toc a, .toc-more a, .issue-nav a, .where { min-height: 44px; }
+  .masthead .wordmark, .rail .wordmark, .issues a, .read-today a, .cell, .toc a, .toc-more a, .issue-nav a, .where { min-height: 44px; }
   .toc a, .toc-more a { display: flex; align-items: center; }
   .toc-inline summary { padding: .5rem 0; }
+}
+@media (pointer: coarse) and (min-width: 1100px) {
+  .front { grid-template-columns: 22rem 36rem; }
 }
