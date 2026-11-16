@@ -1,9 +1,10 @@
 """The site's pages as finished HTML: a day's page from its brief.json (and its picture, picture.py),
 the archive list, the "How Debrief works" page (templates/about.md), the 404 page, and the Atom
 feed. templates/page.html is the shell every page shares (its head, the Content-Security-Policy),
-templates/site.css the one stylesheet, and templates/progress.js the one script: on a day's page it
-marks the rail's link to the part being read and draws the reading-progress bar. Without it the
-pages read the same.
+templates/site.css the one stylesheet, and each page loads one script. On a day's page,
+templates/progress.js marks the rail's link to the part being read and draws the reading-progress
+bar. On the front page, templates/calendar.js pages the calendar, keeps it on the month being read,
+and shows what a day held when it's pointed at. Without them every page still reads in full.
 
 Every string from the data is escaped. Prose gets only **bold** and *italic*. Links come only from
 the data's url fields, and only http(s) ones. Each section has id="s-N" and data-stories (its story
@@ -142,10 +143,10 @@ def _cut(s, n=60):
     return s if len(s) <= n else s[:n + 1].rsplit(" ", 1)[0].rstrip(",;:·-") + "…"
 
 
-def _shell(title, root, body, head=""):
+def _shell(title, root, body, head="", script="progress.js"):
     """A finished page in templates/page.html. `root` is the path from the page to the site's root."""
     return Template((TEMPLATES / "page.html").read_text()).substitute(title=esc(title), root=root, head=head, body=body,
-                                                                      progress=PROGRESS)
+                                                                      progress=PROGRESS, script=script)
 
 
 def _head(description, url, og_title, og_type):
@@ -438,7 +439,9 @@ def _calendar(issues):
         hidden = "" if ym == months[-1] else " hidden"
         out.append(f'<div class="cal-month" data-month="{ym}"{hidden}><h2>{MONTHS[m - 1]} {y}</h2>'
                    f'<div class="cal-grid">{"".join(cells)}</div></div>')
-    return f'<nav class="cal" aria-label="Calendar">{"".join(out)}</nav>'
+    buttons = "".join(f'<button type="button" class="cal-nav" data-step="{step}" aria-label="{name} month" hidden>{arrow}</button>'
+                      for step, name, arrow in ((-1, "Previous", "‹"), (1, "Next", "›")))
+    return f'<nav class="cal" aria-label="Calendar">{buttons}{"".join(out)}</nav>'
 
 
 def _since(issues):
@@ -475,7 +478,7 @@ def index_page(issues, pictures=None):
         body.append(f'<ul class="issues">{"".join(rows)}</ul></section>')
     main = "\n".join(body) or "<p>No issues yet.</p>"
     rail = f"{_calendar(issues)}{LEGEND}{_since(issues)}" if issues else ""
-    return _shell("Debrief", "", head=_head(TAGLINE, f"{SITE}/", "Debrief", "website"), body=(
+    return _shell("Debrief", "", head=_head(TAGLINE, f"{SITE}/", "Debrief", "website"), script="calendar.js", body=(
         f'<div class="page front">\n<header class="archive-head"><h1 class="wordmark">Debrief</h1>'
         f'<p class="tagline">{esc(TAGLINE)}</p>{rail}</header>\n<main>\n{main}\n</main>\n'
         f'<footer class="foot">{_links("")}</footer>\n</div>'))

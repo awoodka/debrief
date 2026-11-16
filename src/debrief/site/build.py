@@ -8,8 +8,10 @@
   <date>/brief.json   a v2 day's brief.json minus what's only for us (the session, the check's
                       warnings, refused fetches): the day as data, for anything that wants it
   site.css            the one stylesheet (templates/site.css), with every color and face as a token
-  progress.js         the one script (templates/progress.js): the rail marks the part being read,
-                      and a bar across the top shows how far through the issue the reader is
+  progress.js         a day's page's script (templates/progress.js): the rail marks the part being
+                      read, and a bar across the top shows how far through the issue the reader is
+  calendar.js         the front page's script (templates/calendar.js): the calendar pages through
+                      the months, follows the archive, and shows a day's issue when pointed at
   about/index.html    "How Debrief works", from templates/about.md
   favicon.svg         a D in the tokens' accent and paper colors
   fonts/              the typeface, Newsreader, upright and italic (templates/fonts/, with its license)
@@ -116,7 +118,8 @@ def build(cfg, out, validator=None, log=print):
             issues.append(page.Issue(d, "v1", v1_summary(body.decode("utf-8", "replace"))))
     issues.reverse()
     (out / "site.css").write_text(css)
-    shutil.copyfile(page.TEMPLATES / "progress.js", out / "progress.js")
+    for script in ("progress.js", "calendar.js"):
+        shutil.copyfile(page.TEMPLATES / script, out / script)
     shutil.copytree(page.TEMPLATES / "fonts", out / "fonts")
     (out / "favicon.svg").write_text(page.favicon(css))
     (out / "about").mkdir()

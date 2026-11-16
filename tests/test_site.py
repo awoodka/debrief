@@ -315,7 +315,7 @@ def test_the_site_build_is_byte_stable_and_publishes_only_the_public_data(tmp_pa
     assert a == b == {"v2": [DATE], "v1": []}
     files = sorted(p.relative_to(tmp_path / "a") for p in (tmp_path / "a").rglob("*") if p.is_file())
     assert [str(f) for f in files] == [f"{DATE}/brief.json", f"{DATE}/index.html", f"{DATE}/picture.svg", "404.html",
-                                       "about/index.html", "favicon.svg",
+                                       "about/index.html", "calendar.js", "favicon.svg",
                                        "feed.xml", "fonts/OFL.txt", "fonts/newsreader-italic.woff2",
                                        "fonts/newsreader.woff2", "index.html", "progress.js", "site.css"]
     pub = json.loads((tmp_path / "a" / DATE / "brief.json").read_text())
@@ -335,7 +335,7 @@ def test_two_builds_of_the_same_inputs_are_byte_identical(tmp_path):
     def tree(root):
         return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
     a = tree(tmp_path / "a")
-    assert len(a) == 19 and a == tree(tmp_path / "b")
+    assert len(a) == 20 and a == tree(tmp_path / "b")
     assert b'<section class="fig">' in a[f"{DATE}/index.html"] and b'<figure class="chart">' in a[f"{DATE}/index.html"]
 
 
@@ -564,14 +564,15 @@ def test_every_page_shares_one_stylesheet_and_one_deferred_script_under_a_strict
     add_v1(cfg, {"2026-09-14": v1_page({"dek": "x"})})
     build.build(cfg, tmp_path / "out")
     out = tmp_path / "out"
-    for f, root in (("index.html", ""), ("404.html", "/"), (f"{DATE}/index.html", "../"), ("about/index.html", "../")):
+    for f, root, script in (("index.html", "", "calendar.js"), ("404.html", "/", "progress.js"),
+                            (f"{DATE}/index.html", "../", "progress.js"), ("about/index.html", "../", "progress.js")):
         body = (out / f).read_text()
         assert f'content="{CSP}"' in body
         assert f'<link rel="stylesheet" href="{root}site.css">' in body and "<style" not in body and "style=" not in body
         assert f'href="{root}favicon.svg"' in body
-        assert re.findall(r"<script\b[^>]*>", body) == [f'<script src="{root}progress.js" defer>']
-    assert (out / "site.css").read_text() == (page.TEMPLATES / "site.css").read_text()
-    assert (out / "progress.js").read_text() == (page.TEMPLATES / "progress.js").read_text()
+        assert re.findall(r"<script\b[^>]*>", body) == [f'<script src="{root}{script}" defer>']
+    for f in ("site.css", "progress.js", "calendar.js"):
+        assert (out / f).read_text() == (page.TEMPLATES / f).read_text()
     assert "No issue at this address." in text((out / "404.html").read_text())
     icon, light = (out / "favicon.svg").read_text(), themes()[0]
     assert icon.startswith("<svg") and ">D</text>" in icon
@@ -612,6 +613,26 @@ def test_a_day_page_gives_the_script_what_it_marks_and_reads(tmp_path):
     assert "transition" not in css.split("@media (prefers-reduced-motion: no-preference)")[0]
     script = (page.TEMPLATES / "progress.js").read_text()
     assert len(script.splitlines()) <= 60 and "import" not in script and "http" not in script
+
+
+def test_the_front_page_gives_its_script_every_month_it_follows_and_every_row_it_points_at(tmp_path):
+    """calendar.js shows the calendar month of the part of the archive being read, and points from a
+    calendar day to its row and back. Its paging buttons only work with the script, so they start
+    hidden."""
+    cfg, doc = written(tmp_path)
+    two_v2_days(cfg, doc)
+    add_v1(cfg, {"2026-09-30": v1_page({"dek": "x"})})
+    build.build(cfg, tmp_path / "out")
+    index = (tmp_path / "out" / "index.html").read_text()
+    main = between(index, "<main>", "</main>")
+    assert re.findall(r'data-month="([\d-]+)"', main) == ["2026-10", "2026-10", "2026-09"]
+    assert re.findall(r'<div class="cal-month" data-month="([\d-]+)"', index) == ["2026-09", "2026-10"]
+    rows = re.findall(r'<li><a href="([\d-]+)/"', main)
+    cells = re.findall(r'<a class="cell [\w-]+" href="([\d-]+)/" aria-label="[^"]+" data-title="([^"]*)"', index)
+    assert sorted(d for d, _ in cells) == sorted([*rows, "2026-10-25"])
+    assert dict(cells) == {"2026-09-30": "x", DATE: page.esc(page.plain(doc["headline"])), "2026-10-25": "The day after"}
+    assert re.findall(r'<button type="button" class="cal-nav" data-step="(-?1)" aria-label="([^"]+)" hidden>', index) == [
+        ("-1", "Previous month"), ("1", "Next month")]
 
 
 def themes():
