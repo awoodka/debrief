@@ -109,6 +109,6 @@ def build(cfg, out, validator=None, log=print):
     (out / "about").mkdir()
     (out / "about" / "index.html").write_text(page.about_page())
     (out / "404.html").write_text(page.not_found_page())
-    (out / "index.html").write_text(page.index_page(issues))
+    (out / "index.html").write_text(page.index_page(issues, pictures))
     (out / "feed.xml").write_text(page.feed(issues[:FEED_SIZE]))
     return {"v2": sorted(v2), "v1": sorted(set(v1) - set(v2))}

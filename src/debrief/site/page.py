@@ -384,15 +384,25 @@ def day_page(doc, nav=Neighbors(), source_names=None, picture=None):
         f'<main id="issue">\n{main}\n</main>\n{_footer(doc, nav, source_names or {})}\n</div>'))
 
 
-def index_page(issues):
-    """The archive: `issues` newest first, grouped by month. Where the v2 issues give way to v1's,
-    a divider says those keep their original layout."""
+def _today(e, picture):
+    """The newest issue at the top of the front page: its picture, its date and its headline."""
+    fig = (f'<figure class="picture"><img src="{e.date}/picture.svg" width="1200" height="500" alt="{esc(picture.alt)}">'
+           f'</figure>' if picture else "")
+    standfirst = f'<p class="standfirst">{inline(e.summary)}</p>' if e.summary else ""
+    return (f'<section class="today" data-month="{e.date[:7]}">{fig}<p class="meta caps">Today</p>'
+            f'<h2 class="today-date"><a href="{e.date}/">{esc(fmt_date(e.date).rsplit(", ", 1)[0])}</a></h2>{standfirst}'
+            f'<p class="read-today"><a href="{e.date}/">Read today\'s issue →</a></p></section>')
+
+
+def index_page(issues, pictures=None):
+    """The front page: the newest of `issues` (newest first), with its picture from `pictures`
+    ({date: picture.Picture}), then the archive of the rest grouped by month. Where the v2 issues
+    give way to v1's, a divider says those keep their original layout."""
     v1 = [e.date for e in issues if e.version == "v1"]
-    body, divided = [], False
-    for month, group in groupby(issues, key=lambda e: e.date[:7]):
-        group = list(group)
-        body.append(f'<section class="month"><h2>{MONTHS[int(month[5:]) - 1]} {month[:4]} '
-                    f'<span class="count">{_count(len(group), "issue", "issues")}</span></h2>')
+    body = [_today(issues[0], (pictures or {}).get(issues[0].date))] if issues else []
+    divided = False
+    for month, group in groupby(issues[1:], key=lambda e: e.date[:7]):
+        body.append(f'<section class="month" data-month="{month}"><h2>{MONTHS[int(month[5:]) - 1]} {month[:4]}</h2>')
         rows = []
         for e in group:
             if e.version == "v1" and not divided:

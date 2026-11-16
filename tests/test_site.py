@@ -433,7 +433,7 @@ def test_v1_pages_are_copied_unchanged_and_a_v2_brief_wins_its_date(tmp_path):
     out = tmp_path / "out"
     assert (out / "2026-09-15" / "index.html").read_bytes() == (src / "2026-09-15" / "index.html").read_bytes()
     assert "v1's take" not in (out / DATE / "index.html").read_text()
-    index = (out / "index.html").read_text()
+    index = between((out / "index.html").read_text(), "<main>", "</main>")
     order = [index.index(f'href="{d}/"') for d in (DATE, "2026-09-16", "2026-09-15", "2026-09-14")]
     assert order == sorted(order)
     for line in ("The dek line", "The old through-line", "First event &lt;/script&gt; and more"):
@@ -442,11 +442,12 @@ def test_v1_pages_are_copied_unchanged_and_a_v2_brief_wins_its_date(tmp_path):
 
 def test_the_archive_groups_issues_by_month_and_marks_where_the_first_version_begins(tmp_path):
     cfg, doc = written(tmp_path)
+    two_v2_days(cfg, doc)
     add_v1(cfg, {d: v1_page({"dek": f"v1 on {d}"}) for d in ("2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02")})
     build.build(cfg, tmp_path / "out")
     index = (tmp_path / "out" / "index.html").read_text()
-    months = {m.split("</h2>")[0]: m for m in index.split("<h2>")[1:]}
-    assert [text(h) for h in months] == ["October 2026 3 issues", "September 2026 2 issues"]
+    months = dict(re.findall(r'<section class="month"[^>]*><h2>(.*?)</h2>(.*?)</section>', index, re.S))
+    assert list(months) == ["October 2026", "September 2026"]
     october, september = months.values()
     assert re.findall(r'href="(\d{4}-\d{2}-\d{2})/"', october) == [DATE, "2026-10-02", "2026-10-01"]
     assert re.findall(r'href="(\d{4}-\d{2}-\d{2})/"', september) == ["2026-09-30", "2026-09-29"]
@@ -457,6 +458,20 @@ def test_the_archive_groups_issues_by_month_and_marks_where_the_first_version_be
     assert "Your morning read on the AI/ML landscape." in seen
     assert "automated daily briefing" not in seen and 'href="https://alexwoodka.com"' not in index
     assert 'href="feed.xml"' in index and 'href="">All issues</a>' in index
+
+
+def test_the_front_page_leads_with_the_newest_issue_and_its_picture_and_the_archive_lists_the_rest(tmp_path):
+    cfg, doc = written(tmp_path)
+    two_v2_days(cfg, doc)
+    build.build(cfg, tmp_path / "out")
+    out = tmp_path / "out"
+    index = (out / "index.html").read_text()
+    today = between(index, '<section class="today" data-month="2026-10">', "</section>")
+    assert text(today) == "Today Sunday, October 25 The day after Read today's issue →"
+    assert hrefs(today) == ["2026-10-25/", "2026-10-25/"]
+    alt = re.search(r'<img src="2026-10-25/picture.svg" width="1200" height="500" alt="([^"]+)">', today)[1]
+    assert htmllib.unescape(alt) == picture_on((out / "2026-10-25" / "index.html").read_text())[0]
+    assert re.findall(r'href="([\d-]+)/"', between(index, '<section class="month"', "</main>")) == [DATE]
 
 
 def test_an_archive_with_no_first_version_issues_has_no_divider(tmp_path):

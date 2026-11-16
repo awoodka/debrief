@@ -97,13 +97,20 @@ p { margin: 0 0 1em; text-wrap: pretty; }
 .archive-head { margin: 0 0 2.5rem; }
 .archive-head h1 { font-size: 2rem; }
 .tagline { margin: .25rem 0 0; font-style: italic; color: var(--muted); }
+.today { margin: 0 0 3.5rem; }
+.today .picture { margin-bottom: 1.5rem; }
+.today-date { font-size: 2rem; line-height: 1.2; }
+.today .standfirst { margin-top: .75rem; }
+.read-today { margin: 1.25rem 0 0; }
+.read-today a { display: inline-flex; align-items: center; min-height: 24px; color: var(--accent); text-decoration: none; }
+.read-today a:hover { text-decoration: underline; }
 .month { margin: 0 0 2.5rem; }
-.month h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
-  padding-bottom: .4rem; margin-bottom: .5rem; border-bottom: 1px solid var(--line); }
-.count { font-size: .9375rem; font-weight: 400; color: var(--muted); }
+.month h2 { padding-bottom: .4rem; margin-bottom: .5rem; border-bottom: 1px solid var(--line); }
 .issues { list-style: none; margin: 0; padding: 0; }
-.issues a { display: grid; grid-template-columns: 4rem 1fr; gap: .75rem; align-items: baseline; padding: .5rem 0; }
+.issues a { display: grid; grid-template-columns: 4rem 1fr; gap: .75rem; align-items: baseline;
+  padding: .65rem .5rem; margin: 0 -.5rem; border-radius: 3px; }
 .issues .d { color: var(--muted); font-size: .9375rem; font-variant-numeric: tabular-nums; }
+.issues .k { min-width: 0; font-size: 1.0625rem; line-height: 1.5; }
 .issues a:hover .d { color: inherit; }
 .divider { margin: 1.5rem 0; padding: 1rem 0; border-block: 1px solid var(--line);
   text-align: center; color: var(--muted); font-size: .9375rem; }
@@ -242,8 +249,12 @@ blockquote .who { margin-top: .4rem; font-size: .9375rem; font-style: normal; co
   .day .masthead, .toc-inline { display: none; }
 }
 
+@media (max-width: 700px) {
+  .today-date { font-size: 1.75rem; }
+}
+
 @media (pointer: coarse) {
-  .masthead .wordmark, .rail .wordmark, .issues a, .toc a, .toc-more a, .issue-nav a, .where { min-height: 44px; }
+  .masthead .wordmark, .rail .wordmark, .issues a, .read-today a, .toc a, .toc-more a, .issue-nav a, .where { min-height: 44px; }
   .toc a, .toc-more a { display: flex; align-items: center; }
   .toc-inline summary { padding: .5rem 0; }
 }
