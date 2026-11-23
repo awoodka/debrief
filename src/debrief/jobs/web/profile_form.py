@@ -11,7 +11,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field as dc_field, replace
 from typing import Any, Callable, Mapping, NamedTuple
 
-from .. import boards, profile as profiles
+from .. import boards, profile as profiles, rank
 
 
 class _Sentinel:
@@ -156,12 +156,14 @@ class Field:
     help: str = ""
     blank: Any = REQUIRED
     messages: Mapping[str, str] = dc_field(default_factory=dict)
+    default: Any = MISSING
 
     @property
     def path(self):
         return tuple(self.key.split("."))
 
     def input_text(self, value):
+        value = self.default if value is MISSING else value
         return "" if value is MISSING or value is None else str(value)
 
     def clean(self, typed):
@@ -200,6 +202,7 @@ class Field:
         yield prefix + self.key, self
 
     def words(self, value):
+        value = self.default if value is MISSING else value
         return NOT_SET if value is MISSING or value is None else self.input_text(value) or "Blank"
 
     def said_label(self, row):
@@ -336,6 +339,7 @@ class Number(Field):
         return ref if ref is not MISSING and value == ref else value
 
     def words(self, value):
+        value = self.default if value is MISSING else value
         if value is MISSING:
             return NOT_SET
         unit = self.unit[:-1] if value == 1 and self.unit.endswith("s") else self.unit
@@ -361,6 +365,7 @@ class Toggle(Field):
         return True
 
     def words(self, value):
+        value = self.default if value is MISSING else value
         return NOT_SET if value is MISSING else "On" if value else "Off"
 
 
@@ -370,11 +375,20 @@ class Choice(Field):
     labels: Mapping[str, str] = dc_field(default_factory=dict)
 
     def words(self, value):
-        return NOT_SET if value is MISSING else self.labels.get(value, str(value))
+        value = self.default if value is MISSING else value
+        return NOT_SET if value is MISSING else self.labels.get(str(value), str(value))
 
     def extras(self, typed):
         extra = [("", "Choose")] if not typed else [(typed, typed)] if typed not in self.labels else []
         return {"choices": (*extra, *self.labels.items())}
+
+
+@dataclass(frozen=True)
+class NumberChoice(Choice):
+    def parse(self, typed, ref):
+        if not re.fullmatch(r"[0-9]{1,6}", typed.strip()):
+            raise Bad("Pick one of the options.")
+        return int(typed)
 
 
 @dataclass(frozen=True)
@@ -586,7 +600,8 @@ def _lines_in(text):
 
 def _where(doc):
     loc = doc["filters"]["locations"]
-    return _dots("Remote in the US" if loc["remote_us"] else "", *loc["places"]) or "Nowhere yet"
+    other = f"elsewhere in the US, ranked {profiles.ranking(doc)['other_us_penalty']} lower" if loc.get("other_us") else ""
+    return _dots("Remote in the US" if loc["remote_us"] else "", *loc["places"], other) or "Nowhere yet"
 
 
 def _looking(doc):
@@ -603,9 +618,12 @@ def _keep(doc):
 
 
 def _daily(doc):
-    r = doc["ranking"]
+    r = profiles.ranking(doc)
     per = r.get("per_company")
-    return _dots(f"{r['top_n']} jobs a day" + (f", at most {per} from one company" if per else ""),
+    return _dots(f"New jobs scoring {r['min_score']}+, posted in the last {_noun(r['fresh_days'], 'day')}",
+                 f"up to {r['top_n']} a day" + (f", {per} from one company" if per else ""),
+                 f"nearby: {_and(r['nearby'])} from {r['nearby_min']}+" if r["nearby"] else "",
+                 f"a company listed in the last {_noun(r['repeat_days'], 'night')} waits" if r["repeat_days"] else "",
                  f"the model reads up to {r['max_candidates']} a night")
 
 
@@ -698,6 +716,13 @@ TABLE = (
                 fields=(Text("area", "Area name", messages=_must("Give this area a name.")),
                         Lines("places", "Places", "One per line. Keep the one to search for on top.", noun="place",
                               first_line_label="Place searched for in {row}", messages=_must("Add at least one place.")))),
+        Toggle("filters.locations.other_us", "Elsewhere in the US",
+               "Keeps jobs in US places outside your areas instead of dropping them, ranked lower than the same job in "
+               "one of your areas.", default=False),
+        Number("ranking.other_us_penalty", "How much lower elsewhere ranks",
+               "Points taken off the model's score, out of 10, before the job is placed and ordered on the list. A note on "
+               f"the job says so. Leave blank for the default, {profiles.RANKING_DEFAULTS['other_us_penalty']}.",
+               blank=MISSING, default=profiles.RANKING_DEFAULTS["other_us_penalty"], unit="points"),
     )),
     Group("looking", "What you're looking for", SEARCH, _looking, fields=(
         Area("wants", "In your own words", "The model reads this to decide what counts as relevant, and what doesn't.",
@@ -723,8 +748,27 @@ TABLE = (
         Lines("filters.blocklist", "Companies to hide", "One per line. These never appear on your list.", noun="company"),
     )),
     Group("daily", "Your daily list", SEARCH, _daily, fields=(
-        Number("ranking.top_n", "Jobs on the list", "How many the day's list shows.", unit="jobs"),
-        Number("ranking.per_company", "Most from one company", "Leave blank for no limit.", blank=MISSING, unit="jobs"),
+        Number("ranking.min_score", "Lowest score on the list",
+               "Out of 10. A new job the model scores lower goes to the list below. Leave blank for the default, "
+               f"{profiles.RANKING_DEFAULTS['min_score']}.", blank=MISSING, default=profiles.RANKING_DEFAULTS["min_score"]),
+        Number("ranking.fresh_days", "New means posted within",
+               "A job found tonight but posted earlier goes to the list below. One with no posted date counts from "
+               f"when it was found. Leave blank for the default, {profiles.RANKING_DEFAULTS['fresh_days']}.",
+               blank=MISSING, default=profiles.RANKING_DEFAULTS["fresh_days"], unit="days"),
+        Number("ranking.top_n", "Most jobs on the list", "A thin night lists fewer. The rest wait below.", unit="jobs"),
+        Number("ranking.per_company", "Most from one company", "Name variants like Bask and Bask Health count as one. "
+               "Leave blank for no limit.", blank=MISSING, unit="jobs"),
+        Lines("ranking.nearby", "Nearby areas",
+              "One per line, named as under Where you want to work. A new job there that scores under the lowest score "
+              "but at least the nearby score is shown after the list, as worth an early application. Most from one "
+              "company counts both. Leave blank for none.", blank=MISSING, noun="area"),
+        Number("ranking.nearby_min", "Lowest score shown nearby",
+               "Out of 10. Leave blank for the default, "
+               f"{profiles.RANKING_DEFAULTS['nearby_min']}.", blank=MISSING, default=profiles.RANKING_DEFAULTS["nearby_min"]),
+        NumberChoice("ranking.repeat_days", "Same company on later nights",
+                     "Whether a company on the list one night can be on it again the next few nights.",
+                     labels={"0": "Show it", "7": f"Hold it for a week unless it scores {rank.REPEAT_PASS}+"},
+                     blank=MISSING, default=profiles.RANKING_DEFAULTS["repeat_days"]),
     ), fine=(
         Number("ranking.max_candidates", "Most jobs the model reads", "Sets the nightly question budget.", unit="jobs"),
         Number("ranking.threshold", "Points to reach the model", "Watchlist companies skip this.", unit="points"),
@@ -1012,8 +1056,9 @@ CROSS_WORDING = {
     "title_excluded": "“{value}” is also in Words that rule out a title, so it could never match. Take it out of one.",
     "company_twice": "{value} is listed twice.",
     "company_blocked": "{value} is on both your Watchlist and Companies to hide. Take it off one of the two.",
-    "top_n_over": "Can't be more than Most jobs the model reads ({limit}), or the list could never fill.",
+    "top_n_over": "Can't be more than Most jobs the model reads ({limit}). No night could list that many.",
     "nowhere": "Turn this on or add an area. With neither, every job is filtered out.",
+    "nearby_unknown": "“{value}” isn't one of your areas under Where you want to work.",
 }
 
 ELSEWHERE = "A setting on another page needs fixing before this can be saved. Press Check on the Profile page to see it."

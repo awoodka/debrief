@@ -46,9 +46,6 @@ class SerpClient:
     def __init__(self, left=250):
         self.left, self.calls = left, []
 
-    def robots_allowed(self, url):
-        return True
-
     def get(self, url, params=None, headers=None, etag=None, last_modified=None):
         self.calls.append((url, dict(params or {})))
         final = url + "?" + "&".join(f"{k}={v}" for k, v in (params or {}).items())

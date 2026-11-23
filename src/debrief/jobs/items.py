@@ -124,10 +124,15 @@ _CORE_IGNORE = _EARLY | {"new", "early", "career", "careers", "level", "i", "sta
 _YEAR = re.compile(r"^20[2-3]\d$")
 
 
-def early_career(title):
+def says_new_grad(title):
+    """The title says new grad, junior, entry level, early career or a class year."""
     toks = title_norm(title).split()
-    return (bool(_EARLY & set(toks)) or any(_YEAR.match(t) for t in toks) or toks[-1:] == ["i"]
+    return (bool(_EARLY & set(toks)) or any(_YEAR.match(t) for t in toks)
             or re.search(r"\bearly careers?\b", " ".join(toks)) is not None)
+
+
+def early_career(title):
+    return says_new_grad(title) or title_norm(title).split()[-1:] == ["i"]
 
 
 def core_title(title):
@@ -141,12 +146,21 @@ COMPANY_TAIL = {"technologies", "technology", "inc", "incorporated", "llc", "ltd
                 "company", "group", "holdings"}
 
 
-def company_short(norm):
+def company_short(norm, tail=COMPANY_TAIL):
     """A normalized company name without generic last words: "palantir technologies" -> "palantir"."""
     ws = (norm or "").split()
-    while len(ws) > 1 and ws[-1] in COMPANY_TAIL:
+    while len(ws) > 1 and ws[-1] in tail:
         ws.pop()
     return " ".join(ws)
+
+
+GENERIC_TAIL = {"health", "technologies", "technology", "tech", "labs", "systems", "software", "group", "holdings",
+                "corporation", "corp", "company", "inc", "llc", "ltd", "solutions", "services", "ai", "io", "hq"}
+
+
+def company_key(name):
+    """One key per company for the list: company_norm without generic last words, never empty."""
+    return company_short(company_norm(name), GENERIC_TAIL)
 
 
 def fuzzy_key(company, title):

@@ -10,7 +10,7 @@ and breaks ties in the list. Every part comes from the profile:
                 it isn't sunk for what we can't see
   fresh     15  posted today 15, falling to 0 at max_age_days
 
-Watchlist companies skip the threshold (select() puts them first).
+Watchlist companies skip the threshold (select() puts them first among tonight's jobs and among the rest).
 """
 from datetime import datetime
 
@@ -65,17 +65,18 @@ def watched(posting, profile):
     return company_norm(posting["company"]) in names
 
 
-def select(scored, profile, cap=None, first=frozenset(), threshold=True):
-    """Split [(posting, points, ...)] into (sent, cut) by the profile's ranking: watchlist companies
-    first and past the threshold, then the postings in `first` (tonight's new ones), then the rest,
-    each by points (ties: newest, then id), up to the cap (ranking.max_candidates unless `cap` is
-    given; cap=0 means no cap; a negative cap means none left). threshold=False skips the threshold
-    (a one-time catch-up). cut items carry their reason."""
+def select(scored, profile, cap=None, first=frozenset(), threshold=True, read=frozenset()):
+    """Split [(posting, points, ...)] into (sent, cut) by the profile's ranking: the postings in
+    `first` (tonight's, which can make the list), then the rest; within each, watchlist companies
+    first and past the threshold, then the postings in `read` (with a description) before the ones
+    known only by title, then by points (ties: newest, then id), up to the cap
+    (ranking.max_candidates unless `cap` is given; cap=0 means no cap; a negative cap means none
+    left). threshold=False skips the threshold (a one-time catch-up). cut items carry their reason."""
     r = profile["ranking"]
     cap = r["max_candidates"] if cap is None else cap
     def key(x):
         p, pts = x[0], x[1]
-        return (not watched(p, profile), p["posting_id"] not in first, -pts,
+        return (p["posting_id"] not in first, not watched(p, profile), p["posting_id"] not in read, -pts,
                 -(_ts(p.get("published_at") or p.get("first_seen_at"))), p["posting_id"])
     sent, cut = [], []
     for x in sorted(scored, key=key):

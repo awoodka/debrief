@@ -1,10 +1,11 @@
 import copy
+import dataclasses
 import json
 from datetime import datetime, timezone
 
 import pytest
 
-from debrief.jobs import build, config as jconfig, prescore, profile, rank, score
+from debrief.jobs import build, collect, config as jconfig, prescore, profile, rank, score
 from debrief.jobs.store import JobsStore, state_path
 from debrief.triage.score import ScoringError
 from test_jobs_collect import AT, FakeAdapter, it, rec, src
@@ -80,8 +81,7 @@ def cfg(tmp_path):
     listings = [it("a", title="AI Engineer, New Grad", company="Acme"),
                 it("b", title="Software Engineer I", company="Beta"),
                 it("c", title="Field Software Engineer, New Grad", company="Gamma"),  # the model says no
-                it("g", title="Software Engineer, Platform", company="Gee",           # fewest points: over the cap
-                   text="Build our platform."),
+                it("g", title="Software Engineer, Platform", company="Gee"),
                 it("d", title="Senior Software Engineer", company="Delta"),          # filtered: senior
                 it("e", title="Software Engineer", company="Eps", locations=("Austin, TX",)),   # filtered: place
                 it("f", title="Software Engineer, New Grad", company="Phi")]
@@ -108,25 +108,25 @@ def test_score_run_end_to_end(cfg):
     # Re-running the same day asks nothing new and gives the same list.
     rep2 = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
     assert len(r.calls) == 1 and rep2["already_scored"] == 4 and rep2["list"]["new"] == new
-    # The next day nothing is new, but the job kept below the top 2 is still an option, and the job
-    # over yesterday's cap is asked today. Nothing shown yesterday comes back.
     beyond = [c["title"] for c in rep["cuts"] if c["stage"] == "beyond N"]
     rep3 = rank.run(cfg, run_date="2026-11-05", runner=r, now=NOW, log=lambda *a: None)
     assert rep3["new"] == 0 and rep3["carried"] == 5 and rep3["sent"] == 1 and len(r.calls) == 2
-    assert {e["title"] for e in rep3["list"]["new"]} == {beyond[0], "Software Engineer, Platform"}
-    assert {e["posting_id"] for e in rep3["list"]["new"]}.isdisjoint(e["posting_id"] for e in new)
-    assert all(e["new"] is False for e in rep3["list"]["new"])
-    assert "2 shown of 2 kept (0 new tonight, 2 carried over)" in rank.today(cfg)
-    # The day after: only the filtered and the not-kept jobs are left. No call, no list.
+    assert rep3["list"]["new"] == []
+    assert {c["title"] for c in rank.below(rep3)} == {beyond[0], "Software Engineer, Platform"}
+    assert {c["stage"] for c in rank.below(rep3)} == {"from an earlier night"}
+    out = rank.today(cfg)
+    assert "0 new tonight · 2 below" in out and "carried over" not in out
     rep4 = rank.run(cfg, run_date="2026-11-06", runner=r, now=NOW, log=lambda *a: None)
     assert rep4["list"]["new"] == [] and len(r.calls) == 2 and rep4["not_kept"] == 1
+    assert {c["title"] for c in rank.below(rep4)} == {beyond[0], "Software Engineer, Platform"}
 
 
 def test_score_run_no_cap_and_fallback(cfg):
     r = Runner(fail=2)
     rep = rank.run(cfg, run_date="2026-11-04", no_cap=True, runner=r, now=NOW, log=lambda *a: None)
     assert rep["status"] == "fallback" and rep["sent"] == 5                  # no cap: all five
-    assert [e["score"] for e in rep["list"]["new"]] == [None, None]          # ranked by points
+    assert rep["list"]["new"] == []
+    assert [c["stage"] for c in rank.below(rep)] == ["not scored"] * 5
     store = JobsStore(state_path(cfg))
     assert store.get_meta("score_cursor") is None                           # the next run asks again
     store.close()
@@ -150,6 +150,11 @@ def test_points_and_select():
     sent, cut = prescore.select([low, other, high], prof)
     assert [x[0]["posting_id"] for x in sent] == ["p2"]
     assert sorted(why.split(" (")[0] for _, why in cut) == ["below the threshold", "over the cap"]
+    prof["ranking"] = {"threshold": 0, "max_candidates": 1, "top_n": 1}
+    unread = ({**p, "posting_id": "p5", "company": "Zed"}, 90)
+    read = ({**p, "posting_id": "p6", "company": "Zed"}, 40)
+    sent, _ = prescore.select([unread, read], prof, first={"p5", "p6"}, read={"p6"})
+    assert [x[0]["posting_id"] for x in sent] == ["p6"]
 
 
 def test_calibrate(cfg):
@@ -195,14 +200,17 @@ def test_money_is_taken_out():
     assert "$" not in score.qualifications("Requirements: Python. Compensation $180K–$220K + equity.", 600)
 
 
-def test_place_limits_jobs_per_company():
-    def g(pid, company):
-        return (({"posting_id": pid, "title": f"Role {pid}", "company": company}, 50, {"score": 8}), [])
-    groups = [g("1", "Raydar"), g("2", "Raydar Inc."), g("3", "Raydar"), g("4", "Beta"), g("5", "Gamma"), g("6", "Raydar")]
-    placed = rank.place(groups, top_n=3, per_company=2)
-    assert [(x[0][0]["posting_id"], where) for x, where in placed] == [
-        ("1", "new"), ("2", "new"), ("3", "company limit"), ("4", "new"), ("5", "beyond N"), ("6", "company limit")]
-    assert [w for _, w in rank.place(groups, top_n=3)] == ["new"] * 3 + ["beyond N"] * 3       # no limit set
+def test_place_puts_each_kept_job_in_one_place():
+    ranking = profile.ranking({"ranking": {"threshold": 0, "max_candidates": 50, "top_n": 3, "per_company": 2}})
+    def j(company, tonight=True, fresh=True, score=8):
+        return rank.Job(tonight, fresh, score, company)
+    jobs = [j("raydar"), j("raydar"), j("raydar"), j("beta", tonight=False, score=10), j("beta", fresh=False, score=10),
+            j("beta", score=4), j("beta", score=None), j("beta"), j("gamma"), j("raydar")]
+    assert rank.place(jobs, ranking) == [
+        "new", "new", "company limit", "from an earlier night", "posted earlier", "below the floor", "not scored",
+        "new", "beyond N", "company limit"]
+    del ranking["per_company"]
+    assert rank.place([j("raydar")] * 4, ranking) == ["new"] * 3 + ["beyond N"]
 
 
 def test_score_run_company_limit(tmp_path):
@@ -226,9 +234,10 @@ def test_score_run_company_limit(tmp_path):
     held, = [x for x in rep["cuts"] if x["stage"] == "company limit"]
     assert held["title"] == "AI Software Engineer, New Grad" and "Zed already has 1" in held["reason"]
     out = rank.today(c)
-    assert "also kept at Zed: 1 more (jobs today --all)" in out
-    assert "AI Software Engineer, New Grad" not in out
-    assert "AI Software Engineer, New Grad" in rank.today(c, show_all=True)
+    assert "also kept at Zed: 1 more (below)" in out
+    listed, kept_below = out.split(rank.BELOW)
+    assert "AI Software Engineer, New Grad" not in listed
+    assert "AI Software Engineer, New Grad — Zed" in kept_below and "Company limit: Zed already has 1 on the list." in kept_below
     assert "also kept at Zed: 1 more" in (c.data_dir / "runs" / "2026-11-04" / f"{rep['run_id']}.md").read_text()
 
 
@@ -237,19 +246,21 @@ def test_score_run_company_limit(tmp_path):
 class ByTitle:
     """A fake claude that keeps every job and scores it by title (default 5)."""
     def __init__(self, scores=None):
-        self.scores, self.calls = scores or {}, []
+        self.scores, self.calls, self.sent = scores or {}, [], []
 
     def __call__(self, argv, stdin, timeout):
         jobs = [json.loads(line) for line in stdin.split("<jobs>\n")[1].split("\n</jobs>")[0].splitlines()]
         self.calls.append([j["title"] for j in jobs])
+        self.sent.append(stdin)
         return 0, claude_stdout([{"id": j["id"], "keep": True, "score": self.scores.get(j["title"], 5),
                                   "why": f"because {j['title']}", "mismatches": []} for j in jobs]), ""
 
 
-def _cfg(tmp_path, **ranking):
+def _cfg(tmp_path, places=None, **ranking):
     c = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
     prof = copy.deepcopy(BASE)
     prof["position_types"] = [{"name": "SWE", "titles": ["software engineer", "ai engineer"]}]
+    prof["filters"]["locations"]["places"] |= places or {}
     prof["ranking"] = {"threshold": 0, "max_candidates": 50, "top_n": 20, **ranking}
     profile.save(c, prof)
     return c
@@ -288,7 +299,7 @@ def test_a_job_dated_yesterday_gets_the_one_day_point(tmp_path):
 
 
 def test_the_bonus_orders_fit_first_with_newness_added(tmp_path):
-    cfg = _cfg(tmp_path, fresh_bonus={"3": 2, "7": 1})
+    cfg = _cfg(tmp_path, fresh_bonus={"3": 2, "7": 1}, fresh_days=14)
     _add(cfg, [it("f", title="Software Engineer, New Grad", company="Fresh", published_at="2026-11-03T12:00:00Z"),
                it("o", title="Software Engineer I", company="Old", published_at="2026-10-22T12:00:00Z"),
                it("s", title="AI Engineer, New Grad", company="Seven", published_at="2026-10-22T12:00:00Z")],
@@ -346,6 +357,89 @@ def test_a_title_only_job_shows_its_source_level(tmp_path):
     assert "level" not in jobs["Nolevel"]
 
 
+def _trusting(cfg, *ids):
+    return dataclasses.replace(cfg, sources=tuple(
+        dataclasses.replace(s, options={**(s.options or {}), "trusted_new_grad": s.id in ids}) for s in cfg.sources))
+
+
+def test_a_title_only_job_on_a_trusted_list_is_asked_and_listed_and_one_on_another_list_is_cut(tmp_path):
+    cfg = _trusting(_cfg(tmp_path), "simplify-newgrad", "usajobs")
+    assert collect.trusted_sources(cfg) == {"simplify-newgrad"}
+    store = JobsStore(state_path(cfg))
+    with store.transaction():
+        for sid, item in (("simplify-newgrad", it("t", title="Software Engineer, Platform", company="Trusted")),
+                          ("vanshb03-newgrad", it("u", title="Software Engineer, Payments", company="Untrusted"))):
+            build.apply(store, src(id=sid), FakeAdapter({0: [item]}), [rec("{}", fetched_at="2026-11-04T08:00:00Z")], ["r"])
+    store.close()
+    r = Runner()
+    rep = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert [j["company"] for j in _jobs_sent(r.calls[0])] == ["Trusted"]
+    assert [e["company"] for e in rep["list"]["new"]] == ["Trusted"]
+    assert [(c["company"], c["stage"], c["reason"]) for c in rep["cuts"] if c["company"] == "Untrusted"] == \
+        [("Untrusted", "level", "nothing says it's for new grads (title only)")]
+
+
+def test_level_no_years_sign_lets_a_read_plain_title_reach_the_scorer(tmp_path):
+    cfg = _cfg(tmp_path)
+    store = JobsStore(state_path(cfg))
+    with store.transaction():
+        build.apply(store, src(id="himalayas", family="api"),
+                    FakeAdapter({0: [it("r", title="Software Engineer", company="Readco", text="Build our platform in Python.")]}),
+                    [rec("{}", fetched_at="2026-11-04T08:00:00Z")], ["r"])
+    store.close()
+    assert cfg.settings["level"]["no_years_sign"] is False
+    rep = rank.run(cfg, run_date="2026-11-04", runner=Runner(), now=NOW, log=lambda *a: None)
+    assert rep["sent"] == 0 and [c["stage"] for c in rep["cuts"]] == ["level"]
+    on = dataclasses.replace(cfg, settings={**cfg.settings, "level": {**cfg.settings["level"], "no_years_sign": True}})
+    r = Runner()
+    rep = rank.run(on, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert [j["company"] for j in _jobs_sent(r.calls[0])] == ["Readco"]
+
+
+class Drops:
+    """A fake claude that drops every job, giving its title's reason (and score 6)."""
+    def __init__(self, reasons):
+        self.reasons = reasons
+
+    def __call__(self, argv, stdin, timeout):
+        jobs = [json.loads(line) for line in stdin.split("<jobs>\n")[1].split("\n</jobs>")[0].splitlines()]
+        return 0, claude_stdout([{"id": j["id"], "keep": False, "score": 6, "why": "x",
+                                  "mismatches": [self.reasons[j["title"]]]} for j in jobs]), ""
+
+
+def test_a_job_dropped_only_for_years_within_the_limit_is_kept_and_capped(tmp_path):
+    cfg = _cfg(tmp_path)
+    reasons = {"Software Engineer, New Grad A": "requires 1-3 years of professional experience",
+               "Software Engineer, New Grad B": "requires 3+ years of experience",
+               "Software Engineer, New Grad C": "requires an active Secret clearance"}
+    _add(cfg, [it(k.lower(), title=t, company=k) for k, t in zip("abc", reasons)], "2026-11-04T08:00:00Z")
+    rep = rank.run(cfg, run_date="2026-11-04", runner=Drops(reasons), now=NOW, log=lambda *a: None)
+    assert [(e["company"], e["score"], e["model_score"]) for e in rep["list"]["new"]] == [("a", 5, 6)]
+    assert sorted((c["company"], c["stage"]) for c in rep["cuts"] if c["company"] in "bc") == \
+        [("b", "not kept"), ("c", "not kept")]
+
+
+def test_a_read_job_at_a_small_company_reaches_the_scorer_only_with_the_startup_sign(tmp_path):
+    cfg = _cfg(tmp_path)
+    store = JobsStore(state_path(cfg))
+    with store.transaction():
+        build.apply(store, src(id="himalayas", family="api"),
+                    FakeAdapter({0: [it("s", title="Software Engineer", company="Smallco", text="Build our agents in Python.",
+                                        extra={"company_size": "11-50 people, seed"}),
+                                     it("b", title="Software Engineer", company="Bigco", text="Build our agents in Python.",
+                                        extra={"company_size": "5,001+ people"})]}),
+                    [rec("{}", fetched_at="2026-11-04T08:00:00Z")], ["r"])
+    store.close()
+    assert cfg.settings["level"]["startup_sign"] is True
+    r = Runner()
+    rep = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert [j["company"] for j in _jobs_sent(r.calls[0])] == ["Smallco"]
+    assert [(c["company"], c["stage"]) for c in rep["cuts"] if c["company"] == "Bigco"] == [("Bigco", "level")]
+    off = dataclasses.replace(cfg, settings={**cfg.settings, "level": {**cfg.settings["level"], "startup_sign": False}})
+    rep = rank.run(off, run_date="2026-11-05", runner=Runner(), now=NOW, log=lambda *a: None)
+    assert rep["sent"] == 0
+
+
 def test_the_nightly_cap_asks_new_jobs_first_and_carried_ones_later(tmp_path):
     cfg = _cfg(tmp_path, max_candidates=1, top_n=1)
     _add(cfg, [it("a", title="Software Engineer, New Grad", company="A"),
@@ -363,7 +457,268 @@ def test_the_nightly_cap_asks_new_jobs_first_and_carried_ones_later(tmp_path):
     assert r.calls[-1] == ["Junior Software Engineer, Payments"] and [e["company"] for e in rep2["list"]["new"]] == ["C"]
     rep3 = rank.run(cfg, run_date="2026-11-06", runner=r, now=_day(2), log=lambda *a: None)
     left = ({"A", "B"} - {first}).pop()
-    assert [e["company"] for e in rep3["list"]["new"]] == [left] and rep3["list"]["new"][0]["new"] is False
+    assert len(r.calls) == 3 and rep3["list"]["new"] == []
+    assert [(c["company"], c["stage"]) for c in rank.below(rep3)] == [(left, "from an earlier night")]
+
+
+def test_a_job_from_an_earlier_night_never_makes_the_list_however_it_scores(tmp_path):
+    cfg = _cfg(tmp_path, max_candidates=1, top_n=1)
+    _add(cfg, [it("a", title="Software Engineer, New Grad", company="A"),
+               it("b", title="AI Engineer, Payments, New Grad", company="B")], "2026-11-04T08:00:00Z")
+    r = ByTitle({"AI Engineer, Payments, New Grad": 9})
+    first = rank.run(cfg, run_date="2026-11-04", runner=r, now=_day(0), log=lambda *a: None)
+    assert [e["company"] for e in first["list"]["new"]] == ["A"] and first["stages"]["cap"] == 1
+    nxt = rank.run(cfg, run_date="2026-11-05", runner=r, now=_day(1), log=lambda *a: None)
+    assert r.calls[-1] == ["AI Engineer, Payments, New Grad"] and nxt["list"]["new"] == []
+    assert [(c["company"], c["score"], c["reason"]) for c in rank.below(nxt)] == \
+        [("B", 9, "From an earlier night: first found Nov 4.")]
+    assert rank.today(cfg).startswith("Jobs for 2026-11-05 · 0 new tonight · 1 below")
+
+
+def test_today_for_a_date_with_no_list_says_there_is_none(tmp_path):
+    cfg = _cfg(tmp_path)
+    assert rank.today(cfg, list_date="2026-11-03") == rank.today(cfg) == "no list yet (debrief jobs score)"
+
+
+def test_a_new_job_under_the_floor_or_posted_earlier_waits_below_with_its_reason(tmp_path):
+    cfg = _cfg(tmp_path)
+    _add(cfg, [it("a", title="AI Engineer, New Grad", company="Ai"),
+               it("l", title="Software Engineer, New Grad", company="Low"),
+               it("o", title="Software Engineer I", company="Old", published_at="2026-10-25T00:00:00Z")],
+         "2026-11-04T08:00:00Z")
+    r = ByTitle({"AI Engineer, New Grad": 8, "Software Engineer, New Grad": 4, "Software Engineer I": 9})
+    rep = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert [e["company"] for e in rep["list"]["new"]] == ["Ai"]
+    assert [(c["company"], c["reason"]) for c in rank.below(rep)] == [
+        ("Old", "Posted earlier: found tonight, posted Oct 25."), ("Low", "Below the floor: scored 4, under 5.")]
+    out = rank.today(cfg)
+    assert out.startswith("Jobs for 2026-11-04 · 1 new tonight · 2 below")
+    assert "Below the floor: scored 4, under 5." in out.split(rank.BELOW)[1]
+    _, prof = profile.latest(cfg)
+    profile.save(cfg, {**prof, "ranking": {**prof["ranking"], "min_score": 4, "fresh_days": 14}})
+    again = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert [e["company"] for e in again["list"]["new"]] == ["Old", "Ai", "Low"] and rank.below(again) == []
+
+
+def test_tonights_fresh_jobs_are_asked_before_one_posted_earlier(tmp_path):
+    cfg = _cfg(tmp_path, max_candidates=1, top_n=1)
+    _add(cfg, [it("s", title="Software Engineer, New Grad", company="Stale", published_at="2026-10-30T00:00:00Z"),
+               it("f", title="Junior Software Engineer, Payments", company="Fresh")], "2026-11-04T08:00:00Z")
+    r = ByTitle()
+    rep = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert r.calls == [["Junior Software Engineer, Payments"]]
+    assert [c["company"] for c in rep["cuts"] if c["stage"] == "cap"] == ["Stale"]
+
+
+def test_a_job_the_watchlist_section_shows_is_shown_once(tmp_path):
+    cfg = _cfg(tmp_path)
+    _add(cfg, [it("w", title="Software Engineer, New Grad", company="Acme"),
+               it("o", title="AI Engineer, New Grad", company="Acme", published_at="2026-10-30T00:00:00Z")],
+         "2026-11-04T08:00:00Z")
+    r = ByTitle({"Software Engineer, New Grad": 4})
+    rep = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert rep["list"]["new"] == [] and [e["title"] for e in rep["list"]["watchlist"]] == ["Software Engineer, New Grad"]
+    assert [c["title"] for c in rank.below(rep)] == ["AI Engineer, New Grad"]
+    assert rank.today(cfg).startswith("Jobs for 2026-11-04 · 0 new tonight · 1 below")
+    nxt = rank.run(cfg, run_date="2026-11-05", runner=r, now=_day(1), log=lambda *a: None)
+    assert nxt["list"]["watchlist"] == []
+    assert [(c["title"], c["stage"]) for c in rank.below(nxt)] == [("AI Engineer, New Grad", "from an earlier night")]
+
+
+def test_name_variants_of_one_company_take_one_slot_and_one_entry(tmp_path):
+    cfg = _cfg(tmp_path, per_company=1)
+    _add(cfg, [it("h", title="Software Engineer, New Grad", company="Bask Health"),
+               it("b", title="New Grad: Software Engineer", company="Bask"),
+               it("a", title="AI Engineer, New Grad", company="Bask"),
+               it("o", title="Software Engineer I", company="Other")], "2026-11-04T08:00:00Z")
+    rep = rank.run(cfg, run_date="2026-11-04", runner=ByTitle({"AI Engineer, New Grad": 8}), now=NOW, log=lambda *a: None)
+    assert [(e["company"], e["title"], e["more"]) for e in rep["list"]["new"]] == [("Bask", "AI Engineer, New Grad", 1),
+                                                                                  ("Other", "Software Engineer I", 0)]
+    (held,) = rank.below(rep)
+    assert held["stage"] == "company limit" and held["company"] in ("Bask", "Bask Health")
+    assert [c["stage"] for c in rep["cuts"] if c["company"] in ("Bask", "Bask Health")].count("same job") == 1
+
+
+def test_repeat_days_holds_a_company_listed_this_week_unless_the_job_scores_7(tmp_path):
+    cfg = _cfg(tmp_path, repeat_days=7)
+    r = ByTitle({"AI Engineer, New Grad": 7, "Junior Software Engineer, Payments": 6})
+    _add(cfg, [it("h", title="Software Engineer, New Grad", company="Bask Health")], "2026-11-04T08:00:00Z")
+    assert [e["company"] for e in rank.run(cfg, run_date="2026-11-04", runner=r, now=_day(0), log=lambda *a: None)
+            ["list"]["new"]] == ["Bask Health"]
+    _add(cfg, [it("p", title="Junior Software Engineer, Payments", company="Bask"),
+               it("a", title="AI Engineer, New Grad", company="Bask")], "2026-11-07T08:00:00Z")
+    rep = rank.run(cfg, run_date="2026-11-07", runner=r, now=_day(3), log=lambda *a: None)
+    assert [e["title"] for e in rep["list"]["new"]] == ["AI Engineer, New Grad"]
+    assert [(c["title"], c["reason"]) for c in rank.below(rep)] == [
+        ("Junior Software Engineer, Payments", "Listed this week: Bask was on the list in the last 7 nights, and this scored under 7.")]
+    _, prof = profile.latest(cfg)
+    profile.save(cfg, {**prof, "ranking": {k: v for k, v in prof["ranking"].items() if k != "repeat_days"}})
+    again = rank.run(cfg, run_date="2026-11-07", runner=r, now=_day(3), log=lambda *a: None)
+    assert [e["title"] for e in again["list"]["new"]] == ["AI Engineer, New Grad", "Junior Software Engineer, Payments"]
+
+
+def test_a_near_job_under_the_floor_is_shown_nearby_sharing_the_company_limit():
+    ranking = profile.ranking({"ranking": {"threshold": 0, "max_candidates": 50, "top_n": 2, "per_company": 1}})
+    def j(company, score, near=True, fresh=True):
+        return rank.Job(True, fresh, score, company, near)
+    jobs = [j("a", 8), j("b", 4), j("a", 4), j("c", 2), j("d", 4, near=False), j("e", 3), j("b", 3), j("f", 4, fresh=False),
+            j("g", 3)]
+    assert rank.place(jobs, ranking) == ["new", "nearby", "company limit", "below the floor", "below the floor", "nearby",
+                                         "company limit", "posted earlier", "beyond N"]
+
+
+DC = {"DC": ["Washington, DC", "Reston, VA"]}
+NEAR_SCORES = {"AI Engineer, New Grad": 8, "Software Engineer, New Grad": 4, "Software Engineer I": 4,
+               "Junior Software Engineer": 4, "Software Engineer, Payments, New Grad": 2, "Software Engineer, Platform, New Grad": 4}
+
+
+def _near_night(cfg):
+    _add(cfg, [it("l", title="AI Engineer, New Grad", company="Listed", locations=("Reston, VA",)),
+               it("x", title="Software Engineer I", company="Listed", locations=("Washington, DC",)),
+               it("n", title="Software Engineer, New Grad", company="Near", locations=("Seattle, WA; Washington, DC",)),
+               it("f", title="Junior Software Engineer", company="Far"),
+               it("w", title="Software Engineer, Payments, New Grad", company="Weak", locations=("Washington, DC",)),
+               it("o", title="Software Engineer, Platform, New Grad", company="Older", locations=("Washington, DC",),
+                  published_at="2026-10-30T00:00:00Z")], "2026-11-04T08:00:00Z")
+    return rank.run(cfg, run_date="2026-11-04", runner=ByTitle(NEAR_SCORES), now=NOW, log=lambda *a: None)
+
+
+def test_a_new_weaker_job_in_a_nearby_area_is_shown_after_the_list_and_not_again(tmp_path):
+    cfg = _cfg(tmp_path, places=DC, per_company=1, nearby=["DC"])
+    rep = _near_night(cfg)
+    assert [(e["company"], e["more"]) for e in rep["list"]["new"]] == [("Listed", 1)]
+    assert [e["company"] for e in rep["list"]["nearby"]] == ["Near"]
+    assert {c["company"]: c["stage"] for c in rank.below(rep)} == {
+        "Listed": "company limit", "Far": "below the floor", "Weak": "below the floor", "Older": "posted earlier"}
+    out = rank.today(cfg)
+    assert out.startswith("Jobs for 2026-11-04 · 1 new tonight · 1 nearby · 4 below")
+    listed, rest = out.split(f"\n{rank.NEARBY}:\n")
+    nearby, below = rest.split(rank.BELOW)
+    assert "AI Engineer, New Grad — Listed" in listed and "also kept at Listed: 1 more (below)" in listed
+    assert "Software Engineer, New Grad — Near · Seattle, WA; Washington, DC" in nearby and rank.NOTES["nearby"] in nearby
+    assert "Near" not in listed + below and "Listed" not in nearby
+    md = (cfg.data_dir / "runs" / "2026-11-04" / f"{rep['run_id']}.md").read_text()
+    assert f"## {rank.NEARBY}\n\n1. **4** Software Engineer, New Grad — Near" in md
+    nxt = rank.run(cfg, run_date="2026-11-05", runner=ByTitle(NEAR_SCORES), now=_day(1), log=lambda *a: None)
+    assert nxt["list"] == {"new": [], "nearby": [], "watchlist": []}
+    assert "Near" not in {c["company"] for c in rank.below(nxt)} and "Far" in {c["company"] for c in rank.below(nxt)}
+
+
+def test_a_profile_without_nearby_areas_keeps_near_jobs_below_the_floor(tmp_path):
+    cfg = _cfg(tmp_path, places=DC, per_company=1)
+    rep = _near_night(cfg)
+    assert list(rep["list"]) == ["new", "watchlist"] and [e["company"] for e in rep["list"]["new"]] == ["Listed"]
+    assert ("Near", "Below the floor: scored 4, under 5.") in [(c["company"], c["reason"]) for c in rank.below(rep)]
+    out = rank.today(cfg)
+    assert out.startswith("Jobs for 2026-11-04 · 1 new tonight · 5 below") and rank.NEARBY not in out
+
+
+ONE_YEAR = "Requirements: 1+ year of professional software engineering experience. Python."
+
+
+def test_a_job_requiring_a_year_ranks_as_a_5_and_says_why_and_two_years_is_still_cut(tmp_path):
+    cfg = _cfg(tmp_path)
+    _, prof = profile.latest(cfg)
+    profile.save(cfg, {**prof, "filters": {**prof["filters"], "max_years": 1}})
+    _add(cfg, [it("y", title="AI Engineer, New Grad", company="Yearco", text=ONE_YEAR),
+               it("n", title="Software Engineer, New Grad", company="Nonco", text="Requirements: Python and SQL."),
+               it("t", title="Software Engineer I", company="Twoco", text="Requirements: 2+ years of professional experience.")],
+         "2026-11-04T08:00:00Z")
+    r = ByTitle({"AI Engineer, New Grad": 8, "Software Engineer, New Grad": 6, "Software Engineer I": 9})
+    rep = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert {j["company"]: j["years_required"] for j in _jobs_sent(r.sent[0])} == {"Yearco": 1, "Nonco": None}
+    assert [(c["company"], c["stage"]) for c in rep["cuts"] if c["company"] == "Twoco"] == [("Twoco", "years")]
+    new = rep["list"]["new"]
+    assert [(e["company"], e["score"]) for e in new] == [("Nonco", 6), ("Yearco", 5)]
+    assert new[1]["model_score"] == 8 and new[1]["years_note"] == "Requires 1 year of experience: ranked as 5 at most."
+    assert "model_score" not in new[0] and "years_note" not in new[0]
+    out = rank.today(cfg)
+    assert "[ 5] AI Engineer, New Grad — Yearco" in out and "Requires 1 year of experience: ranked as 5 at most." in out
+    assert "The model scored 8." in (cfg.data_dir / "runs" / "2026-11-04" / f"{rep['run_id']}.md").read_text()
+
+
+def test_a_capped_job_waits_below_a_higher_floor_with_both_reasons(tmp_path):
+    cfg = _cfg(tmp_path, min_score=6)
+    _add(cfg, [it("y", title="AI Engineer, New Grad", company="Yearco", text=ONE_YEAR)], "2026-11-04T08:00:00Z")
+    rep = rank.run(cfg, run_date="2026-11-04", runner=ByTitle({"AI Engineer, New Grad": 9}), now=NOW, log=lambda *a: None)
+    assert rep["list"]["new"] == []
+    (c,) = rank.below(rep)
+    assert (c["stage"], c["score"], c["model_score"], c["reason"]) == ("below the floor", 5, 9, "Below the floor: scored 5, under 6.")
+    assert "Requires 1 year of experience: ranked as 5 at most." in rank.today(cfg).split(rank.BELOW)[1]
+
+
+def _other_us(cfg, **ranking):
+    _, prof = profile.latest(cfg)
+    f = prof["filters"]
+    profile.save(cfg, {**prof, "filters": {**f, "locations": {**f["locations"], "other_us": True}},
+                       "ranking": {**prof["ranking"], **ranking}})
+
+
+def test_a_job_outside_the_places_ranks_the_penalty_lower_and_says_where(tmp_path):
+    cfg = _cfg(tmp_path)
+    _other_us(cfg)
+    _add(cfg, [it("a", title="AI Engineer, New Grad", company="Atlco", locations=("Atlanta, GA",)),
+               it("n", title="Software Engineer, New Grad", company="Nyco", locations=("New York, NY",)),
+               it("w", title="Software Engineer I", company="Weakco", locations=("Denver, CO",)),
+               it("l", title="Software Engineer, Platform, New Grad", company="Lonco", locations=("London, UK",))],
+         "2026-11-04T08:00:00Z")
+    r = ByTitle({"AI Engineer, New Grad": 8, "Software Engineer, New Grad": 7, "Software Engineer I": 6})
+    rep = rank.run(cfg, run_date="2026-11-04", runner=r, now=NOW, log=lambda *a: None)
+    assert _profile_sent(r.sent[0])["constraints"]["other_us_places_ok"] is True
+    assert [c["stage"] for c in rep["cuts"] if c["company"] == "Lonco"] == ["place"]
+    new = rep["list"]["new"]
+    assert [(e["company"], e["score"], e.get("model_score")) for e in new] == [("Nyco", 7, None), ("Atlco", 6, 8)]
+    assert new[1]["place_note"] == "Outside your places (Atlanta, GA): ranked 2 lower."
+    (c,) = rank.below(rep)
+    assert (c["company"], c["score"], c["model_score"], c["reason"]) == ("Weakco", 4, 6, "Below the floor: scored 4, under 5.")
+    out = rank.today(cfg)
+    assert "[ 6] AI Engineer, New Grad — Atlco" in out and "Outside your places (Atlanta, GA): ranked 2 lower." in out
+    assert "Outside your places (Denver, CO): ranked 2 lower." in out.split(rank.BELOW)[1]
+    assert "ranked 2 lower. The model scored 8." in (cfg.data_dir / "runs" / "2026-11-04" / f"{rep['run_id']}.md").read_text()
+
+
+def test_the_years_cap_applies_on_top_of_the_place_penalty(tmp_path):
+    cfg = _cfg(tmp_path)
+    _other_us(cfg)
+    _add(cfg, [it("y", title="AI Engineer, New Grad", company="Highco", locations=("Atlanta, GA",), text=ONE_YEAR),
+               it("s", title="Software Engineer, New Grad", company="Lowco", locations=("Atlanta, GA",), text=ONE_YEAR)],
+         "2026-11-04T08:00:00Z")
+    rep = rank.run(cfg, run_date="2026-11-04", runner=ByTitle({"AI Engineer, New Grad": 9, "Software Engineer, New Grad": 6}),
+                   now=NOW, log=lambda *a: None)
+    (e,) = rep["list"]["new"]
+    assert (e["company"], e["score"], e["model_score"]) == ("Highco", 5, 9)
+    assert rank.score_notes(e) == ["Outside your places (Atlanta, GA): ranked 2 lower.",
+                                   "Requires 1 year of experience: ranked as 5 at most."]
+    assert [(c["company"], c["score"], c["model_score"]) for c in rank.below(rep)] == [("Lowco", 4, 6)]
+
+
+def test_a_zero_penalty_ranks_a_job_outside_the_places_as_the_model_scored_it(tmp_path):
+    cfg = _cfg(tmp_path)
+    _other_us(cfg, other_us_penalty=0)
+    _add(cfg, [it("a", title="AI Engineer, New Grad", company="Atlco", locations=("Atlanta, GA",))], "2026-11-04T08:00:00Z")
+    rep = rank.run(cfg, run_date="2026-11-04", runner=ByTitle({"AI Engineer, New Grad": 8}), now=NOW, log=lambda *a: None)
+    (e,) = rep["list"]["new"]
+    assert e["score"] == 8 and rank.score_notes(e) == [] and "model_score" not in e
+
+
+def test_a_job_requiring_a_year_ranks_below_one_that_doesnt_with_the_same_score(tmp_path):
+    cfg = _cfg(tmp_path)
+    _add(cfg, [it("y", title="Software Engineer, New Grad", company="Yearco", text=ONE_YEAR),
+               it("n", title="Software Engineer, New Grad", company="Nonco", text="Requirements: SQL.")],
+         "2026-11-04T08:00:00Z")
+    rep = rank.run(cfg, run_date="2026-11-04", runner=ByTitle(), now=NOW, log=lambda *a: None)
+    new = rep["list"]["new"]
+    assert [(e["company"], e["score"]) for e in new] == [("Nonco", 5), ("Yearco", 5)] and new[0]["points"] < new[1]["points"]
+
+
+def test_an_unread_job_ranks_below_a_read_one_with_the_same_score(tmp_path):
+    cfg = _cfg(tmp_path)
+    _add(cfg, [it("u", title="Software Engineer, New Grad", company="Unreadco"),
+               it("r", title="Software Engineer, New Grad", company="Readco", text="We build tools for farmers.")],
+         "2026-11-04T08:00:00Z")
+    rep = rank.run(cfg, run_date="2026-11-04", runner=ByTitle({"Software Engineer, New Grad": 6}), now=NOW, log=lambda *a: None)
+    new = rep["list"]["new"]
+    assert [e["company"] for e in new] == ["Readco", "Unreadco"] and new[0]["points"] < new[1]["points"]
 
 
 def test_catchup_lists_every_kept_job_once(tmp_path):
@@ -443,4 +798,6 @@ def test_display_title_shows_an_hn_role():
     assert rank.display_title(t, prof) == "Junior Software Engineer"
     assert rank.display_title("River | Staff Engineers (Elixir) | NYC") == "Staff Engineers (Elixir)"
     assert rank.display_title("Software Engineer, New Grad", prof) == "Software Engineer, New Grad"
+    assert rank.display_title("Software Engineer (Semiconductors & AI) | Graduates Considered", prof) == \
+        "Software Engineer (Semiconductors & AI)"
     assert rank.display_title("") == ""

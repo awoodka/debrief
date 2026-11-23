@@ -8,10 +8,13 @@ that fails names the stage:
               excluded word is in what's left of the title once that match is taken out
   gone        not closed on its own job board (the describe step's check)
   place       one of the profile's areas, remote in the US, or just "United States" (no location
-              at all passes too: the model sees it); and not placed abroad by the job's own board
-              (board_country from the describe step), whatever a list says
+              at all, or only a count such as Workday's "3 Locations", passes too: the model sees
+              it); with filters.locations.other_us, any other place in the US too (area OTHER_US,
+              ranked lower by rank.py); and not placed abroad by the job's own board (board_country
+              from the describe step), whatever a list says
   age         published (or, failing that, first seen) within max_age_days
-  level       new_grad_only: some sign the job is for new grads (new_grad_sign)
+  level       new_grad_only: the title names no level above entry ("Engineer II"), and some sign
+              says the job is for new grads (new_grad_sign)
   degree      not PhD- or Master's-only by its title, and not above the profile's degree when a source
               lists degrees
   blocklist   the company isn't on it
@@ -27,7 +30,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from .items import METROS, company_norm, early_career
+from .items import METROS, company_norm, early_career, says_new_grad
 
 
 @dataclass
@@ -139,6 +142,24 @@ def _places(profile):
     return out
 
 
+def _pieces(loc):
+    return [s for s in SEPARATORS.split(str(loc).lower()) if words(s)] or [str(loc).lower()]
+
+
+def _area(raw, places):
+    """The profile area one piece of a location is in, or None."""
+    cities, state, foreign = _cities_state(raw)
+    if foreign:
+        return None
+    return next((area for area, pc, ps in places if pc in cities and (ps is None or state is None or state == ps)), None)
+
+
+def areas(locations, profile):
+    """Every profile area (filters.locations.places) one of these locations is in."""
+    places = _places(profile)
+    return {a for loc in locations or () for raw in _pieces(loc) if (a := _area(raw, places))}
+
+
 def _us(raw):
     """Does this piece of a location name the US: a US word, a state, or "City, ST"? "Perth, WA,
     Australia" doesn't: a third part that isn't the US vetoes the state code."""
@@ -172,31 +193,50 @@ def board_abroad(data):
     return None if " ".join(words(country)) in US_COUNTRY else country
 
 
+PLACE_COUNT = re.compile(r"\s*\d+\s+locations?\s*", re.I)        # Workday's "3 Locations": the places are elsewhere
+
+
+def _bare_remote_us(locations):
+    """A bare "Remote" is US remote when it's the job's only place or another of its places is in the US:
+    next to "Tokyo" or "London, UK" it's remote there."""
+    others = [raw for loc in locations for raw in _pieces(loc)
+              if words(REMOTE_WORDS.sub(" ", raw)) and not PLACE_COUNT.fullmatch(raw)]
+    return not others or any(_us(raw) for raw in others)
+
+
+OTHER_US = "other US"
+
+
+def us_places(locations):
+    """The locations that name a place in the US and don't say remote ("Atlanta, GA", "Hybrid - Austin, TX")."""
+    return [loc for loc in locations or () if not any("remote" in words(r) for r in _pieces(loc))
+            and any(_us(r) for r in _pieces(loc))]
+
+
 def place_fit(locations, profile, remote_flag=None):
-    """(area, "remote (US)", "anywhere in the US" or "unknown", None), or (None, why)."""
-    if not locations:
+    """(area, "remote (US)", "anywhere in the US", "unknown" or OTHER_US, None), or (None, why). OTHER_US:
+    with filters.locations.other_us, a job in the US that is in none of the areas and not remote US."""
+    if not locations or all(PLACE_COUNT.fullmatch(str(x)) for x in locations):
         return "unknown", None
     places = _places(profile)
     remote_ok = profile["filters"]["locations"]["remote_us"]
     for loc in locations:
-        raws = [s for s in SEPARATORS.split(str(loc).lower()) if words(s)] or [str(loc).lower()]
-        for raw in raws:
-            cities, state, foreign = _cities_state(raw)
-            if foreign:
-                continue
-            for area, pc, ps in places:
-                if pc in cities and (ps is None or state is None or state == ps):
-                    return area, None
+        raws = _pieces(loc)
+        area = next((a for raw in raws if (a := _area(raw, places))), None)
+        if area:
+            return area, None
         if not remote_ok:
             continue
         says_remote = any("remote" in words(r) for r in raws)
         rest = [r for r in (REMOTE_WORDS.sub(" ", r) for r in raws) if words(r)]
-        if says_remote and (not rest or any(_us(r) for r in rest)):
+        if says_remote and (any(_us(r) for r in rest) or not rest and _bare_remote_us(locations)):
             return "remote (US)", None
         if remote_flag and rest and any(_us(r) for r in rest):
             return "remote (US)", None
         if not says_remote and all(" ".join(words(r)) in US_WORDS for r in raws):
             return "anywhere in the US", None
+    if profile["filters"]["locations"].get("other_us") and us_places(locations):
+        return OTHER_US, None
     return None, "not in the profile's places or remote US: " + "; ".join(str(x) for x in locations)[:120]
 
 
@@ -208,6 +248,11 @@ UP_TO_THREE_WORDS = r"(\W+[\w+#]+){0,3}?"
 LEVEL_ONE = r"\W+(?<!-)(i|1)(\s*/\s*(ii|2))?"
 NOT_II_IM_POINT_IO_OR_RANGE = r"(?![\w'’]|\.\d|\s*/\s*o\b|\s*(-|–|to)\s*\d)"
 LEVEL_TITLE = re.compile(f"{ENTRY_WORDS}|{ROLE}{UP_TO_THREE_WORDS}{LEVEL_ONE}{NOT_II_IM_POINT_IO_OR_RANGE}", re.I)
+RIGHT_AFTER = rf"(?:{ROLE}|\blevels?)[\s,(]+"
+ROMAN_AFTER = rf"{ROLE}{UP_TO_THREE_WORDS}[\s,(]+(?=[iv])"      # a digit after other words is a version or a team ("Python 3")
+ABOVE_ENTRY_TITLE = re.compile(rf"(?:{RIGHT_AFTER}|{ROMAN_AFTER})(?P<level>ii|iii|iv|2|3|4|5){NOT_II_IM_POINT_IO_OR_RANGE}", re.I)
+ASSISTANT_VICE_PRESIDENT = re.compile(r"\bavp\b", re.I)
+LEVEL_RANGE = re.compile(r"\b(?:i|1)\s*(?:/|-|–|,|&|\bor\b|\band\b|\bto\b)\s*(?:ii|2)\b", re.I)
 LEVEL_DATA = re.compile(r"entry|junior|new grad|graduate|early career|student", re.I)
 LEVEL_KEYS = ("levels", "seniority", "level", "experience")
 LEVEL_TEXT = re.compile(
@@ -218,11 +263,23 @@ LEVEL_TEXT = re.compile(
     r"\bnew\s+graduate\s+level\b", re.I)
 
 
+def above_entry(title):
+    if says_new_grad(title) or LEVEL_RANGE.search(title or ""):
+        return None
+    m = ABOVE_ENTRY_TITLE.search(title or "")
+    return m.group("level").upper() if m else "AVP" if ASSISTANT_VICE_PRESIDENT.search(title or "") else None
+
+
 def title_level(title):
-    return early_career(title) or bool(LEVEL_TITLE.search(title or ""))
+    return not above_entry(title) and (early_career(title) or bool(LEVEL_TITLE.search(title or "")))
 
 
-def new_grad_sign(title, text=None, data=None, listed_early=False):
+def new_grad_sign(title, text=None, data=None, listed_early=False, listed_trusted=False, no_years=False,
+                  startup=False, max_years=0):
+    """What says the job is for new grads, or None. A trusted new-grad list counts on its own; any other
+    list, and the description's words, only once the description has been read. no_years: a read
+    description that asks for no years of experience counts too. startup: at a startup, a read
+    description that asks for at most max_years counts, since startups rarely label a role entry level."""
     if title_level(title):
         return "title"
     d = data or {}
@@ -232,11 +289,29 @@ def new_grad_sign(title, text=None, data=None, listed_early=False):
         if any(isinstance(x, str) and LEVEL_DATA.search(x) for x in vals):
             return f"the source's level ({k})"
     if not text:
-        return None
+        return "a trusted new-grad list" if listed_trusted else None
     if listed_early:
         return "a new-grad list"
     m = LEVEL_TEXT.search(text)
-    return f"the description: {' '.join(m.group(0).split())!r}" if m else None
+    if m:
+        return f"the description: {' '.join(m.group(0).split())!r}"
+    years = min_years(text)
+    if no_years and not years:
+        return "the description asks for no years of experience"
+    if startup and (years or 0) <= max_years:
+        return f"a startup role asking for {years or 'no'} year{'' if years == 1 else 's'} of experience"
+    return None
+
+
+SIZE = re.compile(r"(\d[\d,]*)(?:\s*-\s*(\d[\d,]*))?\+?\s*people")
+STARTUP_MAX_PEOPLE = 1000
+
+
+def small_company(size):
+    """True when a company_size label ("11-50 people, series a", "25 people, YC W24") puts the company at
+    STARTUP_MAX_PEOPLE or fewer."""
+    m = SIZE.search(size or "")
+    return bool(m) and int((m.group(2) or m.group(1)).replace(",", "")) <= STARTUP_MAX_PEOPLE
 
 
 # ------------------------------------------------------------------------------- degree, employment
@@ -376,21 +451,36 @@ def clearance_fit(title, text, profile):
     return None
 
 
-YEARS = re.compile(r"\b(\d{1,2})\s*(?:\+|plus)?\s*((?:-|–|to|and)\s*\d{1,2}\s*\+?\s*)?years?[’']?\s+(?:of\s+)?"
+_N = r"(?:\d{1,2}|one)(?:\s*\(1\))?"
+YEARS = re.compile(rf"\b({_N})\s*(?:\+|plus|or\s+more)?\s*((?:-|–|to|and)\s*\d{{1,2}}\s*\+?\s*)?years?[’']?\s+(?:of\s+)?"
                    r"(?:[a-z/+#-]+\s+){0,4}?experience", re.I)
-UPPER_BOUND = re.compile(r"(up to|between|less than|fewer than|under|no more than|maximum of|max\.?|at most)\s+(?:\S+\s+){0,4}$", re.I)
+UPPER_BOUND = re.compile(r"(up to|between|less than|fewer than|under|no more than|maximum of|max\.?|at most)\s+(?:\S+\s+){0,4}[~≈]?$", re.I)
+INSTEAD_OF_A_DEGREE = re.compile(r"\bin\s+(?:lieu|place)\s+of\b|\bsubstitut", re.I)
+SCHOOL = (r"(?:intern(?:ship)?s?|co-?ops?|course\s?work|hackathons?|project\s+(?:work|experience)|"
+          r"(?:school|class|academic|personal|collegiate|student(?:\s+team)?)\s+(?:projects?|work|experience))")
+SCHOOL_COUNTS = re.compile(
+    rf"\b(?:includ\w*|counts?|such\s+as|through|via|or(?:\s+equivalent)?|and/or)\W+(?:[\w-]+\W+){{0,5}}?{SCHOOL}\b|"
+    rf"\b{SCHOOL}\W+(?:[\w/&-]+\W+){{0,4}}?(?:acceptable|accepted|applicable|apply|qualif(?:y|ies)|counts?|considered|included)\b|"
+    rf"\b{SCHOOL},?\s+(?:or|and/or)\b", re.I)
+SCHOOL_EXCLUDED = re.compile(r"\bexclu\w*|(?:\bnot|n[’']t)\s+(?:be\s+)?(?:includ|count|appl|qualif|accept|consider)\w*|"
+                             r"\bother\s+than\b|\bbeyond\b|\bpost[\s-]?grad\w*|\bafter\s+graduat\w*", re.I)
 
 
 def min_years(text):
     """The smallest number of years of experience a description *requires*, or None. An upper bound
-    ("up to 5 years", "between new grad and 5 years") and a preference ("Preferred qualifications:
-    5+ years", "5+ years preferred") don't count."""
+    ("up to 5 years", "between new grad and 5 years"), a preference ("Preferred qualifications:
+    5+ years", "5+ years preferred"), years offered instead of a degree ("or 2+ years of experience
+    in lieu of a degree") and years that school can fill ("1+ years of experience (internship
+    experience qualifies)", unlike "excluding internships") don't count."""
     text = text or ""
     found = []
-    for m in YEARS.finditer(text):
-        n = int(m.group(1))
+    ms = list(YEARS.finditer(text))
+    for m, nxt in zip(ms, ms[1:] + [None]):
+        n = 1 if m.group(1).lower().startswith("one") else int(m.group(1).split("(")[0])
         bounded = not m.group(2) and UPPER_BOUND.search(text[max(0, m.start() - 50):m.start()])   # a range owns its "between"
-        if n > 30 or bounded or preferred(text, m.start(), m.end()):
+        clause = m.group(0) + re.split(r"[.\n;•]", text[m.end():min(nxt.start() if nxt else len(text), m.end() + 160)])[0]
+        school = SCHOOL_COUNTS.search(clause) and not SCHOOL_EXCLUDED.search(clause)
+        if n > 30 or bounded or school or INSTEAD_OF_A_DEGREE.search(clause) or preferred(text, m.start(), m.end()):
             continue
         found.append(n)
     return min(found) if found else None
@@ -398,10 +488,13 @@ def min_years(text):
 
 # ------------------------------------------------------------------------------------- the check
 
-def check(posting, profile, now, text=None, listed_early=False, skip=()):
-    """listed_early: a new-grad list (a "list" family source) carries the job. skip: stages not to
-    check: "level" (describe skips it, since the description it fetches may be what shows it) and
-    "age" (the catch-up skips it for watchlist companies)."""
+def check(posting, profile, now, text=None, listed_early=False, listed_trusted=False, no_years=False, skip=(),
+          startup=False):
+    """listed_early: a new-grad list (a "list" family source) carries the job; listed_trusted: one of
+    them is trusted (collect.trusted_sources). no_years: settings level.no_years_sign. startup: the job is
+    at a startup and settings level.startup_sign is on (see new_grad_sign). skip: stages not
+    to check: "level" (describe skips the new-grad sign, since the description it fetches may be what
+    shows it; a title above entry still fails) and "age" (the catch-up skips it for watchlist companies)."""
     f = profile["filters"]
     d = posting.get("data") or {}
     fit = title_fit(posting["title"], profile)
@@ -419,11 +512,16 @@ def check(posting, profile, now, text=None, listed_early=False, skip=()):
     if area is None:
         return Verdict(False, "place", why, facts)
     facts["area"] = area
+    if area == OTHER_US:
+        facts["outside"] = us_places(posting.get("locations"))
     when = posting.get("published_at") or posting.get("first_seen_at")
     if "age" not in skip and when and datetime.fromisoformat(when.replace("Z", "+00:00")) < now - timedelta(days=f["max_age_days"]):
         return Verdict(False, "age", f"posted {when[:10]}, more than {f['max_age_days']} days ago", facts)
+    level = f["new_grad_only"] and above_entry(posting["title"])
+    if level:
+        return Verdict(False, "level", f"the title names level {level}, above entry", facts)
     if f["new_grad_only"] and "level" not in skip:
-        sign = new_grad_sign(posting["title"], text, d, listed_early)
+        sign = new_grad_sign(posting["title"], text, d, listed_early, listed_trusted, no_years, startup, f["max_years"])
         if sign is None:
             return Verdict(False, "level", "nothing says it's for new grads" + ("" if text else " (title only)"), facts)
         facts["new_grad_sign"] = sign

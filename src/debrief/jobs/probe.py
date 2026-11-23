@@ -6,10 +6,10 @@ the way M1's adapter will. For each source it records:
   - HTTP status, item count, a sample, and how full each field is;
   - the newest date and how many items are from the last 24 h;
   - whether a conditional request really returns a 304;
-  - rate-limit headers and robots.txt.
-A robots.txt-disallowed URL is never requested. A source whose key isn't in the environment is
-"needs_key" and isn't requested either. The alert inbox is only logged into: messages are counted
-per sender, and no bodies are read.
+  - rate-limit headers, and robots.txt as information only: listing_brief reads any site that doesn't
+    block us, so a 401, 403, 429 or 999 answer is "blocked".
+A source whose key isn't in the environment is "needs_key" and isn't requested. The alert inbox is
+only logged into: messages are counted per sender, and no bodies are read.
 
 The universe: the company-board lists (family "universe") are merged per job-board system. Then a
 fixed random sample of boards per system is listed once, which measures:
@@ -24,6 +24,7 @@ Writes the full record to <data>/jobs/probe/probe-<stamp>.json and the review ta
 docs/jobs/SOURCES.md. Nothing else is written.
 """
 import csv
+import html
 import imaplib
 import io
 import json
@@ -41,6 +42,7 @@ from ..config import REPO
 from ..http import Client
 from ..probe import _path, _short
 from . import boards
+from .adapters import BLOCK_STATUSES
 
 SEVERITY = ["ok", "partial", "empty", "needs_key", "blocked", "failed"]
 URL_RE = re.compile(r"https?://[^\s)\"'<>|\]]+")
@@ -198,18 +200,11 @@ def board_links(texts):
 # ------------------------------------------------------------------------------- one request
 
 def probe_url(client, url, spec, *, method="GET", body=None, headers=None, params=None, each=None,
-              secrets=(), now=None, conditional=True, robots_waived=False):
+              secrets=(), now=None, conditional=True):
     now = now or datetime.now(timezone.utc)
     kind = spec.get("kind", "json")
     att = Attempt(url=url, kind=kind, each=each)
     att.robots = client.robots_allowed(url)
-    if att.robots is not True and robots_waived:
-        att.extra["robots_exception"] = True         # disallowed, but the source's keyed-API exception applies
-    elif att.robots is not True:
-        att.status = "blocked"
-        att.error = ("robots.txt disallows this URL for our User-Agent" if att.robots is False
-                     else "robots.txt unreachable (RFC 9309: treat as disallowed)")
-        return att, None
     r = client.request(method, url, params=params, json_body=body, headers=headers)
     att.http_status, att.elapsed_s = r.status, r.elapsed_s
     att.content_type = r.headers.get("content-type", "")[:60]
@@ -217,7 +212,9 @@ def probe_url(client, url, spec, *, method="GET", body=None, headers=None, param
     att.rate_headers = r.rate_headers()
     att.bytes = len(r.content)
     if not r.ok:
-        att.error = _scrub(r.error or f"HTTP {r.status}", secrets) + (" (refused)" if r.status in (401, 403) else "")
+        att.error = _scrub(r.error or f"HTTP {r.status}", secrets)
+        if r.status in BLOCK_STATUSES:
+            att.status = "blocked"
         return att, None
     try:
         if kind == "json":
@@ -273,6 +270,10 @@ def probe_url(client, url, spec, *, method="GET", body=None, headers=None, param
             rows = list(csv.DictReader(io.StringIO(r.text)))
             att.n_items = len(rows)
             att.sample_title = _short(rows[0] if rows else "", 110)
+        elif kind == "html":
+            att.n_items = len(re.findall(spec["items"], r.text))
+            m = re.search(spec["title"], r.text) if spec.get("title") else None
+            att.sample_title = _short(html.unescape(m.group(1)) if m else "", 110)
         else:
             raise ValueError(f"unknown probe kind {kind!r}")
     except Exception as e:  # noqa: BLE001 — a parse failure is a probe result, not a crash
@@ -346,7 +347,7 @@ def probe_source(client, src, env=os.environ, now=None, bodies=None, contact="")
         for spec, u, e in group:
             att, content = probe_url(client, u, spec, method=src.method, body=src.body, headers=headers or None,
                                      params=params or None, each=e, secrets=secrets, now=now,
-                                     conditional=conditional, robots_waived=src.robots_waived(u, env))
+                                     conditional=conditional)
             atts.append(att)
             if bodies is not None and content is not None and src.family in ("list", "universe"):
                 bodies.setdefault(src.id, {})[e] = content
@@ -450,15 +451,12 @@ def sample_boards(client, universe, n, seed, include, exclude, conditional_k, no
         for b in picked:
             method, url, body = boards.list_request(b)
             row = {"board": b, "status": "", "http": 0}
-            allowed = client.robots_allowed(url)
-            if allowed is not True:
-                row["status"] = "blocked" if allowed is False else "robots_unreachable"
-                rows.append(row)
-                continue
             r = client.request(method, url, json_body=body)
             row.update(http=r.status, elapsed_s=r.elapsed_s, bytes=len(r.content))
             if r.status in (404, 410) or (system == "workday" and r.status in (400, 422)):
                 row["status"] = "dead"
+            elif r.status in BLOCK_STATUSES:
+                row["status"], row["error"] = "blocked", r.error
             elif not r.ok:
                 row["status"], row["error"] = "error", r.error
             else:
@@ -497,13 +495,11 @@ def summarize(system, universe_n, rows, client, cond_tried=0, cond_304=0):
     pages = statistics.mean([r["pages"] for r in ok]) if ok else 1
     est_alive = round(universe_n * alive)
     requests = round(est_alive * pages)
-    # Workday and Recruitee have a host per tenant, so robots.txt is one more request per board.
-    robots = est_alive if system in ("workday", "recruitee") else 1
     per_req = max(interval, med or interval)
     s = {"universe": universe_n, "sampled": n,
          "ok": len(ok), "dead": sum(r["status"] == "dead" for r in rows),
          "errors": sum(r["status"] in ("error", "unreadable") for r in rows),
-         "blocked": sum(r["status"] in ("blocked", "robots_unreachable") for r in rows),
+         "blocked": sum(r["status"] == "blocked" for r in rows),
          "alive_share": round(alive, 2),
          "median_s": round(med, 2) if med is not None else None,
          "p90_s": _pct([r["elapsed_s"] for r in ok], 0.9),
@@ -515,8 +511,8 @@ def summarize(system, universe_n, rows, client, cond_tried=0, cond_304=0):
          "conditional": f"{cond_304}/{cond_tried} returned 304" if cond_tried else "",
          "interval_s": interval,
          "est_alive_boards": est_alive,
-         "est_requests": requests + robots,
-         "est_minutes": round((requests + robots) * per_req / 60, 1),
+         "est_requests": requests,
+         "est_minutes": round(requests * per_req / 60, 1),
          "est_mb": round(est_alive * pages * (statistics.median([r["bytes"] for r in ok]) if ok else 0) / 1e6, 1),
          "est_new_24h": round(est_alive * (statistics.mean([r["new_24h"] for r in ok]) if ok else 0)),
          "est_new_24h_rough": round(est_alive * (statistics.mean([r["new_24h_rough"] for r in ok]) if ok else 0))}

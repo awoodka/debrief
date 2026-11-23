@@ -28,6 +28,9 @@ http:
     jobicy: {hosts: [jobicy.com], interval_s: 5}
     adzuna: {hosts: [api.adzuna.com], interval_s: 2.5}            # Adzuna's free tier: 25 a minute, 250 a day
     themuse: {hosts: [themuse.com], interval_s: 1.0}             # 500 an hour without a key
+    jobright: {hosts: [jobright.ai], interval_s: 3}
+    linkedin: {hosts: [linkedin.com], interval_s: 5}
+    workatastartup: {hosts: [workatastartup.com], interval_s: 1.0}    # small pages; most ids answer a 3 KB 404
 
 collect:
   raw_retention_days: 60
@@ -39,10 +42,19 @@ score:
   effort: null                    # Claude Code's --effort; null leaves the model's default
   prompt: prompts/jobs_score_v1.md
   timeout_s: 900
-  text_max_chars: 600             # the qualifications excerpt per job
+  text_max_chars: 2000            # the qualifications excerpt per job
   why_max_chars: 240
   mismatch_max: 5                 # mismatches kept per job, each cut to 120 characters
   chunk_size: 150                 # jobs per call; only a large batch (night one) needs more than one
+
+level:
+  # true: a read description that asks for no years of experience (filters.min_years finds none) is a
+  # new-grad sign.
+  no_years_sign: false
+  # true: at a startup (a source with options.startup, a company on the profile's startup list, or a
+  # company_size of 1,000 people or fewer), a read description asking for at most filters.max_years
+  # is a new-grad sign. Startups rarely label a role entry level.
+  startup_sign: true
 
 probe:
   # The board-universe timing test: this many boards per job-board system, picked at random (fixed

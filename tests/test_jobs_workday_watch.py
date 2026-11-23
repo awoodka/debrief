@@ -32,9 +32,6 @@ class Boards:
         self.workday, self.greenhouse, self.totals = workday or {}, greenhouse or {}, totals or {}
         self.calls = []
 
-    def robots_allowed(self, url):
-        return True
-
     def _ok(self, url, body):
         return Fetched(url=url, final_url=url, status=200, headers={"content-type": "application/json"},
                        content=json.dumps(body).encode())

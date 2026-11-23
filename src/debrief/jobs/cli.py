@@ -11,7 +11,7 @@
                                    the watchlist (each change is a new profile version)
   debrief jobs posting QUERY [--all]                  one posting, its listings and keys
   debrief jobs score [--date D] [--no-cap] [--dry-run] filters, points, the scoring call, the morning list (M2)
-  debrief jobs today [--date D] [--all] [--catchup]   print the morning list (or the catch-up list)
+  debrief jobs today [--date D] [--catchup]         print the morning list (or the catch-up list)
   debrief jobs web [--port 8000]                      the private site (M4), behind Cloudflare Access
   debrief jobs coverage [--date D]                    the coverage check: samples matched, misses with causes (M3)
   debrief jobs catchup [--date D] [--dry-run] [--since D] [--name N]   once: every kept job in the pool, to N.txt
@@ -151,6 +151,7 @@ def _score(args):
     r = rank.run(cfg, run_date=args.date, no_cap=args.no_cap, dry_run=args.dry_run)
     print(f"jobs score {r['run_id']}: {r['status']} · pool {r['candidates']} ({r['new']} new) · {r['passed_filters']} "
           f"passed the filters · {r['sent']} asked · {r['kept']} kept · list of {len(r['list']['new'])}"
+          + (f" · {len(r['list']['nearby'])} nearby" if "nearby" in r["list"] else "")
           + ("" if args.dry_run else f" · report in jobs/runs/{r['run_date']}/{r['run_id']}.md"))
     if args.dry_run:
         for e in r["list"]["new"]:
@@ -160,7 +161,7 @@ def _score(args):
 
 def _today(args):
     from . import config, rank
-    print(rank.today(config.load(), list_date=args.date, show_all=args.all, catchup=args.catchup or None))
+    print(rank.today(config.load(), list_date=args.date, catchup=args.catchup or None))
     return 0
 
 
@@ -272,7 +273,6 @@ def _register_m2(jsub):
     jp.set_defaults(func=lambda args, _cfg: _run(_score, args))
     jp = jsub.add_parser("today", help="print the morning list")
     jp.add_argument("--date", help="a past list (default: the latest)")
-    jp.add_argument("--all", action="store_true", help="also every kept job below the top N")
     jp.add_argument("--catchup", nargs="?", const="catchup", metavar="NAME",
                     help="a catch-up list instead of the morning list (default name: catchup; e.g. older)")
     jp.set_defaults(func=lambda args, _cfg: _run(_today, args))

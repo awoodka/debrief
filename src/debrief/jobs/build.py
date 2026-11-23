@@ -20,7 +20,8 @@ same raw files rebuilds the same rows.
   - Every item that names a board, and every directory row an adapter gives, goes in the board
     directory.
   - A description an adapter gives (texts(): the describe step) is stored for the posting with that
-    job key, and its facts (employment type, pay) fill the posting's data where it has none.
+    job key, or, for a jobright page, the posting of the listing that links to it, and its facts
+    (employment type, pay) fill the posting's data where it has none.
   - A job its own board says is closed (gone(): the describe step) gets data["gone"] = {at,
     status, url}, which the filters' "gone" stage cuts; the board showing it open again clears it.
 """
@@ -221,6 +222,13 @@ def _fallback_key(it):
     return company_short(company_norm(it.company)), core_title(it.title), frozenset(place_tokens(it.locations))
 
 
+def _described(store, key):
+    if isinstance(key, tuple):
+        row = store.item(*key)
+        return row["posting_id"] if row else None
+    return store.find_key(f"job:{key}")
+
+
 def _read(adapter, rec, source, counts):
     """What one response says: (listings, texts, gone, directory). A 2xx we can't read is a failed
     request, not a broken source (Workday's maintenance page comes back as 200 HTML): it says nothing
@@ -246,7 +254,7 @@ def apply(store, source, adapter, records, refs, warn=None, early_sources=frozen
     for rec, ref, (listings, texts, gone, directory) in zip(records, refs, read):
         at = rec["fetched_at"]
         for key, text, facts in texts:
-            pid = store.find_key(f"job:{key}")
+            pid = _described(store, key)
             if not pid:
                 continue
             if text:

@@ -156,8 +156,8 @@ site() {
 }
 
 # The jobs steps. In the daily run the Claude token was checked by triage and the brief already.
-# A failed collect still scores what earlier collects found; a failed scoring call still writes a
-# list, ranked by code points (the score step exits 2).
+# A failed collect still scores what earlier collects found; after a failed scoring call the list is
+# empty and tonight's unscored jobs wait below it, still new for the rerun (the score step exits 2).
 jobs() {
   run_step "jobs collect" timeout 60m docker run "${BASE[@]}" --env-file "$APP/.env" --memory 2g "$IMAGE" \
     python -m debrief jobs collect --date "$TODAY"
@@ -170,7 +170,7 @@ jobs() {
     -e CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 --memory 2g "$IMAGE" python -m debrief jobs score --date "$TODAY"
   case $CODE in
     0) log "jobs score: ok" ;;
-    2) log "FAIL: the jobs scoring call failed; today's list is ranked by points (rerun: run.sh jobs)"; FAILED=1 ;;
+    2) log "FAIL: the jobs scoring call failed; tonight's jobs wait below an empty list, unscored (rerun: run.sh jobs)"; FAILED=1 ;;
     *) log "FAIL: jobs score exited $CODE (rerun: run.sh jobs)"; FAILED=1; return ;;
   esac
   run_step "jobs coverage" timeout 10m docker run "${BASE[@]}" --network none --memory 1g "$IMAGE" \

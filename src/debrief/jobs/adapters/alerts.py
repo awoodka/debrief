@@ -10,19 +10,21 @@ and a replay rebuilds the same items.
 
 parse() picks a parser by the sender's domain. A site's own listing id (LinkedIn's, Indeed's) isn't
 the employer's job id, so items carry no job key and copies merge by company, title and place (Alex,
-2026-11-05); an email that links straight to a job board gets that board's id from the link. The
-parsers are written from real sample emails (PLAN.md "Revision 6", step 4): until a sender has
-one, its emails are kept and counted, not parsed.
+2026-11-05).
 """
 import email
 import email.policy
 import imaplib
 import re
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parseaddr, parsedate_to_datetime
+from html.parser import HTMLParser
 
 from ...http import Fetched
 from ...store import raw
+from ..items import JobItem, fuzzy_key
 from . import Adapter
 
 # Sender domain -> site. A Gmail forwarding filter (Handshake's alerts go to the school address)
@@ -31,10 +33,8 @@ SENDERS = {"linkedin.com": "linkedin", "indeed.com": "indeed", "indeedemail.com"
            "glassdoor.com": "glassdoor", "wellfound.com": "wellfound", "angel.co": "wellfound",
            "joinhandshake.com": "handshake", "dice.com": "dice", "builtin.com": "builtin"}
 
-# site -> parse(message, record, source) -> [JobItem]. Filled in from real samples.
-PARSERS = {}
-
 _UIDVALIDITY = re.compile(rb"UIDVALIDITY\s+(\d+)")
+ISO = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def sender_site(address):
@@ -46,16 +46,148 @@ def sender_site(address):
     return None
 
 
+def sent_at(msg):
+    try:
+        return parsedate_to_datetime(str(msg.get("Date"))).astimezone(timezone.utc).strftime(ISO)
+    except (TypeError, ValueError):
+        return None
+
+
 def headers_of(raw_bytes):
     """(site, sender domain, subject, date ISO) from a raw message's headers."""
     msg = email.message_from_bytes(raw_bytes, policy=email.policy.default)
     sender = str(msg.get("From") or "")
-    try:
-        when = parsedate_to_datetime(str(msg.get("Date"))).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    except (TypeError, ValueError):
-        when = None
     domain = (parseaddr(sender)[1].rsplit("@", 1)[-1] or "").lower()
-    return sender_site(sender), domain, str(msg.get("Subject") or "")[:200], when
+    return sender_site(sender), domain, str(msg.get("Subject") or "")[:200], sent_at(msg)
+
+
+class _Runs(HTMLParser):
+    HIDDEN = ("head", "style", "script")
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.runs, self.hidden = [], 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.HIDDEN:
+            self.hidden += 1
+        elif tag == "a":
+            self.runs.append(("a", dict(attrs).get("href") or ""))
+
+    def handle_endtag(self, tag):
+        if tag in self.HIDDEN:
+            self.hidden = max(0, self.hidden - 1)
+
+    def handle_data(self, data):
+        text = " ".join(data.split())
+        if text and not self.hidden:
+            self.runs.append(("t", text))
+
+
+def html_runs(msg):
+    part = msg.get_body(preferencelist=("html",))
+    html = part.get_content() if part else ""
+    parser = _Runs()
+    parser.feed(html)
+    parser.close()
+    return parser.runs, html
+
+
+def cards(runs, job_of):
+    out, job = {}, None
+    for kind, value in runs:
+        if kind == "a":
+            job = job_of(value)
+            if job is not None:
+                out.setdefault(job, [])
+        elif job is not None:
+            out[job].append(value)
+    return out
+
+
+@dataclass(frozen=True)
+class Digest:
+    marker: str
+    job: Callable[[str], str | None]
+    item: Callable[[str, list, str], JobItem | None]
+
+
+def read(digest, msg, record):
+    rs, html = html_runs(msg)
+    if digest.marker not in html:
+        return []
+    sent = sent_at(msg) or record["fetched_at"]
+    out = [it for job, lines in cards(rs, digest.job).items() if (it := digest.item(job, lines, sent))]
+    if not out:
+        raise ValueError(f"a {(record.get('meta') or {}).get('site')} job-alert digest with no jobs we can read")
+    return out
+
+
+INDEED_LINK = re.compile(r"^https://www\.indeed\.com/(?:rc|pagead)/clk/")
+INDEED_JK = re.compile(r"[?&]jk=([0-9a-f]{16})(?![0-9a-f])")
+INDEED_JK_ONLY = re.compile(r"[0-9a-f]{16}")
+AGE = re.compile(r"^(?:just posted|today|(\d+)\+? (day|hour)s? ago)$", re.I)
+STEP = {"day": timedelta(days=1), "hour": timedelta(hours=1)}
+PAY = re.compile(r"^(?:from |up to )?\$\d", re.I)
+
+
+def _indeed_job(href):
+    if not INDEED_LINK.match(href):
+        return None
+    m = INDEED_JK.search(href)
+    return m.group(1) if m else href
+
+
+def posted_from_age(sent, age):
+    m = AGE.match(age or "")
+    if not m:
+        return None
+    n, unit = m.groups()
+    at = datetime.fromisoformat(sent.replace("Z", "+00:00"))
+    return (at - int(n) * STEP[unit] if unit else at).strftime(ISO)
+
+
+def _indeed_item(job, lines, sent):
+    if len(lines) < 3:
+        return None
+    title, company, place, *rest = lines
+    jk = job if INDEED_JK_ONLY.fullmatch(job) else None
+    fk = fuzzy_key(company, title)
+    if not (jk or fk):
+        return None
+    pay = next((x for x in rest if PAY.match(x)), None)
+    return JobItem(item_key=f"indeed:{jk or fk[3:]}", title=title, company=company, locations=(place,),
+                   url=f"https://www.indeed.com/viewjob?jk={jk}" if jk else "",
+                   published_at=posted_from_age(sent, next((x for x in rest if AGE.match(x)), None)),
+                   extra={"via": "Indeed", **({"pay_hint": pay} if pay else {})})
+
+
+LINKEDIN_LINK = re.compile(r"^https://www\.linkedin\.com/comm/jobs/view/(\d+)")
+WORKPLACE = re.compile(r"\s*\((On-site|Hybrid|Remote)\)$")
+REMOTE = {"On-site": False, "Hybrid": False, "Remote": True}
+
+
+def _linkedin_job(href):
+    m = LINKEDIN_LINK.match(href)
+    return m.group(1) if m else None
+
+
+def _linkedin_item(job, lines, sent):
+    if len(lines) < 2:
+        return None
+    title, where = lines[0], lines[1]
+    company, sep, place = where.rpartition(" · ")
+    if not sep:
+        company, place = place, ""
+    m = WORKPLACE.search(place)
+    place = place[:m.start()] if m else place
+    return JobItem(item_key=f"linkedin:{job}", title=title, company=company, locations=(place,) if place else (),
+                   url=f"https://www.linkedin.com/jobs/view/{job}/", remote=REMOTE[m.group(1)] if m else None,
+                   extra={"via": "LinkedIn"})
+
+
+PARSERS = {"indeed": Digest("utm_campaign=job_alerts", _indeed_job, _indeed_item),
+           "linkedin": Digest("email_job_alert_digest", _linkedin_job, _linkedin_item)}
 
 
 class AlertInbox(Adapter):
@@ -121,11 +253,10 @@ class AlertInbox(Adapter):
         if not raw.ok(record):
             return []
         site = (record.get("meta") or {}).get("site")
-        parser = PARSERS.get(site)
-        if not parser:
+        digest = PARSERS.get(site)
+        if not digest:
             return []
-        msg = email.message_from_bytes(raw.body(record), policy=email.policy.default)
-        return parser(msg, record, source)
+        return read(digest, email.message_from_bytes(raw.body(record), policy=email.policy.default), record)
 
 
 ADAPTERS = [AlertInbox()]

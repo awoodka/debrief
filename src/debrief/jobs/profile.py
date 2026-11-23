@@ -43,7 +43,7 @@ class Issue:
     line: str
 
 
-CROSS_RULES = ("type_twice", "title_excluded", "company_twice", "company_blocked", "top_n_over", "nowhere")
+CROSS_RULES = ("type_twice", "title_excluded", "company_twice", "company_blocked", "top_n_over", "nowhere", "nearby_unknown")
 
 
 def _schema_issue(e):
@@ -86,19 +86,31 @@ def issues(doc):
     r = doc["ranking"]
     if r["top_n"] > r["max_candidates"]:
         out.append(Issue(("ranking", "top_n"), "top_n_over", r["max_candidates"], r["top_n"],
-                         f"ranking: top_n ({r['top_n']}) is more than max_candidates ({r['max_candidates']}), so it can't be filled"))
-    if not doc["filters"]["locations"]["remote_us"] and not doc["filters"]["locations"]["places"]:
+                         f"ranking: top_n ({r['top_n']}) is more than max_candidates ({r['max_candidates']}), so no night could list that many"))
+    loc = doc["filters"]["locations"]
+    if not loc["remote_us"] and not loc["places"] and not loc.get("other_us"):
         out.append(Issue(("filters", "locations", "remote_us"), "nowhere", None, None,
                          "filters/locations: no remote and no places, so every job would be filtered out"))
+    for name in r.get("nearby", []):
+        if name not in doc["filters"]["locations"]["places"]:
+            out.append(Issue(("ranking", "nearby"), "nearby_unknown", None, name,
+                             f"ranking/nearby: {name!r} is not an area in filters/locations/places"))
     return out
 
 
 COMPANY_KINDS = tuple(json.loads(SCHEMA.read_text())["properties"]["companies"]["items"]["properties"]["kind"]["enum"])
 KIND_BEFORE_REVISION_8 = "startup"
+RANKING_DEFAULTS = {k: v["default"] for k, v in json.loads(SCHEMA.read_text())["properties"]["ranking"]["properties"].items()
+                    if "default" in v}
 
 
 def company_kind(company):
     return company.get("kind") or KIND_BEFORE_REVISION_8
+
+
+def ranking(doc):
+    """The profile's ranking settings, with the schema's default for each one it leaves out."""
+    return {**RANKING_DEFAULTS, **doc["ranking"]}
 
 
 def problems(doc):

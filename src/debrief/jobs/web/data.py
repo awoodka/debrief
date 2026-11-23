@@ -1,8 +1,5 @@
 """What the jobs site shows (docs/jobs/PLAN.md, M4), read from the jobs database and data folder.
 Everything here only reads; the one write the site makes, the Tracked mark, is store.set_tracked.
-
-The lists come from the same place as `jobs today`: each list's rows in daily_list, and the run
-report (runs.report) that holds its entries and the jobs kept but not shown.
 """
 import json
 from collections import Counter
@@ -13,8 +10,6 @@ from ...store import raw
 from .. import profile as profiles, rank, score
 from ..coverage import summary_line
 from . import profile_form as pf
-
-LIST_STAGES = ("beyond N", "company limit")
 
 
 def safe_url(u):
@@ -46,7 +41,7 @@ def card(store, prof, e, tracked):
             "company": e.get("company") or p.get("company") or "",
             "places": list(e.get("locations") or p.get("locations") or [])[:3],
             "pay": score.pay_line(d.get("pay")), "posted": rank._day(when) if when else "",
-            "why": e.get("why"), "mismatches": list(e.get("mismatches") or []),
+            "why": e.get("why"), "notes": rank.score_notes(e), "mismatches": list(e.get("mismatches") or []),
             "no_description": bool(p) and not store.texts_for(e["posting_id"]),
             "url": safe_url(e.get("url") or p.get("url")),
             "also": [{"title": o.get("title") or "another listing", "url": safe_url(o.get("url"))}
@@ -54,11 +49,6 @@ def card(store, prof, e, tracked):
             "more": e.get("more") or 0, "new": e.get("new", True),
             "tracked": e["posting_id"] in tracked, "closed": bool(p.get("closed_at") or d.get("gone")),
             "reason": e.get("reason") if e.get("stage") else None}
-
-
-def list_dates(store):
-    return [r[0] for r in store.q(f"SELECT DISTINCT list_date FROM daily_list WHERE section IN ({_marks(rank.DAILY)})"
-                                  " ORDER BY list_date DESC", rank.DAILY)]
 
 
 def catchup_lists(store):
@@ -75,27 +65,24 @@ def _marks(xs):
 
 
 def daily_view(store, prof, list_date=None):
-    dates = list_dates(store)
+    dates = store.list_dates()
     list_date = list_date if list_date in dates else (dates[0] if dates else None)
     from ...site.page import fmt_date
     view = {"date": list_date, "day": fmt_date(list_date) if list_date else "", "dates": dates, "sections": [],
-            "beyond": [], "header": None, "coverage": summary_line(store, list_date) if list_date else None}
+            "below": [], "below_title": rank.BELOW, "header": None,
+            "coverage": summary_line(store, list_date) if list_date else None}
     if not list_date:
         return view
-    row = store.one(f"SELECT run_id FROM daily_list WHERE list_date=? AND section IN ({_marks(rank.DAILY)}) LIMIT 1",
-                    (list_date, *rank.DAILY))
-    report = _report(store, row[0] if row else None)
+    report = store.list_report(list_date)
     tracked = store.tracked()
     entries = report.get("list") or {}
-    for key, title in (("new", "New"), ("watchlist", "Watchlist")):
+    for key, title in rank.SECTIONS:
         cards = [card(store, prof, e, tracked) for e in entries.get(key) or []]
         if cards:
-            view["sections"].append({"key": key, "title": title, "cards": cards})
-    view["beyond"] = [card(store, prof, c, tracked) for c in report.get("cuts") or [] if c.get("stage") in LIST_STAGES]
-    shown = entries.get("new") or []
-    fresh = sum(1 for e in shown if e.get("new", True))
-    view["header"] = {"shown": len(shown), "kept": report.get("kept_distinct", report.get("kept")), "new": fresh,
-                      "carried": len(shown) - fresh, "version": (report.get("profile") or {}).get("version"),
+            view["sections"].append({"key": key, "title": title, "cards": cards,
+                                     "note": rank.NOTES.get(key)})
+    view["below"] = [card(store, prof, c, tracked) for c in rank.below(report)]
+    view["header"] = {"counts": rank.header(report), "version": (report.get("profile") or {}).get("version"),
                       "status": report.get("status")}
     return view
 
@@ -157,7 +144,7 @@ def coverage_view(cfg, store, today=None):
     for s in (col or {}).get("sources") or []:
         c = s.get("counts") or {}
         sources.append({"id": s["id"], "status": s.get("status"), "requests": s.get("requests"), "items": c.get("items"),
-                        "new": c.get("postings_new"), "exception": s.get("robots_exception"),
+                        "new": c.get("postings_new"), "blocked": s.get("blocked") or [],
                         "error": (s.get("errors") or [None])[0]})
     sites, d0 = Counter(), today or date.today()
     for back in range(7):

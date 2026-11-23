@@ -22,6 +22,7 @@ WORKDAY_PAGE = 20
 # so reading 2,000 jobs of such a board isn't reading all of it.
 WORKDAY_MAX_TOTAL = 2000
 SMARTRECRUITERS_PAGE = 100
+PAGE_SIZE = {"workday": WORKDAY_PAGE, "smartrecruiters": SMARTRECRUITERS_PAGE}
 
 
 def key(system, board_id):
@@ -67,7 +68,7 @@ def list_request(board, page=0, full=False):
 def pages_needed(system, total):
     if total is None:
         return 1
-    size = {"workday": WORKDAY_PAGE, "smartrecruiters": SMARTRECRUITERS_PAGE}.get(system)
+    size = PAGE_SIZE.get(system)
     return max(1, -(-int(total) // size)) if size else 1
 
 
@@ -194,9 +195,12 @@ def parse_list(system, data):
         for j in rows:
             loc = _loc((j.get("location") or {}).get("city"), (j.get("location") or {}).get("region"),
                        (j.get("location") or {}).get("country"))
+            company = (j.get("company") or {}).get("identifier")
             jobs.append({"id": j.get("id"), "title": j.get("name"), "published": when(j.get("releasedDate")),
-                         "location": loc, "locations": [loc] if loc else [], "url": None, "text": None, "pay": None,
-                         "remote": (j.get("location") or {}).get("remote")})
+                         "location": loc, "locations": [loc] if loc else [],
+                         "url": f"https://jobs.smartrecruiters.com/{company}/{j['id']}" if company and j.get("id") else None,
+                         "text": None, "pay": None, "remote": (j.get("location") or {}).get("remote"),
+                         "employment": (j.get("typeOfEmployment") or {}).get("label")})
     elif system == "recruitee":
         jobs = []
         for j in _rows(data, "offers"):

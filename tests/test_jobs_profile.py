@@ -55,8 +55,10 @@ def test_kind_and_resume():
     ({"position_types": [{"name": "A", "titles": ["x"]}, {"name": "a", "titles": ["y"]}]}, "appears twice"),
     ({"companies": [{"name": "Acme"}, {"name": "acme"}]}, "listed twice"),
     ({"filters__blocklist": ["Acme"]}, "also on filters/blocklist"),
-    ({"ranking__top_n": 200}, "can't be filled"),
+    ({"ranking__top_n": 200}, "no night could list that many"),
     ({"filters__locations": {"remote_us": False, "places": {}}}, "every job would be filtered out"),
+    ({"ranking__nearby": ["NYC", "Mars"]}, "'Mars' is not an area in filters/locations/places"),
+    ({"ranking__nearby_min": 0}, "ranking/nearby_min"),
 ])
 def test_problems_are_reported(changes, needle):
     assert any(needle in p for p in profile.problems(doc(**changes)))
@@ -81,7 +83,7 @@ def _without(*keys):
     (doc(position_types=[{"name": "A", "titles": ["x"]}, {"name": "a", "titles": ["y"]}]), ["position_types: 'a' appears twice"]),
     (doc(companies=[{"name": "Acme"}, {"name": "acme"}]), ["companies: 'acme' is listed twice"]),
     (doc(filters__blocklist=["Acme"]), ["companies: 'Acme' is also on filters/blocklist"]),
-    (doc(ranking__top_n=200), ["ranking: top_n (200) is more than max_candidates (150), so it can't be filled"]),
+    (doc(ranking__top_n=200), ["ranking: top_n (200) is more than max_candidates (150), so no night could list that many"]),
     (doc(filters__locations={"remote_us": False, "places": {}}), ["filters/locations: no remote and no places, so every job would be filtered out"]),
     (_without("ranking", "wants"), ["(top): 'wants' is a required property", "(top): 'ranking' is a required property"]),
     (doc(filters__max_age_days=0, ranking={"threshold": 400, "max_candidates": 1, "top_n": 1, "fresh_bonus": {"x": 9}}),
@@ -152,3 +154,15 @@ def test_a_title_may_contain_an_excluded_word():
     # 'member of technical staff' is matched whole; 'staff' only excludes what's left over (M2's filter).
     d = doc(position_types=[{"name": "Research", "titles": ["member of technical staff"]}], filters__exclude_titles=["staff"])
     assert profile.problems(d) == []
+
+
+def test_other_us_places_are_off_and_ranked_two_lower_unless_the_profile_says_otherwise():
+    d = doc()
+    assert profile.ranking(d)["other_us_penalty"] == 2 and "other_us_penalty" not in d["ranking"]
+    assert profile.ranking(doc(ranking__other_us_penalty=0))["other_us_penalty"] == 0
+    assert any(p.startswith("ranking/other_us_penalty") for p in profile.problems(doc(ranking__other_us_penalty=-1)))
+    assert any(p.startswith("filters/locations/other_us") for p in profile.problems(doc(filters__locations__other_us="yes")))
+
+
+def test_other_us_places_alone_are_somewhere_to_work():
+    assert profile.problems(doc(filters__locations={"remote_us": False, "places": {}, "other_us": True})) == []

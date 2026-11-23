@@ -1,19 +1,15 @@
 """The board finder: for jobs that came with no job-board id, find the same job on the company's
 own public board, so the description step can read it and the link can point at the company.
 
-Most such jobs come from the new-grad lists, whose links go to jobright.ai pages (robots.txt keeps
-ClaudeBot out of /jobs/) and go.vansh.nyc short links (robots.txt: Disallow: /), so we can't read
-the job there.
-
 fetch() picks the postings the description step would want (open, no description, past every
 filter that doesn't need one) that have no job id, and groups them by company. A company is looked
 at when it has a board in the board directory (or the posting names one) on Greenhouse, Lever,
-Ashby, Workable, Recruitee or Workday:
+Ashby, Workable, Recruitee, SmartRecruiters or Workday:
   - Greenhouse, Lever, Ashby, Workable, Recruitee: the board's list, one request per board;
+  - SmartRecruiters: the list's first page (100 jobs), one request per board;
   - Workday: a search with the job's title, one request per job and board (the lists are long and
     paged);
-  - SmartRecruiters never (robots.txt allows only LinkedInBot), nor the companies in the source's
-    exclude_companies (Amazon, Google, Meta: each OFF for its own reason in sources.yml).
+  - never the companies in the source's exclude_companies (Amazon, Google, Meta: none has a board).
 A company's boards are asked again only for postings first seen after their last answer, or once
 retry_days have passed; a board that answered 403/404/410/422 rests for dead_days. Both come from the
 fetches table, as the description step's refusals do. max_requests caps a night.
@@ -41,7 +37,7 @@ from .. import boards, filters
 from ..items import JobItem, company_norm, core_title, early_career, locations_overlap, title_norm
 from . import Adapter
 
-LIST_SYSTEMS = ("greenhouse", "lever", "ashby", "workable", "recruitee")
+LIST_SYSTEMS = ("greenhouse", "lever", "ashby", "workable", "recruitee", "smartrecruiters")
 SEARCH_SYSTEMS = ("workday",)
 DEAD = (403, 404, 410, 422)      # 422: a Workday site that no longer exists on that host (Salesforce moved wd1 -> wd12)
 _SEVERAL = re.compile(r"^\d+\s+locations?$", re.I)      # Workday's "2 Locations": places unknown, not a city

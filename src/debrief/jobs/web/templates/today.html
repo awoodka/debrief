@@ -2,7 +2,7 @@
 {% block title %}Jobs · {{ view.day or 'Today' }}{% endblock %}
 {% block body %}
 <h1>{{ view.day or 'No list yet' }}</h1>
-{% if view.header %}<p class="sub">{{ view.header.shown }} shown of {{ view.header.kept }} kept · {{ view.header.new }} new tonight, {{ view.header.carried }} carried over · profile v{{ view.header.version }} · {{ view.header.status }}</p>{% endif %}
+{% if view.header %}<p class="sub">{{ view.header.counts }} · profile v{{ view.header.version }} · {{ view.header.status }}</p>{% endif %}
 {% if view.coverage %}<p class="sub">{{ view.coverage }}</p>{% endif %}
 {% if view.dates|length > 1 %}
 <form class="row" method="get" action="/">
@@ -12,14 +12,15 @@
 {% endif %}
 {% for s in view.sections %}
 <h2>{{ s.title }} ({{ s.cards|length }})</h2>
+{% if s.note %}<p class="sub">{{ s.note }}</p>{% endif %}
 {% for c in s.cards %}{{ card(c, back) }}{% endfor %}
 {% else %}
-<p class="empty">Nothing on this list.</p>
+<p class="empty">Nothing new on this list.</p>
 {% endfor %}
-{% if view.beyond %}
+{% if view.below %}
 <details>
-  <summary>Also kept, still options for later days ({{ view.beyond|length }})</summary>
-  {% for c in view.beyond %}{{ card(c, back) }}{% endfor %}
+  <summary>{{ view.below_title }} ({{ view.below|length }})</summary>
+  {% for c in view.below %}{{ card(c, back) }}{% endfor %}
 </details>
 {% endif %}
 {% endblock %}

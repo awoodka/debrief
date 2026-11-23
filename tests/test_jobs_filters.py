@@ -63,6 +63,10 @@ def test_title(title, expected):
     (["Remote - Cleveland, OH"], "ok"),
     (["Remote in Canada"], "place"),
     (["Remote (US or Canada)"], "ok"),
+    (["Tokyo", "Remote"], "place"),
+    (["Remote", "London, UK"], "place"),
+    (["Remote", "Atlanta, GA"], "ok"),
+    (["Remote", "3 Locations"], "ok"),
     (["London, England, United Kingdom"], "place"),
     ([], "ok"),                                            # unknown: the model sees it
 ])
@@ -157,6 +161,34 @@ def test_years():
     assert filters.min_years("5+ years of experience preferred") is None
     assert filters.min_years("Requirements: 3+ years of experience. Preferred: 5+ years of experience in Go") == 3
     assert filters.min_years("Preferred: Go. Requirements: 4+ years of experience") == 4
+    assert filters.min_years("Minimum of one year of professional software development experience.") == 1
+    assert filters.min_years("Requirements One (1) year of experience in the job offered") == 1
+    assert filters.min_years("ONE (1) or more years of experience developing data analytics solutions") == 1
+    assert filters.min_years("Degree and typically 4 or more years of relevant professional experience.") == 4
+    assert filters.min_years("Recent graduate with up to ~1 year of experience.") is None
+    assert filters.min_years("Bachelor's degree OR Associate's degree and two (2) years of relevant experience") is None
+
+
+@pytest.mark.parametrize("text,years", [
+    ("Bachelor's degree OR 2+ years of professional experience building software in lieu of a degree", None),
+    ("4 years of software engineering experience may be substituted for the degree.", None),
+    ("Bachelor's degree and 1+ year of experience with embedded development or 4+ years of experience with "
+     "embedded development in lieu of a degree", 1),
+    ("1+ years of software development experience (internship and/or project experience is acceptable)", None),
+    ("1–3 years of experience — or equivalent academic, project, or internship work", None),
+    ("2-12+ years of industry software engineering experience (does not include internships or co-ops)", 2),
+    ("3-10 years of full-time experience exclusive of internships in Data Analyst roles", 3),
+    ("0–2 years of professional experience (or equivalent internship/academic project experience). "
+     "2+ years of professional experience with Go.", 2),
+    ("Minimum 5 years of experience in software engineering, plus a BS from an accredited school", 5),
+    ("3+ years of experience in an academic or industry setting", 3),
+    ("4 years of experience in software engineering (Internship experience does not apply)", 4),
+    ("1-3 years of experience in software engineering (internships included)", None),
+    ("1+ years of experience with software development, application support, internships, academic projects, or "
+     "technical work", None),
+])
+def test_years_a_degree_or_school_can_stand_in_for_dont_count(text, years):
+    assert filters.min_years(text) == years
     assert stage(text="We need 3+ years of relevant work experience.") == "years"
     assert stage(text="1+ year of experience with Python.") == "ok"
     assert stage() == "ok"                                 # no text: not checked
@@ -192,6 +224,28 @@ def test_a_list_alone_cuts_a_title_only_job_and_says_so():
     assert (v.ok, v.stage, v.reason) == (False, "level", "nothing says it's for new grads (title only)")
 
 
+def test_a_trusted_list_alone_passes_a_title_only_job_but_never_a_level_two_title():
+    p = copy.deepcopy(PROFILE)
+    p["filters"]["new_grad_only"] = True
+    v = filters.check(job(title="Software Engineer, Platform"), p, NOW, listed_early=True, listed_trusted=True)
+    assert v.ok and v.facts["new_grad_sign"] == "a trusted new-grad list"
+    v = filters.check(job(title="Software Engineer II"), p, NOW, listed_early=True, listed_trusted=True)
+    assert (v.ok, v.stage) == (False, "level")
+
+
+def test_a_read_description_asking_no_years_is_a_sign_only_when_switched_on():
+    p = copy.deepcopy(PROFILE)
+    p["filters"]["new_grad_only"] = True
+    def lv(title="Software Engineer", text="Build our platform in Python.", **kw):
+        v = filters.check(job(title=title), p, NOW, text=text, **kw)
+        return v.facts.get("new_grad_sign") if v.ok else v.stage
+    assert lv() == "level"
+    assert lv(no_years=True) == "the description asks for no years of experience"
+    assert lv(text="1+ years of professional software experience.", no_years=True) == "level"
+    assert lv(text=None, no_years=True) == "level"
+    assert lv("Software Engineer II", no_years=True) == "level"
+
+
 @pytest.mark.parametrize("title,new_grad", [
     ("Software Engineer I - Engagement Growth", True),
     ("Software Engineer 1 - Cloud Infrastructure", True),
@@ -220,6 +274,60 @@ def test_a_level_one_anywhere_in_the_title_is_new_grad(title, new_grad):
     assert (v.facts.get("new_grad_sign") if v.ok else v.stage) == ("title" if new_grad else "level")
 
 
+@pytest.mark.parametrize("title,verdict", [
+    ("Software Engineer II", "level"),
+    ("Software Dev Engineer II", "level"),
+    ("Software Engineer II - Reliability", "level"),
+    ("Associate Software Engineer III", "level"),
+    ("Software Engineer (Level 3/4)", "level"),
+    ("Software Engineer I/II", "title"),
+    ("Web Developer 1 or 2", "title"),
+    ("Software Engineer 2 – Early Career", "title"),
+    ("Graduate Software Engineer 2", "title"),
+    ("Software Dev Engineer I - AMZ10587268.2", "title"),
+    ("Software Dev Engineer II - AMZ27610.1", "level"),
+    ("Machine Learning Engineer 4 (IC)", "level"),
+    ("Machine Learning Engineer, Level 5", "level"),
+    ("AVP, Backend Software Engineer", "level"),
+])
+def test_a_title_naming_level_two_or_more_fails_level_whatever_else_says_new_grad(title, verdict):
+    p = copy.deepcopy(PROFILE)
+    p["filters"]["new_grad_only"] = True
+    p["position_types"] += [{"name": "Other", "titles": ["engineer", "developer"]}]
+    v = filters.check(job(title=title, levels=["Entry Level"]), p, NOW, text="We welcome new grads.", listed_early=True)
+    assert (v.facts.get("new_grad_sign") if v.ok else v.stage) == verdict
+    if verdict == "level":
+        assert v.reason.startswith("the title names level ") and v.reason.endswith(", above entry")
+    assert filters.title_level(title) == (verdict == "title")
+
+
+@pytest.mark.parametrize("title,vetoed", [
+    ("Software Engineer - Python 3", False),
+    ("Software Engineer, Backend (Node 2)", False),
+    ("Software Engineer - Team 2", False),
+    ("Data Analyst, Product 3", False),
+    ("Software Engineer 2", True),
+    ("SDE III", True),
+    ("Software Engineer, Level 2", True),
+    ("Software Engineer Data & AI II", True),
+    ("Software Engineer - 5G Core", False),
+    ("Software Engineer (L2)", False),                     # company L-numbers differ: Google's entry level is L3
+])
+def test_a_level_number_counts_right_after_the_role_word_or_level(title, vetoed):
+    p = copy.deepcopy(PROFILE)
+    p["filters"]["new_grad_only"] = True
+    p["position_types"] += [{"name": "Other", "titles": ["engineer", "analyst", "sde"]}]
+    v = filters.check(job(title=title, levels=["Entry Level"]), p, NOW)
+    assert (v.ok, v.stage) == ((False, "level") if vetoed else (True, ""))
+
+
+def test_a_list_of_place_counts_is_an_unknown_place():
+    assert stage(locations=["3 Locations"]) == "ok"
+    assert stage(locations=["14 Locations", "2 Locations"]) == "ok"
+    assert filters.place_fit(["3 Locations"], PROFILE) == ("unknown", None)
+    assert stage(locations=["3 Locations", "London, UK"]) == "place"
+
+
 def test_facts():
     v = filters.check(job(title="Software Engineer", locations=["SF"], pay={"summary": "$150k/yr"}), PROFILE, NOW)
     assert v.ok and v.facts["position_type"] == "SWE" and v.facts["area"] == "SF" and v.facts["hourly_top"] == 72.12
@@ -245,6 +353,54 @@ def test_a_foreign_namesake_never_matches_a_us_town():
     assert filters.place_fit(["Vienna, Austria"], prof)[0] is None
     assert filters.place_fit(["Hanover, Germany"], prof)[0] is None
     assert filters.place_fit(["Hanover, United States"], prof)[0] == "DC"      # no state given: the name decides
+
+
+def test_areas_names_every_profile_area_a_job_is_in():
+    prof = {"filters": {"locations": {"places": {"DC": ["Washington, DC", "Reston, VA"], "NYC": ["New York, NY"]}}}}
+    assert filters.areas(["Seattle, WA; Reston, VA"], prof) == {"DC"}
+    assert filters.areas(["New York, NY", "Washington DC-Baltimore Area"], prof) == {"DC", "NYC"}
+    assert filters.areas(["Reston, VA, United States"], prof) == {"DC"}
+    assert filters.areas(["Remote, US"], prof) == filters.areas(["Vienna, Austria"], prof) == filters.areas([], prof) == set()
+
+
+OTHER_US = copy.deepcopy(PROFILE)
+OTHER_US["filters"]["locations"]["other_us"] = True
+
+
+@pytest.mark.parametrize("locations,area,outside", [
+    (["Atlanta, GA"], "other US", ["Atlanta, GA"]),
+    (["Hybrid - Austin, TX"], "other US", ["Hybrid - Austin, TX"]),
+    (["Atlanta, GA, United States", "London, UK"], "other US", ["Atlanta, GA, United States"]),
+    (["Atlanta, GA", "New York, NY"], "NYC", None),
+    (["Atlanta, GA", "Remote in USA"], "remote (US)", None),
+    (["London, UK"], None, None),
+    (["Perth, WA, Australia"], None, None),
+    (["Vienna, Austria"], None, None),
+    (["Remote - Canada"], None, None),
+    (["Tokyo", "Remote"], None, None),
+    ([], "unknown", None),
+    (["3 Locations"], "unknown", None),
+])
+def test_other_us_keeps_a_us_job_outside_the_areas_and_names_its_places(locations, area, outside):
+    v = filters.check(job(locations=locations), OTHER_US, NOW)
+    assert (v.facts.get("area") if v.ok else None, v.facts.get("outside")) == (area, outside)
+    assert v.ok or v.stage == "place"
+
+
+def test_without_other_us_a_us_job_outside_the_areas_is_cut_as_before():
+    assert stage(locations=["Atlanta, GA"]) == "place"
+    off = copy.deepcopy(OTHER_US)
+    off["filters"]["locations"]["other_us"] = False
+    assert filters.check(job(locations=["Atlanta, GA"]), off, NOW).stage == "place"
+
+
+def test_other_us_never_overrides_the_board_or_a_remote_ban():
+    assert filters.check(job(locations=["Atlanta, GA"], board_country="United Kingdom"), OTHER_US, NOW).stage == "place"
+    no_remote = copy.deepcopy(OTHER_US)
+    no_remote["filters"]["locations"]["remote_us"] = False
+    assert filters.check(job(locations=["Remote (US)"]), no_remote, NOW).stage == "place"
+    assert filters.check(job(locations=["Remote - Cleveland, OH"]), no_remote, NOW).stage == "place"
+    assert filters.check(job(locations=["Cleveland, OH"]), no_remote, NOW).facts["area"] == "other US"
 
 
 def test_skip_age():
@@ -291,3 +447,27 @@ def test_the_board_country_outranks_a_list(data, expected):
     assert (v.stage if not v.ok else "ok") == expected
     if expected == "place":
         assert v.reason == "its own job board places it in United Kingdom"
+
+
+def test_a_read_startup_role_asking_no_more_years_than_allowed_passes_the_level_check():
+    p = copy.deepcopy(PROFILE)
+    p["filters"]["new_grad_only"] = True
+    def lv(text="Build our agent platform in Python.", startup=True):
+        v = filters.check(job(title="Software Engineer"), p, NOW, text=text, startup=startup)
+        return v.facts.get("new_grad_sign") if v.ok else v.stage
+    assert lv() == "a startup role asking for no years of experience"
+    assert lv(text="1+ years of experience with Python.") == "a startup role asking for 1 year of experience"
+    assert lv(text="2+ years of experience with Python.") == "a startup role asking for 2 years of experience"
+    assert lv(text="3+ years of professional software experience.") == "level"
+    assert lv(text=None) == "level"
+    assert lv(startup=False) == "level"
+
+
+def test_small_company_reads_the_size_labels_sources_give():
+    assert filters.small_company("11-50 people, series a")
+    assert filters.small_company("25 people, YC W24")
+    assert filters.small_company("201-1,000 people")
+    assert not filters.small_company("1,001-5,000 people")
+    assert not filters.small_company("5,001+ people, public")
+    assert not filters.small_company("series b")
+    assert not filters.small_company(None)

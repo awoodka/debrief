@@ -65,7 +65,9 @@
           "properties": {
             "remote_us": {"type": "boolean"},
             "places": {"type": "object", "minProperties": 0, "additionalProperties": {"$ref": "#/$defs/words", "minItems": 1},
-                       "description": "{area name: [place names a job's location may contain]}"}
+                       "description": "{area name: [place names a job's location may contain]}"},
+            "other_us": {"type": "boolean", "default": false,
+                         "description": "also keep jobs placed in the US outside every area (and not remote), ranked ranking/other_us_penalty lower (missing: false, such jobs are dropped)"}
           }
         },
         "max_years": {"type": "integer", "minimum": 0, "maximum": 30,
@@ -90,12 +92,24 @@
       "properties": {
         "threshold": {"type": "integer", "minimum": 0, "maximum": 100, "description": "pre-score points needed to reach the scoring call"},
         "max_candidates": {"type": "integer", "minimum": 1, "maximum": 500, "description": "most jobs sent to the scoring call in a night"},
-        "top_n": {"type": "integer", "minimum": 1, "maximum": 500, "description": "jobs shown on the day's list"},
+        "top_n": {"type": "integer", "minimum": 1, "maximum": 500, "description": "most jobs on the day's list, and separately in its nearby section; it lists only tonight's new jobs, so a thin night lists fewer"},
+        "min_score": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5,
+                      "description": "the model's score a new job needs to make the day's list; a lower one goes to the collapsed list below it (missing: the default)"},
+        "fresh_days": {"type": "integer", "minimum": 1, "maximum": 30, "default": 2,
+                       "description": "a job found tonight makes the day's list only if posted within this many days (a job with no posted date counts from when it was found); an older one goes to the collapsed list (missing: the default)"},
         "per_company": {"type": "integer", "minimum": 1, "maximum": 500,
-                        "description": "most jobs from one company on the day's list; the rest are counted under its last one (missing: no limit)"},
+                        "description": "most jobs from one company on the day's list; the rest are counted under its last one (missing: no limit). Name variants such as 'Bask' and 'Bask Health' count as one company"},
+        "repeat_days": {"type": "integer", "minimum": 0, "maximum": 30, "default": 0,
+                        "description": "a company on the day's list in this many earlier nights waits in the collapsed list unless its job scores 7 or more; 0 lets it be listed every night (missing: the default)"},
+        "nearby": {"$ref": "#/$defs/words", "default": [],
+                   "description": "names of areas in filters/locations/places: a new job in one of them that scores at least nearby_min but under min_score is shown in a nearby section after the day's list, as worth an early application, instead of in the collapsed list. per_company counts the list and this section together (missing: none)"},
+        "nearby_min": {"type": "integer", "minimum": 1, "maximum": 10, "default": 3,
+                       "description": "the model's score a new job in a nearby area needs to be shown in the nearby section (missing: the default)"},
         "fresh_bonus": {"type": "object", "additionalProperties": false,
                         "patternProperties": {"^[1-9][0-9]{0,2}$": {"type": "integer", "minimum": 0, "maximum": 5}},
-                        "description": "added to the model's score when ordering the list, by days since posting: {\"1\": 1} is +1 within a day. A date-only stamp counts whole days from the run's date, so a job dated yesterday is 1 day old (missing: no bonus)"}
+                        "description": "added to the model's score when ordering the list, by days since posting: {\"1\": 1} is +1 within a day. A date-only stamp counts whole days from the run's date, so a job dated yesterday is 1 day old (missing: no bonus)"},
+        "other_us_penalty": {"type": "integer", "minimum": 0, "maximum": 9, "default": 2,
+                             "description": "taken off the model's score of a job kept by filters/locations/other_us (in the US, outside every area) for the list's floor, sections and order; the model's own score is still shown (missing: the default)"}
       }
     }
   },

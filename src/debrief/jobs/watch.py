@@ -5,7 +5,7 @@
   2. otherwise the name is looked up in the board directory (the two company-board lists, plus
      every board the community lists and watchlist link to). Every board filed under exactly that
      name is listed once, live, and the one with the most open jobs wins; a board that's dead or
-     refused by robots.txt never does.
+     blocks us never does.
 A company with no board found is still added (board null) with a note to set a LinkedIn alert
 for it. Every change saves a new profile version.
 """
@@ -24,9 +24,6 @@ class WatchError(Exception):
 def check_board(client, board):
     """(open jobs, None) if the board answers, else (None, why)."""
     method, url, body = boards.list_request(board)
-    allowed = client.robots_allowed(url)
-    if allowed is not True:
-        return None, "robots.txt disallows it" if allowed is False else "robots.txt unreachable"
     r = client.request(method, url, json_body=body)
     if not r.ok:
         return None, r.error or f"HTTP {r.status}"

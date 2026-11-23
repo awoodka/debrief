@@ -17,7 +17,7 @@ from collections import Counter
 from datetime import datetime, timezone
 
 from . import filters, profile as profiles
-from .collect import early_sources
+from .collect import early_sources, trusted_sources
 from .store import JobsStore, state_path
 
 
@@ -42,15 +42,16 @@ def run(cfg, now=None):
     version, prof = profiles.latest(cfg)
     pid = profiles.profile_id(prof)
     store = JobsStore(state_path(cfg))
-    E = early_sources(cfg)
+    E, trusted = early_sources(cfg), trusted_sources(cfg)
     rows, c = [], Counter()
     for lab in load_labels(cfg):
         p = store.posting(lab["posting_id"])
         if p is None:
             c["unknown posting"] += 1
             continue
-        v = filters.check(p, prof, now, text=store.texts_for(p["posting_id"]),
-                          listed_early=bool(store.posting_sources(p["posting_id"]) & E))
+        srcs = store.posting_sources(p["posting_id"])
+        v = filters.check(p, prof, now, text=store.texts_for(p["posting_id"]), listed_early=bool(srcs & E),
+                          listed_trusted=bool(srcs & trusted), no_years=cfg.settings["level"]["no_years_sign"])
         a = store.score_for(p["posting_id"], pid)
         if not v.ok:
             decided, by, why = "no", f"filter: {v.stage}", v.reason

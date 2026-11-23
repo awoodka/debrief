@@ -1,9 +1,10 @@
 """`debrief jobs collect`: fetch every job source, keep the raw responses, build postings.
 
-Sources run one after another, by family: the watchlist first (a board's own data is the best
-version of a job, and a posting keeps the first company and title it's made with), then the
-community lists, the job APIs, Hacker News, and last the board directory. Within a family,
-config/jobs/sources.yml order. For each source:
+Sources run one after another, by family: the watchlist first, then the big companies' own careers
+APIs (a company's own data is the best version of a job, and a posting keeps the first company and
+title it's made with), then the community lists, the job APIs, Hacker News, and last the board
+directory. Within a family, config/jobs/sources.yml order. A host that blocks one source is skipped by
+every later one (adapters.Ctx, the site rule). For each source:
 1. The adapter fetches through the polite client; each response becomes a raw record.
 2. The records are written to the raw store (<data>/jobs/raw/) before anything parses them.
 3. In one transaction, build.apply() stores items and postings; only then are the source's ETags
@@ -28,7 +29,7 @@ from . import build, profile as profiles
 from .adapters import REGISTRY, Ctx
 from .store import JobsStore, state_path
 
-ORDER = ("watchlist", "list", "api", "discussion", "email", "universe", "detail", "check")
+ORDER = ("watchlist", "bigtech", "list", "api", "discussion", "email", "universe", "detail", "check")
 
 
 def ordered(sources):
@@ -37,9 +38,20 @@ def ordered(sources):
 
 def early_sources(cfg):
     """The community lists (family "list"): every one is a new-grad list, so all their listings are
-    early-career. Also any source with options.early (the alert inbox: every saved search uses the
-    site's Entry-level filter)."""
+    early-career. Also any source with options.early."""
     return frozenset(s.id for s in cfg.sources if s.family == "list" or (s.options or {}).get("early"))
+
+
+def startup_sources(cfg):
+    """Sources with options.startup: every job they carry is at a startup (YC companies)."""
+    return frozenset(s.id for s in cfg.sources if (s.options or {}).get("startup"))
+
+
+def trusted_sources(cfg):
+    """The new-grad lists with options.trusted_new_grad: their listing alone says a job is for new
+    grads, so a job nobody could read passes the level check on it."""
+    early = early_sources(cfg)
+    return frozenset(s.id for s in cfg.sources if s.id in early and (s.options or {}).get("trusted_new_grad"))
 
 
 def eligibility(source, store, env, now):
@@ -76,14 +88,18 @@ def classify(records, counts, crash, quiet_ok=False, tolerate=()):
     return "ok"
 
 
-def collect_source(cfg, store, client, source, run_id, run_date, now, prof, env, log):
+def collect_source(cfg, store, client, source, run_id, run_date, now, prof, env, log, blocks=None):
+    """blocks: the run's {host: Block}, shared by its sources (a fresh one when None)."""
     adapter = REGISTRY[source.adapter]
-    ctx = Ctx(client, store, env, run_id, prof, cfg.contact, cfg.settings, log, early_sources=early_sources(cfg))
+    ctx = Ctx(client, store, env, run_id, prof, cfg.contact, cfg.settings, log, early_sources=early_sources(cfg),
+              run_date=run_date, blocks=blocks)
     crash = None
     try:
         adapter.fetch(ctx, source)
     except Exception as e:  # noqa: BLE001 — one broken source never sinks the run
         crash = f"fetch crashed: {type(e).__name__}: {e}"[:300]
+    for host, n in sorted(ctx.skipped.items()):
+        ctx.warn(f"{n} request{'s' * (n != 1)} to {host} not made: it blocked us ({ctx.blocks[host].why}) earlier this run")
     refs = raw.write(cfg.data_dir, run_date, source.id, run_id, ctx.records) if ctx.records else []
     counts = Counter()
     stamp = now.isoformat(timespec="seconds")
@@ -101,15 +117,17 @@ def collect_source(cfg, store, client, source, run_id, run_date, now, prof, env,
                     if url not in unread:
                         store.save_validators(url, etag, last_modified, stamp)
             errors = ([crash] if crash else []) + [f"{r['url']}: {r.get('error') or r.get('status')}" for r in ctx.records
-                                                    if _failed(r, adapter.tolerate)]
+                                                    if _failed(r, adapter.tolerate) and r["seq"] not in ctx.not_made]
             store.save_source_state(source.id, run_id, status, "; ".join(errors)[:500] or None, stamp)
     except Exception as e:  # noqa: BLE001 — a build crash rolls back this source only
         status, errors = "failed", [f"build crashed: {type(e).__name__}: {e}"[:300]]
         store.save_source_state(source.id, run_id, status, errors[0], stamp)
-    out = {"id": source.id, "status": status, "requests": len(ctx.records), "counts": dict(counts),
+    out = {"id": source.id, "status": status, "requests": len(ctx.records) - len(ctx.not_made), "counts": dict(counts),
            "errors": errors[:10], "warnings": ctx.warnings}
-    if ctx.robots_waived:
-        out["robots_exception"] = ctx.robots_waived          # requests under Alex's keyed-API exception
+    hosts = sorted({h for h, b in ctx.blocks.items() if b.source == source.id} | set(ctx.skipped))
+    if hosts:
+        out["blocked"] = [{"host": h, "why": ctx.blocks[h].why, "by": ctx.blocks[h].source, "skipped": ctx.skipped[h]}
+                          for h in hosts]
     return out
 
 
@@ -151,6 +169,7 @@ def run(cfg, only=None, run_date=None, client=None, env=os.environ, log=print, s
     wide = widened(prof, since, started) if since and prof else prof
     if prof is None:
         log("no profile saved: the watchlist and the profile-driven searches (Adzuna, USAJobs) have nothing to do")
+    blocks = {}
     for source in ordered(cfg.sources):
         if only and source.id not in only:
             continue
@@ -160,7 +179,7 @@ def run(cfg, only=None, run_date=None, client=None, env=os.environ, log=print, s
             continue
         log(f"[{source.id}]", end=" ", flush=True)
         entry = collect_source(cfg, store, client, source, run_id, run_date, started,
-                               wide if source.family == "detail" else prof, env, log)
+                               wide if source.family == "detail" else prof, env, log, blocks=blocks)
         c = entry["counts"]
         log(f"{entry['status']}: {entry['requests']} req, {c.get('items', 0)} items, {c.get('new', 0)} new "
             f"({c.get('postings_new', 0)} new postings, {c.get('merged', 0)} merged), {c.get('closed', 0)} closed"

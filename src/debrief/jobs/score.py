@@ -80,6 +80,7 @@ def profile_view(profile):
         "interests": profile["interests"], "large_companies": listed("large"), "startups": listed("startup"),
         "wants": profile["wants"],
         "constraints": {"places": f["locations"]["places"], "remote_us_ok": f["locations"]["remote_us"],
+                        "other_us_places_ok": bool(f["locations"].get("other_us")),
                         "max_years_experience": f["max_years"], "work_authorization": f["work_authorization"],
                         "clearance": f["clearance"], "full_time_only": f["full_time_only"],
                         "new_grad_only": f["new_grad_only"]},
@@ -89,14 +90,17 @@ def profile_view(profile):
     return view
 
 
-def job_view(jid, posting, text, sources, early_sources, max_chars):
+def job_view(jid, posting, text, sources, early_sources, max_chars, years_required=None):
+    """years_required: filters.min_years of the whole description (None when it finds none)."""
     d = posting.get("data") or {}
-    origin = sorted({"a new-grad list" if s in early_sources else "the company's board" if s in ("watchlist", "board-finder")
+    origin = sorted({"a new-grad list" if s in early_sources else "the company's board" if s in ("watchlist", "yc-boards", "board-finder")
                      else "Hacker News" if s.startswith("hn-") else "a job site" for s in sources})
     out = {"id": jid, "title": sanitize.text(no_pay(posting["title"]), 200), "company": sanitize.text(posting["company"], 120),
            "locations": [sanitize.text(x, 80) for x in posting.get("locations") or []][:6],
            "posted": (posting.get("published_at") or posting.get("first_seen_at") or "")[:10], "from": origin,
-           "qualifications": qualifications(text, max_chars)}
+           "years_required": years_required, "qualifications": qualifications(text, max_chars)}
+    if d.get("company_size"):
+        out["company_size"] = sanitize.text(d["company_size"], 60)
     # Pay is never shown to the model (Alex, 2026-11-04: not a scoring factor); code alone applies
     # the minimum-pay filter.
     if d.get("employment"):

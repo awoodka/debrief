@@ -15,6 +15,7 @@ from .. import boards
 from ..items import JobItem
 from . import Adapter
 from .lists import clean_url
+from .yc import parse_title
 
 HN_ITEM = "https://news.ycombinator.com/item?id={}"
 WHERE = re.compile(r"remote|on-?site|hybrid|\b[A-Z]{2}\b|,", re.I)
@@ -83,9 +84,10 @@ class HNJobs(Adapter):
         if j.get("type") != "job" or j.get("dead") or j.get("deleted"):
             return []
         title = (j.get("title") or "").strip()
-        m = COMPANY.match(title)
+        yc, m = parse_title(title, job=True), COMPANY.match(title)
         url = clean_url(j.get("url")) or HN_ITEM.format(j["id"])
-        return [JobItem(item_key=str(j["id"]), title=title, company=(m.group(1).strip() if m else ""), url=url,
+        return [JobItem(item_key=str(j["id"]), title=(yc and yc.role) or title,
+                        company=yc.name if yc else (m.group(1).strip() if m else ""), url=url,
                         board=boards.board_from_url(url), published_at=boards.when(j.get("time")),
                         text=boards.html_text(j.get("text")), extra={"hn": HN_ITEM.format(j["id"]), "via": "HN jobs"})]
 

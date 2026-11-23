@@ -59,13 +59,14 @@ def test_early_careers_words():
     assert finder.search_text("New Grad 2027: AI/ML Engineer") == "ai ml engineer"
 
 
-def test_company_boards_skip_excluded_and_unreadable_and_fold_workday_case(tmp_path):
+def test_company_boards_skip_excluded_and_fold_workday_case(tmp_path):
     s = JobsStore(tmp_path / "j.sqlite")
     with s.transaction():
         for b in ("workday:hss|wd1|HSS_Careers", "workday:hss|wd1|hss_careers", "smartrecruiters:HSS", "greenhouse:hss"):
             s.save_directory(b, "HSS", "hss", "universe", "2026-11-01T00:00:00Z")
         s.save_directory("workable:amazon", "Amazon", "amazon", "universe", "2026-11-01T00:00:00Z")
-    assert finder.company_boards(s, {"company": "HSS", "board": None}) == ["greenhouse:hss", "workday:hss|wd1|HSS_Careers"]
+    assert finder.company_boards(s, {"company": "HSS", "board": None}) == ["greenhouse:hss", "smartrecruiters:HSS",
+                                                                         "workday:hss|wd1|HSS_Careers"]
     assert finder.company_boards(s, {"company": "Amazon", "board": None}, exclude={"amazon"}) == []
     s.close()
 
@@ -84,9 +85,6 @@ class BoardClient:
 
     def __init__(self, pages, searches=None):
         self.pages, self.searches, self.calls = pages, searches or {}, []
-
-    def robots_allowed(self, url):
-        return True
 
     def _answer(self, url, body):
         if body is None:
@@ -296,11 +294,11 @@ def test_a_known_board_beats_a_greenhouse_guess(tmp_path):
     _list(s, [it("s1", title="Software Engineer", company="Acme", url="https://acme.com/jobs?gh_jid=5",
                  job_key="job:greenhouse:5")], _iso(datetime.now(timezone.utc)), source_id="simplify-newgrad",
           snapshot="window")
-    found = describe.targets(s, json.loads(json.dumps(BASE)), datetime.now(timezone.utc))
+    found = describe.targets(s, json.loads(json.dumps(BASE)), "2026-11-04", datetime.now(timezone.utc))
     assert [(sy, b, k) for sy, b, k, _ in found] == [("greenhouse", None, "greenhouse:5")]      # to guess
     with s.transaction():
         s.save_directory("greenhouse:acme", "Acme", "acme", "universe", _iso(datetime.now(timezone.utc)))
-    found = describe.targets(s, json.loads(json.dumps(BASE)), datetime.now(timezone.utc))
+    found = describe.targets(s, json.loads(json.dumps(BASE)), "2026-11-04", datetime.now(timezone.utc))
     assert [(sy, b, k) for sy, b, k, _ in found] == [("greenhouse", "greenhouse:acme", "greenhouse:5")]
     s.close()
 

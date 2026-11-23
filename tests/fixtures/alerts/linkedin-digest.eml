@@ -1,0 +1,68 @@
+From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>
+To: alerts@example.com
+Subject: Globex Corporation is hiring: Junior Software Engineer
+Date: Thu, 12 Nov 2026 14:00:00 +0000
+Message-ID: <synthetic-linkedin-1@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b2"
+
+--b2
+Content-Type: text/plain; charset=utf-8
+
+Your job alert for software engineer in Springfield
+3 new jobs match your preferences.
+
+Junior Software Engineer
+Globex Corporation
+Springfield, IL
+View job: https://www.linkedin.com/comm/jobs/view/4000000001/?trackingId=x
+
+---------------------------------------------------------
+
+--b2
+Content-Type: text/html; charset=utf-8
+
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>LinkedIn</title><style>.text-md { font-size: 16px; }</style></head>
+<body>
+<table role="presentation"><tr><td>
+  <a href="https://www.linkedin.com/comm/feed/?lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01">Home</a>
+  <a href="https://www.linkedin.com/comm/jobs/search-results/?keywords=software%20engineer&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01">View jobs in Springfield</a>
+  <p>Your job alert for</p><p>software engineer</p><p>3 new jobs in Springfield match your preferences.</p>
+</td></tr>
+<tr><td data-test-id="job-card">
+  <a href="https://www.linkedin.com/comm/jobs/view/4000000001/?trackingId=x&amp;refId=x&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01"><img src="https://media.example.com/globex.png" alt="Globex Corporation"></a>
+  <a href="https://www.linkedin.com/comm/jobs/view/4000000001/?trackingId=x&amp;refId=x&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01"><table><tr><td>
+    <a href="https://www.linkedin.com/comm/jobs/view/4000000001/?trackingId=x&amp;refId=x&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01" class="font-bold text-md">Junior Software Engineer</a>
+  </td></tr><tr><td><p>Globex Corporation &middot; Springfield, IL (Hybrid)</p></td></tr>
+  <tr><td><p class="job-card-flavor__detail">This company is actively hiring</p></td></tr></table></a>
+</td></tr>
+<tr><td data-test-id="job-card">
+  <a href="https://www.linkedin.com/comm/jobs/view/4000000002/?trackingId=x&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01"><img src="https://media.example.com/initech.png" alt="Initech"></a>
+  <a href="https://www.linkedin.com/comm/jobs/view/4000000002/?trackingId=x&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01"><table><tr><td>
+    <a href="https://www.linkedin.com/comm/jobs/view/4000000002/?trackingId=x&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01" class="font-bold text-md">New Grad Software Engineer</a>
+  </td></tr><tr><td><p>Initech &middot; United States (Remote)</p></td></tr></table></a>
+</td></tr>
+<tr><td data-test-id="job-card">
+  <a href="https://www.linkedin.com/comm/jobs/view/4000000003/?trackingId=x&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01"><img src="https://media.example.com/hooli.png" alt="Hooli"></a>
+  <a href="https://www.linkedin.com/comm/jobs/view/4000000003/?trackingId=x&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01"><table><tr><td>
+    <a href="https://www.linkedin.com/comm/jobs/view/4000000003/?trackingId=x&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01" class="font-bold text-md">Software Engineer, Early Career</a>
+  </td></tr><tr><td><p>Hooli &middot; Shelbyville, IL</p></td></tr>
+  <tr><td><p class="job-card-flavor__detail">2 school alumni</p></td></tr></table></a>
+</td></tr>
+<tr><td data-test-id="job-card">
+  <a href="https://www.linkedin.com/comm/jobs/view/4000000001/?trackingId=y&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01"><img src="https://media.example.com/globex.png" alt="Globex Corporation"></a>
+  <a href="https://www.linkedin.com/comm/jobs/view/4000000001/?trackingId=y&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01" class="font-bold text-md">Junior Software Engineer</a>
+  <p>Globex Corporation &middot; Springfield, IL (Hybrid)</p>
+</td></tr>
+<tr><td>
+  <a href="https://www.linkedin.com/comm/jobs/search-results/?keywords=software%20engineer&amp;lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01">See all jobs</a>
+  <p>Stand out and let hirers know when a role they've posted is your top choice.</p>
+  <a href="https://www.linkedin.com/comm/premium/products/?lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01">Try Premium</a>
+  <p>You are receiving Job Alert emails.</p>
+  <a href="https://www.linkedin.com/job-alert-email-unsubscribe?savedSearchId=x">Unsubscribe</a>
+</td></tr>
+</table>
+</body></html>
+
+--b2--

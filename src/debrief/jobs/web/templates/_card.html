@@ -9,6 +9,7 @@
   <h3>{% if c.url %}<a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">{{ c.title }}</a>{% else %}{{ c.title }}{% endif %}</h3>
   <p class="co">{{ c.company }}{% if c.places %} · {{ c.places|join('; ') }}{% endif %}{% if c.pay %} · {{ c.pay }}{% endif %}{% if c.posted %} · posted {{ c.posted }}{% endif %}</p>
   {% if c.why %}<p class="why">{{ c.why }}</p>{% endif %}
+  {% for n in c.notes %}<p class="note">{{ n }}</p>{% endfor %}
   {% if c.no_description %}<p class="note">No description: scored on the title alone.</p>{% endif %}
   {% if c.mismatches %}<p class="miss">{{ c.mismatches|join('; ') }}</p>{% endif %}
   {% if c.reason %}<p class="note">{{ c.reason }}</p>{% endif %}

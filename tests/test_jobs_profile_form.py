@@ -54,6 +54,9 @@ def test_every_control_fits_its_schema_node(slot):
         assert isinstance(control, pf.Choice) and sorted(control.labels) == sorted(node["enum"])
     elif node.get("type") == "boolean":
         assert isinstance(control, pf.Toggle)
+    elif node.get("type") == "integer" and isinstance(control, pf.NumberChoice):
+        assert all(node["minimum"] <= int(v) <= node["maximum"] for v in control.labels)
+        assert str(node["default"]) in control.labels
     elif node.get("type") == "integer":
         assert isinstance(control, pf.Number) and control.whole
     elif node.get("type") == "number":
@@ -100,10 +103,12 @@ NASTY = dict(
     position_types=[{"name": "  SWE", "titles": ["z title", "a title"]}, {"name": "ML", "titles": ["ml"]}],
 )
 BONUS = dict(ranking={"threshold": 40.0, "max_candidates": 150, "top_n": 30, "fresh_bonus": {"7": 1, "3": 2}})
+NEARBY = dict(ranking={"threshold": 40, "max_candidates": 150, "top_n": 30, "nearby": ["NYC"], "nearby_min": 4})
+OTHER_US = dict(filters__locations__other_us=True, ranking={"threshold": 40, "max_candidates": 150, "top_n": 30, "other_us_penalty": 3})
 
 
 @pytest.mark.parametrize("table", [pf.TABLE, pf.WATCH_TABLE], ids=["settings", "watchlist"])
-@pytest.mark.parametrize("changes", [{}, NASTY, BONUS], ids=["base", "nasty", "bonus"])
+@pytest.mark.parametrize("changes", [{}, NASTY, BONUS, NEARBY, OTHER_US], ids=["base", "nasty", "bonus", "nearby", "other_us"])
 def test_an_untouched_form_reads_back_identically(table, changes):
     stored = doc(**changes)
     raw = pf.fill_all(stored, table)
@@ -137,6 +142,33 @@ def test_emptying_a_required_number_is_an_error_and_an_optional_one_removes_the_
     rd, read = pf.read_all({**pf.fill_all(d), "ranking.top_n": "", "ranking.per_company": ""}, d)
     assert rd.failed == {"ranking.top_n": ["Can't be blank."]}
     assert "per_company" not in read["ranking"]
+
+
+def test_a_profile_from_before_the_list_settings_is_valid_shows_their_defaults_and_keeps_its_id():
+    old = doc()
+    assert not {"min_score", "fresh_days", "repeat_days"} & set(old["ranking"])
+    assert profile.problems(old) == [] and profile.profile_id(old) == "ce851a5d25e8"
+    raw = pf.fill_all(old)
+    assert (raw["ranking.min_score"], raw["ranking.fresh_days"], raw["ranking.repeat_days"]) == ("5", "2", "0")
+    rd, read = pf.read_all(raw, old)
+    assert not rd.failed and read == old and profile.profile_id(read) == profile.profile_id(old)
+    rd, changed = pf.read_all({**raw, "ranking.min_score": "6", "ranking.fresh_days": "", "ranking.repeat_days": "7"}, old)
+    assert not rd.failed and changed["ranking"] == {**old["ranking"], "min_score": 6, "repeat_days": 7}
+    assert profile.problems(changed) == []
+    assert [(c.label, c.was, c.now) for c in pf.changes(old, changed)] == [
+        ("Lowest score on the list", "5", "6"), ("Same company on later nights", "Show it", "Hold it for a week unless it scores 7+")]
+
+
+def test_other_us_places_are_off_with_a_penalty_of_2_until_changed_and_an_old_profile_keeps_its_id():
+    old = doc()
+    raw = pf.fill_all(old)
+    assert (raw["filters.locations.other_us"], raw["ranking.other_us_penalty"]) == ("", "2")
+    rd, read = pf.read_all(raw, old)
+    assert not rd.failed and read == old
+    rd, on = pf.read_all({**raw, "filters.locations.other_us": "on", "ranking.other_us_penalty": "3"}, old)
+    assert not rd.failed and (on["filters"]["locations"]["other_us"], on["ranking"]["other_us_penalty"]) == (True, 3)
+    assert [(c.label, c.was, c.now) for c in pf.changes(old, on)] == [
+        ("Elsewhere in the US", "Off", "On"), ("How much lower elsewhere ranks", "2 points", "3 points")]
 
 
 def test_a_changed_list_is_tidied_and_a_repeat_is_dropped_keeping_order():
@@ -251,7 +283,7 @@ def _form(client):
     return browser_submit(client.get("/profile").text, "/profile")
 
 
-@pytest.mark.parametrize("changes", [{}, NASTY, BONUS], ids=["base", "nasty", "bonus"])
+@pytest.mark.parametrize("changes", [{}, NASTY, BONUS, NEARBY, OTHER_US], ids=["base", "nasty", "bonus", "nearby", "other_us"])
 def test_an_untouched_page_saves_nothing(site, changes):
     cfg, client, _ = site
     profile.save(cfg, doc(**changes), note="seed")
@@ -311,6 +343,29 @@ def test_cross_field_rules_land_on_the_right_input(site):
     del form["filters.locations.remote_us"]
     r = _post(client, {**form, "filters.locations.places.0.remove": "on"}, action="save")
     assert r.status_code == 400 and "With neither, every job is filtered out." in r.text
+
+
+def test_nearby_areas_must_be_your_own_areas_and_save_with_their_score(site):
+    cfg, client, _ = site
+    page = _post(client, {**_form(client), "ranking.nearby": "Mars"}, action="save").text
+    assert "“Mars” isn&#39;t one of your areas" in page.split('name="ranking.nearby"')[1].split('class="hint"')[0]
+    v, before = profile.latest(cfg)
+    area = next(iter(before["filters"]["locations"]["places"]))
+    r = _post(client, {**_form(client), "ranking.nearby": area, "ranking.nearby_min": "4"}, action="save")
+    assert r.status_code == 303 and profile.latest(cfg) == (v + 1, {**before, "ranking": {**before["ranking"], "nearby": [area],
+                                                                                             "nearby_min": 4}})
+    assert f"nearby: {area} from 4+" in client.get("/profile").text
+    r = _post(client, {**_form(client), "ranking.nearby": "", "ranking.nearby_min": ""}, action="save")
+    assert r.status_code == 303 and profile.latest(cfg)[1] == before
+
+
+def test_other_us_places_save_from_the_page_and_its_summary_says_how_much_lower(site):
+    cfg, client, _ = site
+    r = _post(client, {**_form(client), "filters.locations.other_us": "on", "ranking.other_us_penalty": "3"}, action="save")
+    assert r.status_code == 303
+    _, after = profile.latest(cfg)
+    assert (after["filters"]["locations"]["other_us"], after["ranking"]["other_us_penalty"]) == (True, 3)
+    assert "Remote in the US · NYC · elsewhere in the US, ranked 3 lower" in client.get("/profile").text
 
 
 def test_check_says_so_and_writes_nothing_and_a_failed_check_is_not_called_a_failed_save(site):
@@ -611,7 +666,8 @@ def test_a_blank_page_saved_after_a_first_profile_appeared_changes_nothing(tmp_p
     assert profile.latest(cfg) == (1, doc())
 
 
-FULL = doc(ranking={"threshold": 40, "max_candidates": 150, "top_n": 30, "per_company": 3, "fresh_bonus": {"3": 2}},
+FULL = doc(ranking={"threshold": 40, "max_candidates": 150, "top_n": 30, "per_company": 3, "fresh_bonus": {"3": 2}, "other_us_penalty": 2},
+           filters__locations__other_us=False,
            companies=[{"name": "Acme", "board": "greenhouse:acme", "note": "n", "kind": "large"}, {"name": "Globex"}],
            resume="Alex Example\nBS Computer Science, Example U",
            filters__blocklist=["Initrode"], position_types=[{"name": "A", "titles": ["a", "b"]}, {"name": "B", "titles": ["c"]}])

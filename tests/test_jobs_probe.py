@@ -77,12 +77,16 @@ def test_json_probe_finds_unknown_list():
     assert att.status == "ok" and att.n_items == 2 and att.items_path == "data.positions"
 
 
-def test_robots_block_means_no_request():
-    stub = StubClient(fetched([]), robots=False)
+def test_robots_is_information_and_a_block_answer_is_blocked():
+    stub = StubClient(fetched([{"a": 1}]), robots=False)
     att, _ = probe.probe_url(stub, "https://x.test/", {"kind": "json"}, now=NOW)
-    assert att.status == "blocked" and stub.requests == []
-    stub = StubClient(fetched([]), robots=None)
-    assert probe.probe_url(stub, "https://x.test/", {"kind": "json"}, now=NOW)[0].status == "blocked"
+    assert att.status == "ok" and len(stub.requests) == 1 and att.robots is False
+    for status in (401, 403, 429, 999):
+        att, _ = probe.probe_url(StubClient(fetched(b"", status=status, error=f"HTTP {status}")), "https://x.test/",
+                                 {"kind": "json"}, now=NOW)
+        assert att.status == "blocked" and att.error == f"HTTP {status}"
+    att, _ = probe.probe_url(StubClient(fetched(b"", status=404, error="HTTP 404")), "https://x.test/", {"kind": "json"}, now=NOW)
+    assert att.status == "failed"
 
 
 def test_secrets_never_reach_the_record():
@@ -171,7 +175,7 @@ def test_summarize_extrapolates():
             {"board": "greenhouse:b", "status": "dead", "http": 404}]
     s = probe.summarize("greenhouse", 1000, rows, StubClient(None))
     assert s["alive_share"] == 0.5 and s["est_alive_boards"] == 500
-    assert s["est_requests"] == 501 and s["est_minutes"] == round(501 * 0.5 / 60, 1)
+    assert s["est_requests"] == 500 and s["est_minutes"] == round(500 * 0.5 / 60, 1)
     assert s["est_new_24h"] == 1000 and s["est_new_24h_rough"] == 500 and s["est_mb"] == 5.0
 
 

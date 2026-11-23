@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
+from markupsafe import escape
 from cryptography.hazmat.primitives.asymmetric import rsa
 from starlette.testclient import TestClient
 
@@ -19,12 +20,12 @@ from debrief.jobs.web.app import create_app
 from debrief.jobs.web.auth import AccessVerifier
 from browser_form import browser_submit
 from test_jobs_coverage import _sample, job
-from test_jobs_score import NOW, ByTitle, _add, _cfg
+from test_jobs_score import NOW, ByTitle, _add, _cfg, _other_us
 from test_jobs_collect import it
 
 TEAM, AUD = "testteam", "aud-123"
 ISS = f"https://{TEAM}.cloudflareaccess.com"
-EMAILS = ["alexwoodka@gmail.com", "alexwoodka@startupshell.org"]
+EMAILS = ["owner@example.com", "owner@example.org"]
 ORIGIN = "http://testserver"
 
 
@@ -40,7 +41,7 @@ PEM, JWK = _key("k1")
 OTHER_PEM, OTHER_JWK = _key("k2")
 
 
-def token(email="alexwoodka@gmail.com", aud=AUD, iss=ISS, exp_in=600, pem=PEM, kid="k1", alg="RS256", key=None):
+def token(email="owner@example.com", aud=AUD, iss=ISS, exp_in=600, pem=PEM, kid="k1", alg="RS256", key=None):
     now = int(time.time())
     claims = {"email": email, "aud": [aud], "iss": iss, "iat": now, "exp": now + exp_in, "type": "app"}
     return jwt.encode(claims, key or pem, algorithm=alg, headers={"kid": kid})
@@ -117,7 +118,7 @@ def test_both_emails_get_in_and_an_unknown_key_is_fetched_once(site):
     assert certs.calls == before + 1                             # one refetch, then a minute's wait
     certs.keys.append(OTHER_JWK)                                  # Access rotated its keys
     v = AccessVerifier(TEAM, AUD, EMAILS, fetch=certs)
-    assert v.email_for(token(pem=OTHER_PEM, kid="k2")) == "alexwoodka@gmail.com"
+    assert v.email_for(token(pem=OTHER_PEM, kid="k2")) == "owner@example.com"
 
 
 # ----------------------------------------------------------------------------------- the pages
@@ -130,9 +131,40 @@ def test_today_escapes_links_only_http_and_runs_no_script(site):
     assert "<script" not in body and "&lt;script&gt;" in body
     assert "javascript:" not in body
     assert 'href="https://job-boards.greenhouse.io/initech/jobs/1"' in body and 'rel="noopener noreferrer"' in body
-    assert "AI Engineer, New Grad" in body and "Also kept, still options for later days" in body
+    assert "AI Engineer, New Grad" in body and rank.BELOW in body
     assert "default-src 'none'" in r.headers["content-security-policy"] and r.headers["x-content-type-options"] == "nosniff"
-    assert "alexwoodka@gmail.com" in body                        # who's signed in
+    assert "owner@example.com" in body                        # who's signed in
+
+
+def test_a_job_requiring_a_year_shows_its_capped_score_and_why(tmp_path):
+    cfg = _cfg(tmp_path)
+    _add(cfg, [it("y", title="AI Engineer, New Grad", company="Yearco",
+                  text="Requirements: 1+ year of professional software engineering experience.")], "2026-11-04T08:00:00Z")
+    rank.run(cfg, run_date="2026-11-04", runner=ByTitle({"AI Engineer, New Grad": 8}), now=NOW, log=lambda *a: None)
+    body = _watch_client(cfg, Certs([JWK])).get("/").text
+    assert '<span class="score">5</span>' in body and "Requires 1 year of experience: ranked as 5 at most." in body
+
+
+def test_a_job_outside_the_places_shows_its_lowered_score_and_where(tmp_path):
+    cfg = _cfg(tmp_path)
+    _other_us(cfg)
+    _add(cfg, [it("a", title="AI Engineer, New Grad", company="Atlco", locations=("Atlanta, GA",))], "2026-11-04T08:00:00Z")
+    rank.run(cfg, run_date="2026-11-04", runner=ByTitle({"AI Engineer, New Grad": 8}), now=NOW, log=lambda *a: None)
+    body = _watch_client(cfg, Certs([JWK])).get("/").text
+    assert '<span class="score">6</span>' in body and "Outside your places (Atlanta, GA): ranked 2 lower." in body
+
+
+def test_the_nearby_section_follows_the_list_with_its_note(tmp_path):
+    cfg = _cfg(tmp_path, places={"DC": ["Washington, DC"]}, nearby=["DC"])
+    _add(cfg, [it("a", title="AI Engineer, New Grad", company="Listed"),
+               it("n", title="Software Engineer, New Grad", company="Near", locations=("Washington, DC",))], "2026-11-04T08:00:00Z")
+    rank.run(cfg, run_date="2026-11-04", runner=ByTitle({"AI Engineer, New Grad": 8, "Software Engineer, New Grad": 4}),
+             now=NOW, log=lambda *a: None)
+    body = _watch_client(cfg, Certs([JWK])).get("/").text
+    new, nearby = body.split("<h2>New (1)</h2>")[1].split(f"<h2>{escape(rank.NEARBY)} (1)</h2>")
+    assert "Listed" in new and "Near" not in new
+    assert str(escape(rank.NOTES["nearby"])) in nearby and "Software Engineer, New Grad" in nearby
+    assert "1 new tonight · 1 nearby · 0 below" in body
 
 
 def test_catchup_and_coverage_and_unknown_pages(site):
@@ -142,6 +174,19 @@ def test_catchup_and_coverage_and_unknown_pages(site):
     assert client.get("/catchup/nope").status_code == 404
     r = client.get("/coverage")
     assert r.status_code == 200 and "Google sample" in r.text and "pending" in r.text
+
+
+def test_the_coverage_page_names_a_host_that_blocked_a_source(site):
+    cfg, client, _ = site
+    s = JobsStore(state_path(cfg))
+    s.start_run("run-b", "collect", "2026-11-04", "2026-11-04T23:00:00Z")
+    collect.finish(cfg, s, {"kind": "collect", "run_id": "run-b", "run_date": "2026-11-04", "started_at": "2026-11-04T23:00:00Z",
+                            "profile": {"version": 1, "id": None}, "since": None,
+                            "sources": [{"id": "describe", "status": "partial", "requests": 3, "counts": {}, "errors": [],
+                                         "warnings": [], "blocked": [{"host": "www.linkedin.com", "why": "HTTP 999",
+                                                                      "by": "describe", "skipped": 2}]}]})
+    s.close()
+    assert "www.linkedin.com blocked us (HTTP 999); 2 requests not made" in client.get("/coverage").text
 
 
 # ------------------------------------------------------------------------------ the Tracked mark
@@ -321,9 +366,6 @@ def test_an_upload_keeps_the_guards(site):
 
 class Boards:
     user_agent = "t"
-
-    def robots_allowed(self, url):
-        return True
 
     def request(self, method, url, params=None, json_body=None, headers=None):
         body = {"jobs": [{"id": 1, "title": "SWE"}, {"id": 2, "title": "MLE"}]} if "globex" in url else None

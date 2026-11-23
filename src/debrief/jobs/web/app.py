@@ -3,7 +3,7 @@
 Server-rendered pages, plain form posts, no JavaScript. It shows what the nightly run stored and
 writes only Alex's own edits: the Tracked mark, the profile and the watchlist. It never collects
 jobs or calls the model; adding a watchlist company looks up its board (watch.add) through the
-same polite, robots-checked client as the collector.
+same polite client as the collector.
 
 Every request passes the gate first: a valid Cloudflare Access token for an allowed email
 (auth.py), else 403. A form post must also come from the site itself (its Origin, or

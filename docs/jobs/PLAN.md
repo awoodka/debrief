@@ -857,8 +857,8 @@ also carries "Berkeley, CA" (from speedyapply's row); fixed below (F1).
   raw with no username in its URL; the sender's site is recognized from the From domain (a
   forwarded Handshake alert keeps it). Parsers per site come from real sample emails; until a site
   has one, its emails are kept and counted, not parsed. Items never carry a site's listing id as a
-  job key, so a LinkedIn copy merges into the job the lists have (tested). The source counts as
-  new-grad (`options.early`), since every alert uses the site's Entry-level filter.
+  job key, so a LinkedIn copy merges into the job the lists have (tested). Revision 9: the source
+  no longer counts as new-grad, since the alerts turned out to carry no Entry-level filter.
 - **The Google sample** (`adapters/serpapi.py`, source `serpapi-google-jobs`): reads the account
   first (free), spends at most 8 searches a night and never more than an even share of the month's
   remainder, rotating through role types x New York, Washington DC, San Francisco and remote.
@@ -1132,3 +1132,118 @@ rescored under v10 plus IBM as a large company (`jobs score --no-cap`, 117 jobs,
     None of the 91 finder answers with status 200 so far does this.
   - A weekly company list that fails while another succeeds waits its week: the source is `partial`, which
     sets `last_ok_at`. The directory is a lookup table, so that list is a week stale at worst.
+
+## Revision 9 (Alex, 2026-11-22): new jobs first, read before judged
+Alex: "I do not like the current product. I have received job listings from the same company BASK for
+basically the last 7 days … The descriptions of listings making it into the list even say 'require 1
+year' which should not make the top 3 … I would like there to be no rollover from previous days, just
+list them in the dropdown at the bottom, and more priority to new listings. The idea is that this gives
+me an advantage for finding new listings other people might miss for the first couple of days." Also:
+YC jobs were missing and nothing read the alert inbox.
+
+What a read-only study of 11-12..11-22 found (scripts kept outside the repo, with the replay harness):
+the list always filled 20 slots while only about 3.5 new jobs a night scored 6 or more, so carried-over
+jobs and score-3 filler made up the rest. 117 of 220 listed jobs had no description when listed. The
+scorer saw 600 characters and judged "1 year" inconsistently (26 kept, 16 dropped of 42). Bask posts as
+"Bask" and "Bask Health", and the per-company limit compared exact names, one night at a time.
+
+Alex's answers (2026-11-22): trust a new-grad list again only where a replay shows it carries real entry
+roles; one job per company a night, with a switch for a weekly hold; read YC companies' own boards if it
+costs little time; read jobright job pages.
+
+Built:
+- **The list holds only tonight's new jobs.** `rank.PLACES` sends each kept job to one place. The list
+  ("new") takes jobs first seen since the last run and posted within `ranking.fresh_days` (default 2),
+  scoring at least `ranking.min_score` (default 5), up to `ranking.top_n`, with no filler. Every other
+  kept job waits in the collapsed list below with its reason: from an earlier night, posted earlier,
+  below the floor, listed this week, company limit, beyond N, not scored. Only jobs on the list or in
+  the Watchlist section are highlighted. The answer budget goes to tonight's jobs first, and among them
+  to read jobs before title-only ones. `night.py` holds the one definition of tonight's jobs that rank
+  and describe share. New ranking fields default in code, so a saved profile keeps its id.
+- **One company key.** `items.company_key` strips trailing generic words ("Bask Health" and "Bask" are
+  "bask"). It is used only for list placement (the per-company limit, same-job grouping and the repeat
+  rule), never for posting identity. `ranking.repeat_days` (default 0) holds a company listed in the
+  last N nights below unless the job scores `REPEAT_PASS` (7); the settings page has the switch.
+- **The 1-year rule is code.** `filters.min_years` reads the full description ("one year" included;
+  years that internships, coursework or a degree can stand in for don't count). A job requiring 1 year
+  ranks as a 5 at most (`rank.YEARS_CAP`) and says so; 2+ years is still cut. The scorer reads 2,000
+  characters and a `years_required` field.
+- **Level fixes.** A title naming level II or above fails the new-grad check ("SDE II", "Software
+  Engineer II - Reliability"), while "Engineer I/II" and early-career titles with a number pass. A
+  Workday place given only as a count ("3 Locations") is unknown, not foreign.
+- **Trusted new-grad lists.** `options.trusted_new_grad` lets a list stand as the new-grad sign for a
+  job nobody could read. The replay trusted Simplify, vanshb03 and speedyapply SWE (every trust-only job
+  kept, half or more scoring 5+); speedyapply AI (45%) and jobright (36%) stay title-only.
+- **jobright pages.** describe reads `jobright.ai/jobs/info/<id>` (robots.txt allows our agent; it
+  blocks ClaudeBot and GPTBot) at one page every 3 s, 60 a night, tonight's jobs first, and stops after
+  3 unreadable pages in a row. The stored page keeps only its `__NEXT_DATA__` with people (connections,
+  leaders, recruiters) removed before the record is built.
+- **Alert email.** Indeed and LinkedIn digests parse into listings keyed by the site's own id, merged by
+  company, title and place (Revision 6's rule). Indeed's "N days ago" dates a job; LinkedIn's don't. The
+  inbox is not an early source: the alerts carry no entry-level filter.
+- **YC boards.** `yc-boards` builds the YC company list weekly from HN story titles through HN Algolia
+  and reads each confirmed company's own board nightly: one an HN post links, or one whose postings name
+  Y Combinator. A board that answered 404 waits for the weekly refresh. YC's own sites stay unread
+  (their terms forbid robots). hn-jobs titles are cut down to the role.
+
+Not built, on purpose:
+- A "no years stated" new-grad sign for readable startup jobs (`level.no_years_sign`, off). Measured on
+  3 nights: 528 to 616 more jobs pass a night, the scorer keeps 7 of 65, and the list grows by 0 or 1.
+- Following LinkedIn or Indeed links (robots), or reading ycombinator.com or Work at a Startup (terms).
+
+Verified, by replaying 11-12..11-22 from recorded state (the old code reproduces every real list
+exactly) with real answers for the new prompt: no job requiring 1+ years in any top 3 (was 5 such
+nights); every listed job new that night; 124 listed jobs in 11 nights instead of 220, from 0 to 19 a
+night (a night can list none: the page then says so above the collapsed list); no company on the list
+more than 3 nights (profile v14, two a company). Listed jobs with a description fell from 103 of 220 to
+43 of 124: the replay can't see jobright pages, which didn't exist in the recorded state. Of 191 new postings with an early-career engineering
+title in Alex's places, 82 were listed the night they appeared (95 before); 53 of the 191 are excluded
+by Alex's own rules (clearance, OPT, age), and most of the rest score 3-4 and now wait below. A full
+end-to-end night on a copy (collect 30 min, of which YC's first read is about 5) listed 4 jobs, all
+posted within a day; jobright answered that run with its security challenge, after several test runs
+that hour, so only 1 of the 4 had a description. Known cut: Deloitte "Associate Forward Deployed
+Engineer II" (scored 6-7 on 11-16 and 11-17) now fails the level check. 927 tests pass.
+
+## Revision 10 (2026-11-23): three lanes, sites that don't block us, startup sources
+
+Alex, after reading Revision 9's list for 11-23: show "startup positions that are exactly what I want to
+get into", then "large company positions that are worth the time applying" (general SWE, data analyst,
+full stack), then "new positions in the area, that might not be as strong", because applying early can
+still work. "A listing that is new, at a recognizable company, that isn't outside of what I have listed
+between the resume and interests, even if not a startup, should not be below a 5." Robotics and roles that
+need hands-on hardware skills (PLCs, microcontrollers) aren't worth the time. "The issue with the startup
+positions is that they are likely not going to be on job boards." And Alex lifted the robots.txt and terms
+rule: "if not block, it is fine for now."
+
+- **Rubric.** A kept job at a large, established company, for work within Alex's background, scores at
+  least 5, read or unread. Work that needs hands-on skills Alex lacks is 3-4; work "wants" rules out is
+  1-2. Where a job is never raises its score. Measured on 11-23: Comcast's entry-level role went from 4 to
+  5 or 6; the floor held from the prompt alone, so there is no code floor.
+- **Nearby lane.** `ranking.nearby` names place groups (profile v16: DC area). A fresh job tonight there
+  that the scorer keeps at `ranking.nearby_min` (3) or more but under `min_score` shows in a "Nearby"
+  section after the list, labelled for an early application. The company limit counts both together.
+- **Sites.** No robots.txt or terms gate in listing_brief (the news collector keeps its own). One block
+  rule instead: a 401, 403, 999, a 429 that outlived the retries, or a challenge or login page an adapter
+  names ends requests to that host for the run (Workday's per-job 403 S22 is not a block). Indeed answers
+  with a login wall, so its page reader is off.
+- **New sources.** Amazon's job search; SmartRecruiters boards and job pages; LinkedIn job pages for alert
+  and search jobs (40 a night, people stripped); `linkedin-search` (the last day, early-career words by
+  place, plus "founding engineer" and "forward deployed engineer" US-wide; LinkedIn's entry-level and
+  remote filters are not trusted: 0 of 15 "entry level" pages said so, and a "remote" result was an
+  on-site Cincinnati role); `getro` (ten VC funds' boards through one API, with company size and stage
+  for the scorer); `waas-jobs` (Work at a Startup job pages walked by id; "new grads ok" is a level sign;
+  founders and hiring managers are never stored).
+- **Startup sign.** `level.startup_sign` (on): at a startup (a source with `options.startup`, a company on
+  the profile's startup list, or 1,000 people or fewer), a read description asking for at most
+  `filters.max_years` is a new-grad sign. Startups rarely label a role entry level. On 11-23 the scorer
+  kept none of the 6 it let through (3+ years, mid-senior, track records), so this lane is still thin.
+- **Budget.** Profile v16 asks up to 200 jobs a night (tonight's first). With the new sources, 100 left 25
+  of 11-23's new jobs unasked, and an unasked new job can't reach a later list.
+- **Filters.** Level 4 and 5 titles and "AVP" are above entry; a bare "Remote" beside a place abroad is
+  not US remote.
+
+Verified on a copy of 11-23 (the pre-run snapshot, collected live at 09:20 to 13:00 ET, so jobs dated
+11-23 may postdate the 03:00 run): 20 listed (the site listed 9, 6 of them carried-over 2s and 3s), 11
+of them found only by `linkedin-search`, including Bitdeer's AI and cloud infrastructure fresh-grad role,
+Hippocratic AI's forward deployment residency, TikTok's ML graduate role and Legora's junior forward
+deployed role; 200 asked, 95 kept, $0.74 at list price on this first night. 991 tests pass.

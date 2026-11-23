@@ -1,9 +1,10 @@
 import json
 import sqlite3
+from dataclasses import replace
+from datetime import datetime, timezone
 
 import pytest
 
-from debrief.config import ConfigError
 from debrief.http import Fetched
 from debrief.jobs import build, collect, config as jconfig, items, profile, watch
 from debrief.jobs.adapters import REGISTRY, Ctx
@@ -31,6 +32,14 @@ def src(**kw):
 
 
 # ------------------------------------------------------------------------------- normalizing
+
+def test_company_key_drops_generic_last_words_but_never_the_whole_name():
+    assert items.company_key("Bask Health") == items.company_key("Bask") == "bask"
+    assert items.company_key("Palantir Technologies") == items.company_key("Palantir Technologies Inc.") == "palantir"
+    assert items.company_key("Invisible Technologies AI") == "invisible"
+    assert items.company_key("Health") == "health" and items.company_key("AI Labs") == "ai"
+    assert items.company_key("Booz Allen Hamilton") == "booz allen hamilton"
+
 
 def test_company_and_title_norm():
     assert items.company_norm("The Scale AI, Inc.") == "scale ai"
@@ -111,7 +120,9 @@ def test_hn_parsers():
     job = {"id": 77, "type": "job", "title": "Widgets (YC S24) Is Hiring a Founding Engineer", "time": 1762243200,
            "url": "https://www.ycombinator.com/companies/widgets/jobs/x"}
     (j,) = REGISTRY["hn_jobs"].parse(rec(job, url="https://hacker-news.firebaseio.com/v0/item/77.json"), src())
-    assert j.company == "Widgets" and j.item_key == "77"
+    assert (j.company, j.title, j.item_key) == ("Widgets", "Founding Engineer", "77")
+    (j,) = REGISTRY["hn_jobs"].parse(rec({**job, "title": "Widgets (YC S24) Is Hiring"}, url="https://hacker-news.firebaseio.com/v0/item/77.json"), src())
+    assert (j.company, j.title) == ("Widgets", "Widgets (YC S24) Is Hiring")
     assert REGISTRY["hn_jobs"].parse(rec([1, 2], url="https://hacker-news.firebaseio.com/v0/jobstories.json"), src()) == []
 
 
@@ -342,11 +353,8 @@ def test_full_snapshot_closes_missing_but_not_on_304_or_empty(store):
 # --------------------------------------------------------------------------- context safety
 
 class StubClient:
-    def __init__(self, robots=True, final="https://api.test/x?app_key=SECRETKEY1"):
-        self.robots, self.final, self.calls = robots, final, []
-
-    def robots_allowed(self, url):
-        return self.robots
+    def __init__(self, final="https://api.test/x?app_key=SECRETKEY1"):
+        self.final, self.calls = final, []
 
     def get(self, url, params=None, headers=None, etag=None, last_modified=None):
         self.calls.append((url, params, headers))
@@ -355,30 +363,133 @@ class StubClient:
     post = get
 
 
-def test_ctx_redacts_keys_and_refuses_disallowed(tmp_path):
+def test_ctx_redacts_keys(tmp_path):
     s = JobsStore(tmp_path / "j.sqlite")
     source = src(auth={"params": {"app_key": "K"}}, headers={"User-Agent": "{contact}"})
     ctx = Ctx(StubClient(), s, {"K": "SECRETKEY1"}, "run", None, "me@example.com", {})
     r = ctx.get(source, "https://api.test/x")
     assert "SECRETKEY1" not in json.dumps(r) and "<redacted>" in r["final_url"]
     assert ctx.client.calls[0][1] == {"app_key": "SECRETKEY1"} and ctx.client.calls[0][2]["User-Agent"] == "me@example.com"
-    ctx = Ctx(StubClient(robots=False), s, {}, "run", None, "", {})
-    r = ctx.get(src(), "https://x.test/")
-    assert ctx.client.calls == [] and r["status"] == 0 and "robots.txt disallows" in r["error"]
+    s.close()
+
+
+class StatusClient:
+    """200 with an empty JSON object, except the URLs given another status; records what was asked."""
+    user_agent = "t"
+
+    def __init__(self, statuses):
+        self.statuses, self.asked = statuses, []
+
+    def get(self, url, params=None, headers=None, etag=None, last_modified=None, json_body=None):
+        self.asked.append(url)
+        status = self.statuses.get(url, 200)
+        return Fetched(url=url, final_url=url, status=status, content=b"{}", error="" if status == 200 else f"HTTP {status}")
+
+    def post(self, url, json_body=None, headers=None):
+        return self.get(url)
+
+
+@pytest.mark.parametrize("status,block", [(401, True), (403, True), (429, True), (999, True), (404, False), (500, False)])
+def test_a_block_answer_stops_its_host_for_the_rest_of_the_run(tmp_path, status, block):
+    s = JobsStore(tmp_path / "j.sqlite")
+    client, run_blocks = StatusClient({"https://a.test/1": status}), {}
+    ctx = Ctx(client, s, {}, "run", None, "", {}, blocks=run_blocks)
+    for url in ("https://a.test/1", "https://a.test/2", "https://b.test/1"):
+        ctx.get(src(), url)
+    later = Ctx(client, s, {}, "run", None, "", {}, blocks=run_blocks)
+    r = later.post(src(id="t"), "https://a.test/3", {})
+    if block:
+        assert client.asked == ["https://a.test/1", "https://b.test/1"]
+        assert [x["status"] for x in ctx.records] == [status, 0, 200] and r["status"] == 0
+        assert "a block" in ctx.records[0]["error"] and "a.test" in r["error"]
+        assert ctx.warnings == [f"a.test blocked us (HTTP {status}{' after retries' if status == 429 else ''}); "
+                                "not asked again this run"]
+    else:
+        assert client.asked == ["https://a.test/1", "https://a.test/2", "https://b.test/1", "https://a.test/3"]
+        assert ctx.warnings == [] and not run_blocks
+    s.close()
+
+
+def test_an_adapter_names_a_challenge_page_a_block(tmp_path):
+    s = JobsStore(tmp_path / "j.sqlite")
+    client = StatusClient({})
+    ctx = Ctx(client, s, {}, "run", None, "", {})
+    ctx.get(src(), "https://a.test/1", block=lambda f: "a challenge page" if f.content == b"{}" else None)
+    ctx.get(src(), "https://a.test/2")
+    assert client.asked == ["https://a.test/1"] and ctx.blocked("https://a.test/9").why == "a challenge page"
+    s.close()
+
+
+class Asks:
+    """A collector that asks each URL in options.urls."""
+    snapshot, quiet_ok, tolerate, weekly = "window", True, (), False
+
+    def fetch(self, ctx, source):
+        for url in source.options["urls"]:
+            ctx.get(source, url)
+
+    def parse(self, record, source):
+        return []
+
+    def directory(self, record, source):
+        return []
+
+    def texts(self, record, source):
+        return []
+
+
+def test_the_report_names_the_host_that_blocked_us_and_what_was_not_asked(tmp_path, monkeypatch):
+    monkeypatch.setitem(REGISTRY, "asks", Asks())
+    cfg = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
+    sources = (src(id="first", family="api", adapter="asks", options={"urls": ["https://a.test/1", "https://a.test/2",
+                                                                              "https://b.test/1"]}),
+               src(id="second", family="api", adapter="asks", options={"urls": ["https://a.test/3", "https://b.test/2"]}))
+    cfg = jconfig.JobsConfig(settings=cfg.settings, sources=sources, data_dir=cfg.data_dir, contact="me@example.com")
+    client = StatusClient({"https://a.test/1": 999})
+    report = collect.run(cfg, client=client, run_date="2026-11-23", env={}, log=lambda *a, **k: None)
+    first, second = report["sources"]
+    assert client.asked == ["https://a.test/1", "https://b.test/1", "https://b.test/2"]
+    assert first["blocked"] == [{"host": "a.test", "why": "HTTP 999", "by": "first", "skipped": 1}]
+    assert second["blocked"] == [{"host": "a.test", "why": "HTTP 999", "by": "first", "skipped": 1}]
+    assert (first["requests"], second["requests"]) == (2, 1)
+    assert first["errors"] == ["https://a.test/1: HTTP 999 (a block: a.test not asked again this run)"]
+    assert second["errors"] == [] and any("1 request to a.test not made" in w for w in second["warnings"])
+    assert "a.test blocked us (HTTP 999)" in collect.render(report)
+
+
+def test_a_board_whose_host_blocked_us_closes_none_of_its_jobs(tmp_path, monkeypatch):
+    from debrief.jobs.adapters import Block
+    cfg = _cfg(tmp_path, monkeypatch, {"watchlist"})
+    gh = "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true&pay_transparency=true"
+    jobs = {"jobs": [{"id": 1, "title": "SWE New Grad", "location": {"name": "New York, NY"},
+                      "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/1"}]}
+    collect.run(cfg, client=SiteClient({gh: jobs}), run_date="2026-11-22", env={}, log=lambda *a, **k: None)
+    s = JobsStore(state_path(cfg))
+    _, prof = profile.latest(cfg)
+    client = StatusClient({})
+    out = collect.collect_source(cfg, s, client, cfg.source("watchlist"), "run-2", "2026-11-23", datetime.now(timezone.utc), prof, {},
+                                 lambda *a, **k: None, blocks={"boards-api.greenhouse.io": Block("HTTP 429 after retries", "other", gh)})
+    assert client.asked == [] and out["counts"].get("closed", 0) == 0
+    assert s.one("SELECT COUNT(*) FROM postings WHERE closed_at IS NULL")[0] == 1
+    s.close()
+
+
+def test_ctx_records_only_what_keep_leaves_of_a_response(tmp_path):
+    s = JobsStore(tmp_path / "j.sqlite")
+    ctx = Ctx(SiteClient({"https://x.test/p": b"the job; a person"}), s, {}, "run", None, "", {})
+    r = ctx.get(src(), "https://x.test/p", conditional=False, keep=lambda f: replace(f, content=f.content.split(b";")[0]))
+    assert ctx.records == [r] and raw.body(r) == b"the job"
     s.close()
 
 
 # --------------------------------------------------------------------- a whole run, and replay
 
 class SiteClient:
-    """Answers by URL from a dict; everything is allowed by robots.txt."""
+    """Answers by URL from a dict."""
     user_agent = "t"
 
     def __init__(self, pages):
         self.pages = pages
-
-    def robots_allowed(self, url):
-        return True
 
     def _answer(self, url):
         body = self.pages.get(url)
@@ -539,7 +650,7 @@ def test_describe_targets_and_store(store, tmp_path):
                                  board="greenhouse:acme"),                                   # filtered out: senior
                               it("s3", title="Software Engineer", company="Beta", url="https://beta.com/jobs/9")])  # no id
     from datetime import datetime, timezone
-    found = describe_mod.targets(store, prof, datetime(2026, 11, 4, 12, tzinfo=timezone.utc))
+    found = describe_mod.targets(store, prof, "2026-11-04", datetime(2026, 11, 4, 12, tzinfo=timezone.utc))
     assert [(s, b, k) for s, b, k, _ in found] == [("greenhouse", "greenhouse:acme", "greenhouse:1")]
     r = rec({"id": 1, "title": "Software Engineer", "content": "Python and SQL"},
             meta={"system": "greenhouse", "board": "greenhouse:acme", "wanted": ["greenhouse:1"]})
@@ -548,7 +659,18 @@ def test_describe_targets_and_store(store, tmp_path):
     assert c["texts"] == 1
     pid = store.find_key("job:greenhouse:1")
     assert store.one("SELECT text FROM posting_text WHERE posting_id=?", (pid,))[0] == "Python and SQL"
-    assert describe_mod.targets(store, prof, datetime(2026, 11, 4, 12, tzinfo=timezone.utc)) == []    # described now
+    assert describe_mod.targets(store, prof, "2026-11-04", datetime(2026, 11, 4, 12, tzinfo=timezone.utc)) == []
+
+
+def test_describe_never_asks_for_a_title_above_entry(store):
+    from datetime import datetime, timezone
+    gh = "https://job-boards.greenhouse.io/acme/jobs/{}"
+    apply(store, "simplify", [it("s1", title="Software Engineer", url=gh.format(1), job_key="job:greenhouse:1",
+                                 board="greenhouse:acme"),
+                              it("s2", title="Software Engineer II/III", url=gh.format(2), job_key="job:greenhouse:2",
+                                 board="greenhouse:acme")])
+    found = describe_mod.targets(store, BASE, "2026-11-04", datetime(2026, 11, 4, 12, tzinfo=timezone.utc))
+    assert [k for _, _, k, _ in found] == ["greenhouse:1"]
 
 
 def test_describe_facts_carry_the_board_country():
@@ -693,50 +815,6 @@ def test_adzuna_and_usajobs_requests(tmp_path, monkeypatch):
                       "path graduates @ Washington, DC", "path graduates @ remote"]
     graduates = [p for p, e in usa if e.startswith("path")]
     assert all(p["HiringPath"] == "graduates" and "Keyword" not in p for p in graduates)
-
-
-# ------------------------------- Revision 7 (11-05): the robots exception for official keyed APIs
-
-class NoRobots:
-    """Every URL is disallowed by robots.txt; records what was requested."""
-    user_agent = "t"
-
-    def __init__(self):
-        self.requested = []
-
-    def robots_allowed(self, url):
-        return False
-
-    def get(self, url, params=None, headers=None, etag=None, last_modified=None):
-        self.requested.append(url)
-        return Fetched(url=url, final_url=url, status=200, headers={}, content=b"{}")
-
-
-def test_the_robots_exception_is_narrow(tmp_path):
-    from debrief.jobs.adapters import Ctx
-    cfg = jconfig.load(env={"DEBRIEF_DATA_DIR": str(tmp_path)})
-    adzuna, remoteok = cfg.source("adzuna"), cfg.source("remoteok")
-    keys = {"ADZUNA_APP_ID": "id", "ADZUNA_APP_KEY": "key"}
-    client, s = NoRobots(), JobsStore(tmp_path / "j.sqlite")
-    ctx = Ctx(client, s, keys, "run", None, "me@example.com", cfg.settings)
-    ctx.get(adzuna, "https://api.adzuna.com/v1/api/jobs/us/search/1")              # its own host, keys set: allowed
-    ctx.get(adzuna, "https://www.adzuna.com/details/123")                          # another host: refused
-    ctx.get(remoteok, "https://remoteok.com/api")                                  # no exception: refused
-    assert client.requested == ["https://api.adzuna.com/v1/api/jobs/us/search/1"] and ctx.robots_waived == 1
-    ctx2 = Ctx(NoRobots(), s, {}, "run", None, "me@example.com", cfg.settings)
-    ctx2.get(adzuna, "https://api.adzuna.com/v1/api/jobs/us/search/1")              # no keys: the rule applies
-    assert ctx2.client.requested == []
-    s.close()
-    with_ex = {s_.id for s_ in cfg.sources if s_.robots_exception}
-    assert with_ex == {"adzuna", "usajobs", "serpapi-google-jobs"}
-
-
-def test_a_robots_exception_needs_terms_and_a_key():
-    base = {"id": "x", "name": "X", "family": "api", "url": "https://api.x.test/"}
-    with pytest.raises(ConfigError, match="hosts, terms and decided"):
-        jconfig._source({**base, "auth": {"params": {"k": "K"}}, "robots_exception": {"hosts": ["api.x.test"]}}, set())
-    with pytest.raises(ConfigError, match="only for keyed APIs"):
-        jconfig._source({**base, "robots_exception": {"hosts": ["api.x.test"], "terms": "t", "decided": "d"}}, set())
 
 
 def test_adzuna_places_come_from_its_structured_area():

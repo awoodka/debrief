@@ -8,16 +8,32 @@
    night: a job leaves when it closes, ages past max_age_days or fails a filter. Full cut detail is
    kept for new postings; carried-over ones are only counted.
 3. Points (prescore.py) for jobs with no answer for this profile version: ranking.threshold, then
-   at most ranking.max_candidates answers a night (watchlist first, then new tonight, then carried
-   over). A job over the cap stays in the pool and is asked another night. no_cap lifts the cap.
-4. The scoring call (score.py) for those jobs, in chunks of score.chunk_size. If it fails, the list
-   is ranked by points and the cursor stays put, so the next run asks again.
-5. The list: kept jobs by score plus ranking.fresh_bonus for recently posted ones (ties: score,
-   points, newest, id); the top ranking.top_n as "new", at most ranking.per_company from one company
-   (the rest are cut as "company limit" and counted under that company's last entry), and every
-   kept watchlist job as "watchlist". Kept jobs not shown stay in the pool. Every job shown, and
-   every copy shown under it, is highlighted. Saved in daily_list; the report,
-   runs/<date>/score-<run>.json and .md, has the cuts with their stage and reason.
+   at most ranking.max_candidates answers a night (tonight's fresh jobs first, the watchlist first
+   among them, then the rest). A job over the cap stays in the pool and is asked another night.
+   no_cap lifts the cap.
+4. The scoring call (score.py) for those jobs, in chunks of score.chunk_size. If it fails, the jobs
+   it didn't answer wait below the list as "not scored" and the cursor stays put, so the next run
+   asks again and they are still new.
+5. The list: kept jobs by score plus ranking.fresh_bonus for recently posted ones (ties: score, no
+   required years before some, a read description before none, points, newest, id). A job kept only
+   by filters.locations.other_us (in the US, outside every area) ranks, lists and shows as if it scored
+   ranking.other_us_penalty less, and one whose description requires 1+ years of experience
+   (filters.min_years) as if it scored at most YEARS_CAP (adjusted); its entry keeps the model's own
+   score and says why. Each lands in one place
+   (PLACES): the list ("new") holds only tonight's fresh jobs (first seen since the last run,
+   posted within ranking.fresh_days) scoring at least
+   ranking.min_score, at most ranking.per_company from one company (items.company_key, so "Bask"
+   and "Bask Health" are one) and ranking.top_n in all. With ranking.repeat_days, a company on the
+   list in that many earlier nights waits unless the job scores REPEAT_PASS or more. With
+   ranking.nearby (area names from filters.locations.places), a fresh job tonight in one of those
+   areas that scores at least ranking.nearby_min but under min_score goes to "nearby", shown after
+   the list as worth an early application, under the same rules (LANES); per_company counts the
+   list and nearby together, and top_n bounds each. Every other kept job goes to the collapsed list
+   below them, as a cut whose stage names its place, so it stays in the pool. "watchlist" shows
+   tonight's fresh scored and kept watchlist jobs, wherever they landed; one it shows is not also
+   below. Every job on the list, nearby or the watchlist, and every copy shown under it, is
+   highlighted. Saved in daily_list; the report, runs/<date>/score-<run>.json and .md, has the cuts
+   with their stage and reason.
 
 The catch-up (mode "catchup") is the same pass over the same pool with no cap and no threshold,
 watchlist companies exempt from the age limit, and every kept job listed in one section named after
@@ -27,18 +43,19 @@ age limit with "posted on or after this date" (the older-roles catch-up). It doe
 import re
 import json
 from collections import Counter
-from datetime import date, datetime, timezone
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
+from typing import NamedTuple
 
 from ..store import dumps
 from ..triage.score import ScoringError, run_claude
 from . import filters, prescore, profile as profiles, score
-from .collect import early_sources
-from .items import company_norm, core_title
+from .collect import early_sources, startup_sources, trusted_sources
+from .items import company_key, core_title
+from .night import DAILY, age_days, fresh, posted, tonight
 from .store import JobsStore, state_path
 
 BIG_STAGES = ("title", "place", "age")       # counted in the .md report; listed in full only in the .json
-LIST_STAGES = ("not kept", "beyond N", "company limit", "same job")
-DAILY = ("new", "watchlist")
 NAME = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 
 
@@ -53,19 +70,6 @@ def _new_run_id(store, started, kind="score"):
         n += 1
         run_id = f"{base}-{n}"
     return run_id
-
-
-def posted(p):
-    return p.get("published_at") or p.get("first_seen_at")
-
-
-BARE_DATE = "T00:00:00Z"     # how boards.when stores a date with no time
-
-
-def age_days(when, now):
-    if when.endswith(BARE_DATE):
-        return (now.astimezone().date() - date.fromisoformat(when[:10])).days
-    return (now - datetime.fromisoformat(when.replace("Z", "+00:00"))).total_seconds() / 86400
 
 
 def fresh_bonus(p, profile, now):
@@ -97,6 +101,7 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log, since=None, na
     if prof is None:
         raise SystemExit("no profile saved (debrief jobs profile save FILE)")
     pid = profiles.profile_id(prof)
+    ranking = profiles.ranking(prof)
     s = cfg.settings["score"]
     daily = mode == "daily"
     kind = "score" if daily else "catchup"
@@ -105,13 +110,13 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log, since=None, na
     since_at = f"{posted_since}T00:00:00Z" if posted_since else None
     store = JobsStore(state_path(cfg))
     run_id = _new_run_id(store, started, kind)
-    E = early_sources(cfg)
+    E, trusted = early_sources(cfg), trusted_sources(cfg)
+    no_years = cfg.settings["level"]["no_years_sign"]
+    S = startup_sources(cfg) if cfg.settings["level"]["startup_sign"] else None
+    startups = {company_key(c["name"]) for c in prof["companies"] if profiles.company_kind(c) == "startup"}
 
     # 1. the pool, and what's new tonight
-    if store.get_meta("score_cursor_date") == run_date:
-        since = store.get_meta("score_cursor_prev")
-    else:
-        since = store.get_meta("score_cursor")
+    since = store.score_since(run_date)
     rows = store.pool(run_date, sections)
     new_ids = {r["posting_id"] for r in rows if not since or r["first_seen_at"] > since}
     newest_seen = max([since or ""] + [r["first_seen_at"] for r in rows if r["posting_id"] in new_ids]) or None
@@ -122,13 +127,13 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log, since=None, na
               "no_cap": no_cap, "dry_run": dry_run, "cuts": [], "calls": []}
     stages = Counter()
 
-    def cut(p, stage, reason, points=None, score_=None):
+    def cut(p, stage, reason, points=None, a=None):
         stages[stage] += 1
         if not daily or p["posting_id"] in new_ids or stage in LIST_STAGES:
-            report["cuts"].append(_cut(p, stage, reason, points, score_))
+            report["cuts"].append(_cut(p, stage, reason, points, a))
 
     log(f"{len(rows)} open postings not yet highlighted: {len(new_ids)} new since {since or 'the start'}, "
-        f"{len(rows) - len(new_ids)} carried over")
+        f"{len(rows) - len(new_ids)} from earlier nights")
 
     # 2-3. filters, answers, points
     passed = []
@@ -138,7 +143,10 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log, since=None, na
         srcs = store.posting_sources(p["posting_id"])
         watched = not daily and prescore.watched(p, prof)
         skip = ("age",) if watched or since_at else ()
-        v = filters.check(p, prof, started, text=text, listed_early=bool(srcs & E), skip=skip)
+        startup = S is not None and (bool(srcs & S) or company_key(p["company"]) in startups
+                                     or filters.small_company((p.get("data") or {}).get("company_size")))
+        v = filters.check(p, prof, started, text=text, listed_early=bool(srcs & E), listed_trusted=bool(srcs & trusted),
+                          no_years=no_years, skip=skip, startup=startup)
         if not v.ok:
             cut(p, v.stage, v.reason)
             continue
@@ -152,9 +160,11 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log, since=None, na
     if no_cap:
         cap = 0
     else:
-        left = prof["ranking"]["max_candidates"] - store.answered_on(run_date, pid)
+        left = ranking["max_candidates"] - store.answered_on(run_date, pid)
         cap = left if left > 0 else -1
-    sent, over = prescore.select(unanswered, prof, cap=cap, first=new_ids, threshold=daily)
+    first = {p["posting_id"] for p, *_ in passed if tonight(p, since, ranking, started)}
+    sent, over = prescore.select(unanswered, prof, cap=cap, first=first, threshold=daily,
+                                       read={x[0]["posting_id"] for x in unanswered if x[3]})
     for (p, pts, *_), why in over:
         cut(p, "threshold" if why.startswith("below") else "cap", why, pts)
     report["passed_filters"], report["sent"] = len(passed), len(sent)
@@ -171,57 +181,65 @@ def _pass(cfg, mode, run_date, no_cap, dry_run, runner, now, log, since=None, na
 
     # 5. the list
     sent_ids = {x[0]["posting_id"] for x in sent}
+    unread = {p["posting_id"] for p, _, _, text, *_ in passed if not text}
     kept, not_kept = [], []
-    for p, pts, *_ in passed:
+    for p, pts, _, _, _, facts in passed:
         a = answers.get(p["posting_id"])
         if a is None:
             if status in ("fallback", "dry_run") and p["posting_id"] in sent_ids:
                 kept.append((p, pts, None))
             continue
-        if a["keep"]:
-            kept.append((p, pts, a))
+        within = None if a["keep"] else years_within(a, prof["filters"]["max_years"])
+        if a["keep"] or within is not None:
+            kept.append((p, pts, adjusted({**a, "keep": True}, facts.get("min_years") or within, facts.get("outside"),
+                                          ranking["other_us_penalty"])))
         else:
             not_kept.append((p, pts, a))
-            cut(p, "not kept", "; ".join(a["mismatches"]) or a["why"], pts, a["score"])
+            cut(p, "not kept", "; ".join(a["mismatches"]) or a["why"], pts, a)
 
     def order(x):
         p, pts, a = x
         sc = a["score"] if a else 0
         bonus = fresh_bonus(p, prof, started) if a else 0
-        return (-(sc + bonus), -sc, -pts, -prescore._ts(posted(p)), p["posting_id"])
+        return (-(sc + bonus), -sc, bool(a and a.get("years")), p["posting_id"] in unread, -pts, -prescore._ts(posted(p)),
+                p["posting_id"])
     kept.sort(key=order)
     groups = collapse(kept)
-    top_n, per_company = prof["ranking"]["top_n"], prof["ranking"].get("per_company")
     if daily:
-        placed = place(groups, top_n, per_company)
+        jobs = [_job(g, new_ids, prof, ranking, started) for g in groups]
+        recent = _recent(store, run_date, ranking["repeat_days"])
+        watched = [j.tonight and j.fresh and j.score is not None and prescore.watched(g[0][0], prof)
+                   for g, j in zip(groups, jobs)]
+        placed = [(g, "watchlist" if w and where not in LANE_NAMES else where)
+                  for g, where, w in zip(groups, place(jobs, ranking, recent), watched)]
+        watch = [g for g, w in zip(groups, watched) if w]
+        listed = ("new", "nearby") if ranking["nearby"] else ("new",)
     else:
-        placed = [(g, "catchup") for g in groups]
-    shown = [g for g, where in placed if where in ("new", "catchup")]
+        placed = [(g, name) for g in groups]
+        listed = (name,)
+    shown = {k: [g for g, where in placed if where == k] for k in listed}
     for ((p, pts, a), _), where in placed:
-        if where == "beyond N":
-            cut(p, where, f"kept, ranked below the top {top_n}", pts, a["score"] if a else None)
-        elif where == "company limit":
-            cut(p, where, f"kept; {p['company']} already has {per_company} in the list", pts, a["score"] if a else None)
-    held = Counter(company_norm(g[0][0]["company"]) for g, where in placed if where == "company limit")
-    last = {company_norm(g[0][0]["company"]): i for i, g in enumerate(shown)}
+        if where in REASONS:
+            cut(p, where, REASONS[where].format(seen=_day(p["first_seen_at"]), posted=_day(posted(p)),
+                                                score=a["score"] if a else None, company=p["company"], **ranking), pts, a)
+    held = Counter(company_key(g[0][0]["company"]) for g, where in placed if where == "company limit")
+    last = {company_key(g[0][0]["company"]): (k, i) for k in listed for i, g in enumerate(shown[k])}
     for (p0, *_), same in groups:
         for p, pts, a in same:
-            cut(p, "same job", f"shown with {p0['posting_id']} ({p0['title']})", pts, a["score"] if a else None)
+            cut(p, "same job", f"shown with {p0['posting_id']} ({p0['title']})", pts, a)
     report["kept"], report["kept_distinct"], report["not_kept"] = len(kept), len(groups), len(not_kept)
 
-    def entries(gs, limits=False):
+    def entries(gs, section=None):
         out = []
         for i, g in enumerate(gs):
-            c = company_norm(g[0][0]["company"])
-            more = held[c] if limits and last.get(c) == i else 0
+            c = company_key(g[0][0]["company"])
+            more = held[c] if last.get(c) == (section, i) else 0
             out.append(_entry(i + 1, *g[0], also=g[1], more=more, new=g[0][0]["posting_id"] in new_ids,
                               bonus=fresh_bonus(g[0][0], prof, started) if g[0][2] else 0))
         return out
+    report["list"] = {k: entries(shown[k], k) for k in listed}
     if daily:
-        watch = [g for g in groups if prescore.watched(g[0][0], prof)]
-        report["list"] = {"new": entries(shown, limits=True), "watchlist": entries(watch)}
-    else:
-        report["list"] = {name: entries(shown)}
+        report["list"]["watchlist"] = entries(watch)
     report["status"] = status
     report["stages"] = dict(stages)
     report["finished_at"] = _iso(datetime.now(timezone.utc))
@@ -259,7 +277,7 @@ def _score(store, cfg, s, prof, todo, answers, pid, run_id, started, E, report, 
         for i, (p, pts, parts, text, srcs, facts) in enumerate(chunk, 1):
             jid = f"j{i}"
             by_jid[jid] = p["posting_id"]
-            jobs.append(score.job_view(jid, p, text, srcs, E, s["text_max_chars"]))
+            jobs.append(score.job_view(jid, p, text, srcs, E, s["text_max_chars"], facts.get("min_years")))
         log(f"scoring call: {len(jobs)} jobs" + (f" (chunk {start // size + 1})" if len(todo) > size else ""))
         try:
             res = score.call(cfg.data_dir / "cache" / "score", s, view, jobs, runner=runner, log=log)
@@ -285,7 +303,7 @@ def collapse(kept):
     groups, order = {}, []
     for x in kept:
         core = core_title(x[0]["title"])
-        key = (company_norm(x[0]["company"]), core) if core else x[0]["posting_id"]
+        key = (company_key(x[0]["company"]), core) if core else x[0]["posting_id"]
         if key in groups:
             groups[key][1].append(x)
         else:
@@ -294,31 +312,122 @@ def collapse(kept):
     return [groups[k] for k in order]
 
 
-def place(groups, top_n, per_company=None):
-    """[(group, "new" | "company limit" | "beyond N")] in rank order. A company's groups past the
-    first per_company are "company limit" wherever they rank, so they never take a slot and all
-    count as that company's "more"; the rest fill the list up to top_n. No per_company: no limit."""
-    out, shown, n = [], Counter(), 0
-    for g in groups:
-        c = company_norm(g[0][0]["company"])
-        if per_company and shown[c] >= per_company:
-            out.append((g, "company limit"))
-        elif n < top_n:
-            out.append((g, "new"))
-            shown[c] += 1
-            n += 1
-        else:
-            out.append((g, "beyond N"))
+class Job(NamedTuple):
+    tonight: bool
+    fresh: bool
+    score: int | None
+    company: str
+    in_nearby_area: bool = False
+
+
+@dataclass
+class Tally:
+    ranking: dict
+    recent: frozenset = frozenset()
+    by_lane: Counter = field(default_factory=Counter)
+    by_company: Counter = field(default_factory=Counter)
+
+
+REPEAT_PASS = 7
+YEARS_CAP = 5
+NOTES_ON_SCORE = ("place_note", "years_note")
+ADJUSTED = ("model_score", "years", *NOTES_ON_SCORE)
+
+
+def years_within(a, max_years):
+    """The years a dropped job's reason (its first mismatch) asks for, when they are within max_years, else
+    None. The scoring call sometimes drops "1-3 years" although the profile allows 1; Alex keeps such a job,
+    ranked as YEARS_CAP at most."""
+    n = filters.min_years((a.get("mismatches") or [""])[0])
+    return n if n is not None and n <= max_years else None
+
+
+def adjusted(a, years, outside, penalty):
+    """The answer as the list ranks it. A job outside Alex's places (outside: its US places, from
+    filters.check) ranks penalty lower, never under 1; then one that requires years ranks as YEARS_CAP
+    at most. The model's own score stays as model_score, with a note for each change."""
+    sc, notes = a["score"], {}
+    if outside and penalty:
+        sc = max(1, sc - penalty)
+        notes["place_note"] = f"Outside your places ({'; '.join(outside[:2])}): ranked {penalty} lower."
+    if years:
+        sc = min(sc, YEARS_CAP)
+        notes |= {"years": years, "years_note": f"Requires {years} year{'' if years == 1 else 's'} of experience: "
+                                                f"ranked as {YEARS_CAP} at most."}
+    return {**a, "score": sc, "model_score": a["score"], **notes} if notes else a
+
+
+def score_notes(e):
+    """Why an entry ranks other than as the model scored it, one sentence each."""
+    return [e[k] for k in NOTES_ON_SCORE if e.get(k)]
+
+
+LANES = (
+    ("new", lambda j, r: j.score >= r["min_score"]),
+    ("nearby", lambda j, r: j.in_nearby_area and j.score >= r["nearby_min"]),
+)
+LANE_NAMES = tuple(name for name, _ in LANES)
+
+
+def lane(j, ranking):
+    """Where a scored job could be shown, by its score: the first lane it fits, or None."""
+    return next((name for name, fits in LANES if fits(j, ranking)), None)
+
+
+PLACES = (
+    ("from an earlier night", lambda j, t: not j.tonight, "From an earlier night: first found {seen}."),
+    ("posted earlier", lambda j, t: not j.fresh, "Posted earlier: found tonight, posted {posted}."),
+    ("not scored", lambda j, t: j.score is None, "Not scored yet: the scoring call didn't answer."),
+    ("below the floor", lambda j, t: lane(j, t.ranking) is None, "Below the floor: scored {score}, under {min_score}."),
+    ("listed this week", lambda j, t: j.company in t.recent and j.score < REPEAT_PASS,
+     f"Listed this week: {{company}} was on the list in the last {{repeat_days}} nights, and this scored under {REPEAT_PASS}."),
+    ("company limit", lambda j, t: bool(t.ranking.get("per_company")) and t.by_company[j.company] >= t.ranking["per_company"],
+     "Company limit: {company} already has {per_company} on the list."),
+    ("beyond N", lambda j, t: t.by_lane[lane(j, t.ranking)] >= t.ranking["top_n"], "Beyond {top_n}: the list holds at most {top_n}."),
+)
+REASONS = {name: reason for name, _, reason in PLACES}
+LIST_STAGES = ("not kept", *REASONS, "same job")
+
+
+def _job(group, new_ids, prof, ranking, now):
+    p, _, a = group[0]
+    in_nearby_area = not set(ranking["nearby"]).isdisjoint(filters.areas(p["locations"], prof))
+    return Job(p["posting_id"] in new_ids, fresh(p, ranking, now), a["score"] if a else None, company_key(p["company"]),
+               in_nearby_area)
+
+
+def _recent(store, run_date, days):
+    if not days:
+        return frozenset()
+    first = (date.fromisoformat(run_date) - timedelta(days=days)).isoformat()
+    return frozenset(company_key(c) for c in store.listed_companies(first, run_date))
+
+
+def place(jobs, ranking, recent=frozenset()):
+    """Each job's place, in order: the first of PLACES that holds, else its lane."""
+    t, out = Tally(ranking, recent), []
+    for j in jobs:
+        where = next((name for name, holds, _ in PLACES if holds(j, t)), None)
+        if where is None:
+            where = lane(j, ranking)
+            t.by_lane[where] += 1
+            t.by_company[j.company] += 1
+        out.append(where)
     return out
 
 
-def _cut(p, stage, reason, points=None, score_=None):
+def below(report):
+    """The collapsed list: kept jobs not on the list, best score first (ties: the list's order)."""
+    return sorted((c for c in report.get("cuts") or [] if c["stage"] in REASONS), key=lambda c: -(c.get("score") or 0))
+
+
+def _cut(p, stage, reason, points=None, a=None):
     out = {"posting_id": p["posting_id"], "company": p["company"], "title": p["title"], "stage": stage,
            "reason": reason}
     if points is not None:
         out["points"] = points
-    if score_ is not None:
-        out["score"] = score_
+    if a:
+        out |= {k: a[k] for k in ("score", *ADJUSTED) if k in a}
     return out
 
 
@@ -329,7 +438,8 @@ def _entry(rank, p, pts, a, also=(), more=0, new=True, bonus=0):
             "locations": p["locations"], "url": p["url"], "points": pts, "score": a["score"] if a else None,
             "why": a["why"] if a else None, "mismatches": a["mismatches"] if a else [],
             "also": [{"posting_id": q["posting_id"], "title": q["title"], "url": q["url"]} for q, *_ in also],
-            "more": more, "posted": (posted(p) or "")[:10], "new": new, "bonus": bonus}
+            "more": more, "posted": (posted(p) or "")[:10], "new": new, "bonus": bonus,
+            **{k: a[k] for k in ADJUSTED if a and k in a}}
 
 
 # ------------------------------------------------------------------------------------- reports
@@ -338,20 +448,35 @@ def display_title(title, profile=None):
     """How a title is printed. A Hacker News "Who is hiring" post keeps its whole first line as its
     title ("Mechanize | San Francisco, CA (Onsite) | Junior Engineer | ..."), because the filters
     read all of it; the list shows just its role: the segment a position type matches, else the
-    second one. Display only: storage, filters, matching and the model's input are unchanged."""
+    second one. A job site's title with a bar in it ("Forward Deployed Engineer | Graduates Considered") matches
+    on its first segment and keeps it. Display only: storage, filters, matching and the model's input are
+    unchanged."""
     if not title or " | " not in title:
         return title
     segs = [x.strip() for x in title.split("|") if x.strip()]
     if len(segs) < 2:
         return title
     if profile:
-        for seg in segs[1:]:
+        for seg in segs:
             if filters.title_fit(seg, profile)[0] is not None:
                 return seg
     return segs[1]
 
 
-TITLES = {"new": "The list", "watchlist": "Watchlist", "catchup": "Catch-up", "older": "Older roles"}
+NEARBY = "Nearby, worth an early application"
+TITLES = {"new": "The list", "nearby": NEARBY, "watchlist": "Watchlist", "catchup": "Catch-up", "older": "Older roles"}
+SECTIONS = (("new", "New"), ("nearby", NEARBY), ("watchlist", "Watchlist"))
+NOTES = {"nearby": "New tonight in a nearby area, scored under the list's floor."}
+BELOW = "Also kept, below the list"
+
+
+def header(report):
+    """How many jobs are new tonight on the list, how many nearby (when the profile asks for that
+    section), and how many are kept below them."""
+    lists = report.get("list") or {}
+    n = sum(1 for e in lists.get("new") or [] if e.get("new", True))
+    near = f" · {len(lists['nearby'])} nearby" if "nearby" in lists else ""
+    return f"{n} new tonight{near} · {len(below(report))} below"
 
 
 def _day(iso):
@@ -368,7 +493,7 @@ def render_report(r):
     L = [f"# Jobs {what} {r['run_id']} ({r['run_date']})", "",
          f"Status: **{r['status']}**. Profile version {r['profile']['version']} ({r['profile']['id']}). "
          f"Pool: {r['candidates']} open postings not yet highlighted ({r.get('new', r['candidates'])} new since "
-         f"{r['since'] or 'the start'}, {r.get('carried', 0)} carried over).", "",
+         f"{r['since'] or 'the start'}, {r.get('carried', 0)} from earlier nights).", "",
          f"Passed the filters: {r['passed_filters']} ({r['already_scored']} already answered). Asked in the scoring "
          f"call: {r['sent']}. Kept: {r['kept']} ({r.get('kept_distinct', r['kept'])} once repeats of the same job are "
          f"shown together). Not kept: {r['not_kept']}.", ""]
@@ -387,6 +512,8 @@ def render_report(r):
                      f"({'; '.join(e['locations'][:2])}) · posted {e.get('posted') or '?'} · {e['points']} pts · {e['url'] or ''}")
             if e["why"]:
                 L.append(f"   {e['why']}")
+            if score_notes(e):
+                L.append(f"   {' '.join(score_notes(e))} The model scored {e['model_score']}.")
             if e.get("more"):
                 L.append(f"   also kept at {e['company']}: {e['more']} more (company limit)")
         if not es:
@@ -402,26 +529,26 @@ def render_report(r):
     return "\n".join(L) + "\n"
 
 
-def today(cfg, list_date=None, show_all=False, catchup=None):
-    """The morning list, or with catchup (True for "catchup", or a catch-up's name such as
-    "older") that catch-up list, as terminal text."""
+def today(cfg, list_date=None, catchup=None):
+    """The morning list with the jobs kept below it, or with catchup (True for "catchup", or a
+    catch-up's name such as "older") that catch-up list, as terminal text."""
     store = JobsStore(state_path(cfg))
     if catchup is True:
         catchup = "catchup"
-    wanted = (catchup,) if catchup else DAILY
-    marks = ",".join("?" * len(wanted))
-    if list_date is None:
-        row = store.one(f"SELECT MAX(list_date) FROM daily_list WHERE section IN ({marks})", wanted)
-        list_date = row[0] if row else None
+    if catchup:
+        if list_date is None:
+            list_date = store.one("SELECT MAX(list_date) FROM daily_list WHERE section=?", (catchup,))[0]
+        row = store.one("SELECT run_id FROM daily_list WHERE list_date=? AND section=? LIMIT 1", (list_date, catchup))
+        rep = store.one("SELECT report FROM runs WHERE run_id=?", (row[0],)) if row else None
+        report = json.loads(rep[0]) if rep else {}
+    else:
+        list_date = list_date or next(iter(store.list_dates()), None)
+        report = store.list_report(list_date) if list_date else {}
+        list_date = list_date if report else None
     if not list_date:
         store.close()
         return f"no {catchup} list yet (debrief jobs catchup)" if catchup else "no list yet (debrief jobs score)"
-    rows = store.q(f"SELECT * FROM daily_list WHERE list_date=? AND section IN ({marks}) ORDER BY section, rank",
-                   (list_date, *wanted))
     prof = profiles.latest(cfg)[1]
-    run_id = rows[0]["run_id"] if rows else None
-    rep = store.one("SELECT report FROM runs WHERE run_id=?", (run_id,)) if run_id else None
-    report = json.loads(rep[0]) if rep else {}
     entries = report.get("list", {})
     tail = f"profile v{report.get('profile', {}).get('version', '?')} · {report.get('status', '?')}"
     if catchup:
@@ -430,25 +557,19 @@ def today(cfg, list_date=None, show_all=False, catchup=None):
         L = [f"{title} for {list_date} · {len(entries.get(catchup) or [])} kept jobs, best first{since} · {tail}"]
         sections = [(catchup, title)]
     else:
-        shown = entries.get("new") or []
-        fresh = sum(1 for e in shown if e.get("new", True))
-        L = [f"Jobs for {list_date} · {len(shown)} shown of {report.get('kept_distinct', report.get('kept', '?'))} kept "
-             f"({fresh} new tonight, {len(shown) - fresh} carried over) · {tail}"]
+        kept = below(report)
+        L = [f"Jobs for {list_date} · {header(report)} · {tail}"]
         from .coverage import summary_line
         line = summary_line(store, list_date)
         if line:
             L.append(line)
-        sections = [("new", "New"), ("watchlist", "Watchlist")]
-    if show_all and not catchup:
-        allkept = [c for c in report.get("cuts", []) if c["stage"] in ("beyond N", "company limit")]
-        sections.append(("beyond", f"Also kept, still options for later days ({len(allkept)})"))
-        entries = {**entries, "beyond": [{"rank": i + 1, **c, "locations": [], "url": store.posting(c["posting_id"])["url"],
-                                          "why": None, "mismatches": []} for i, c in enumerate(allkept)]}
+        sections = [*SECTIONS, ("below", f"{BELOW} ({len(kept)})")]
+        entries = {**entries, "below": [{**c, "rank": i + 1} for i, c in enumerate(kept)]}
     for key, title in sections:
         es = entries.get(key) or []
         if not es:
             continue
-        L += ["", f"{title}:"]
+        L += ["", f"{title}:"] + ([f"  {NOTES[key]}"] if key in NOTES else [])
         for e in es:
             p = store.posting(e["posting_id"]) or {}
             pay = score.pay_line((p.get("data") or {}).get("pay"))
@@ -459,15 +580,19 @@ def today(cfg, list_date=None, show_all=False, catchup=None):
                      + (f" · {where}" if where else "") + (f" · {pay}" if pay else "") + (f" · posted {when}" if when else ""))
             if e.get("why"):
                 L.append(f"       {e['why']}")
+            for note in score_notes(e):
+                L.append(f"       {note}")
+            if e.get("stage"):
+                L.append(f"       {e['reason']}")
             if p and not store.texts_for(e["posting_id"]):
                 L.append("       (no description: scored on the title alone)")
             if e.get("mismatches"):
                 L.append(f"       ! {'; '.join(e['mismatches'])}")
-            if e.get("url"):
-                L.append(f"       {e['url']}")
+            if e.get("url") or p.get("url"):
+                L.append(f"       {e.get('url') or p['url']}")
             for o in e.get("also") or []:
                 L.append(f"       also listed as \"{o['title']}\": {o['url']}")
             if e.get("more"):
-                L.append(f"       also kept at {e['company']}: {e['more']} more (jobs today --all)")
+                L.append(f"       also kept at {e['company']}: {e['more']} more (below)")
     store.close()
     return "\n".join(L)

@@ -3,6 +3,7 @@ validators, source state, transactions, migrations) with the jobs tables (migrat
 from pathlib import Path
 
 from ..store.db import Store, dumps, loads
+from .night import DAILY
 
 MIGRATIONS = Path(__file__).with_name("migrations")
 
@@ -47,6 +48,16 @@ class JobsStore(Store):
     def active_in_scope(self, source_id, scope):
         return [r["item_key"] for r in self.q(
             "SELECT item_key FROM items WHERE source_id=? AND scope=? AND active=1", (source_id, scope))]
+
+    def newest_published(self, source_id, scope):
+        """The latest posted date among a source's listings in one scope, or None."""
+        return self.one("SELECT MAX(json_extract(data, '$.published_at')) FROM items WHERE source_id=? AND scope=?",
+                        (source_id, scope))[0]
+
+    def top_item_number(self, source_id):
+        """The highest number after the colon in a source's item keys ("waas:124344"), or None."""
+        return self.one("SELECT MAX(CAST(substr(item_key, instr(item_key, ':') + 1) AS INTEGER)) FROM items WHERE source_id=?",
+                        (source_id,))[0]
 
     def deactivate(self, source_id, item_key):
         self.run("UPDATE items SET active=0 WHERE source_id=? AND item_key=?", (source_id, item_key))
@@ -141,13 +152,30 @@ class JobsStore(Store):
                  (posting_id, profile_id, run_id, at, answer["score"], int(answer["keep"]), answer["why"],
                   dumps(answer["mismatches"]), model, prompt_version))
 
-    def save_list(self, list_date, run_id, rows, sections=("new", "watchlist")):
+    def save_list(self, list_date, run_id, rows, sections=DAILY):
         """rows: [(section, rank, posting_id, score, points)]; replaces that date's rows for these
         sections only, so the catch-up and a morning list on the same date keep each other's."""
         marks = ",".join("?" * len(sections))
         self.run(f"DELETE FROM daily_list WHERE list_date=? AND section IN ({marks})", (list_date, *sections))
         for section, rank, pid, score, pts in rows:
             self.run("INSERT INTO daily_list VALUES (?,?,?,?,?,?,?)", (list_date, run_id, section, rank, pid, score, pts))
+
+    def list_dates(self):
+        """Every date with a morning list, newest first: a finished score run, even one that listed nothing."""
+        return [r[0] for r in self.q("SELECT DISTINCT run_date FROM runs WHERE kind = 'score' AND finished_at IS NOT NULL "
+                                     "ORDER BY run_date DESC")]
+
+    def list_report(self, list_date):
+        """The report of list_date's morning list (its last score run), or {}."""
+        row = self.one("""SELECT report FROM runs WHERE kind = 'score' AND run_date = ? AND finished_at IS NOT NULL
+                          ORDER BY started_at DESC, run_id DESC LIMIT 1""", (list_date,))
+        return loads(row[0], {}) if row else {}
+
+    def listed_companies(self, first_date, before_date):
+        """The company names on the morning lists dated first_date up to, not including, before_date."""
+        return {r[0] for r in self.q("""SELECT DISTINCT p.company FROM daily_list d JOIN postings p USING (posting_id)
+                                        WHERE d.section = 'new' AND d.list_date >= ? AND d.list_date < ?""",
+                                     (first_date, before_date))}
 
     # --------------------------------------------------------------- highlighted (revision 5)
     def pool(self, list_date, sections):
@@ -158,6 +186,12 @@ class JobsStore(Store):
                           AND posting_id NOT IN (SELECT posting_id FROM highlighted
                                                  WHERE NOT (list_date = ? AND section IN ({marks})))
                           ORDER BY posting_id""", (list_date, *sections))
+
+    def score_since(self, run_date):
+        """Where "new tonight" starts for a run dated run_date: the last scoring run's cursor, or
+        on a rerun of that date, the cursor before it."""
+        rerun = self.get_meta("score_cursor_date") == run_date
+        return self.get_meta("score_cursor_prev" if rerun else "score_cursor")
 
     def save_highlighted(self, list_date, run_id, rows, sections):
         """rows: [(posting_id, section)]; replaces this date's rows for these sections. A posting

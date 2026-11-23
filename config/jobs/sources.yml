@@ -7,23 +7,27 @@
 #                 board     one company's job board on a job-board system (an example of that system;
 #                           the universe test covers the rest)
 #                 bigtech   a big company's own careers API
-#                 api       a job API (aggregator or job board with an official API)
+#                 api       a job API or a job site's own search (an aggregator, a job board)
 #                 discussion  Hacker News hiring threads and job posts
 #                 email     the alert inbox (LinkedIn, Indeed, ... alert emails)
 #                 check     the miss-check sample (never a source of jobs)
 #                 universe  a list of companies' job boards: the board directory, for finding a watchlist
 #                           company's board (never polled as a whole; Revision 1)
-#                 watchlist the profile's companies' boards, read in full every night
+#                 watchlist companies' boards, read in full every night: the profile's companies, and YC
+#                           companies named in HN titles (yc-boards)
 #   url, each   the endpoint; {each} expands over `each`
 #   method      GET (default) or POST, with `body` as JSON
 #   candidates  alternative urls, tried in order until one works
-#   probe       how the probe parses it: kind json | feed | md_table | csv | text | imap
+#   probe       how the probe parses it: kind json | feed | md_table | csv | html | imap
 #                 items/title/date/count: dotted paths (json); `fields`: {name: dotted path} whose fill
-#                 rate across items the probe reports
+#                 rate across items the probe reports; html: items is a pattern counted once per job,
+#                 title a pattern whose first group is a job's title
 #   auth        {headers: {Header: ENV_VAR}, params: {param: ENV_VAR}}: sent when every var is set,
 #               else the source is "needs_key" and nothing is requested
 #   adapter     the collector that reads it nightly (src/debrief/jobs/adapters); none = probe only
-#   options     the collector's settings (endpoint, when it differs from the probe's url; paging; searches)
+#   options     the collector's settings (endpoint, when it differs from the probe's url; paging; searches);
+#               on a list, trusted_new_grad: true makes its listing alone the new-grad sign, so a job nobody
+#               could read passes the level check (filters.new_grad_sign)
 #   headers     extra request headers; "{contact}" is DEBRIEF_CONTACT
 #   terms       what the source's terms ask of us (attribution, rate)
 #   enabled     false = listed with its reason, never requested
@@ -33,6 +37,7 @@
   name: SimplifyJobs New-Grad-Positions
   family: list
   adapter: simplify_json
+  options: {trusted_new_grad: true}
   url: https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json
   probe:
     kind: json
@@ -47,6 +52,7 @@
   name: vanshb03 New-Grad-2027
   family: list
   adapter: simplify_json
+  options: {trusted_new_grad: true}
   url: https://raw.githubusercontent.com/vanshb03/New-Grad-2027/dev/.github/scripts/listings.json
   probe:
     kind: json
@@ -68,6 +74,7 @@
   name: speedyapply 2027-SWE-College-Jobs (US new grad)
   family: list
   adapter: md_table
+  options: {trusted_new_grad: true}
   url: https://raw.githubusercontent.com/speedyapply/2027-SWE-College-Jobs/main/NEW_GRAD_USA.md
   probe: {kind: md_table}
   notes: markdown only (no JSON)
@@ -131,10 +138,9 @@
     fields: {country: country, city: city, remote: telecommuting, published: published_on, url: url}
 
 - id: board-smartrecruiters
-  name: SmartRecruiters (Visa's board)
+  name: SmartRecruiters (LLNL's board)
   family: board
-  enabled: false
-  url: https://api.smartrecruiters.com/v1/companies/Visa/postings?limit=100
+  url: https://api.smartrecruiters.com/v1/companies/LLNL/postings?limit=100
   probe:
     kind: json
     items: content
@@ -142,8 +148,10 @@
     date: releasedDate
     count: totalFound
     fields: {country: location.country, city: location.city, remote: location.remote, released: releasedDate}
-  notes: "OFF: api.smartrecruiters.com robots.txt allows /v1/companies/ only to LinkedInBot (User-agent: * Disallow: /),
-    checked 2026-11-04. SmartRecruiters jobs reach us through the community lists and LinkedIn alerts."
+  notes: "ON again 2026-11-23: it was off only because api.smartrecruiters.com robots.txt allows /v1/companies/ to
+    LinkedInBot alone, and Alex lifted the robots and terms rule (read any site that doesn't block us). The API
+    answered every test request (LLNL's list, one posting). Visa's board, the old example, lists no jobs now.
+    SmartRecruiters boards are read by the watchlist, yc-boards, the board finder and describe."
 
 - id: board-recruitee
   name: Recruitee (Hatchtech's board)
@@ -175,7 +183,9 @@
 - id: amazon
   name: Amazon (amazon.jobs)
   family: bigtech
-  enabled: false
+  adapter: amazon
+  options: {endpoint: "https://www.amazon.jobs/en/search.json", country: USA, page_size: 100, max_pages: 5, stop_days: 3,
+            categories: [software-development, machine-learning-science, data-science, business-intelligence]}
   url: https://www.amazon.jobs/en/search.json?result_limit=100&offset=0&sort=recent&country=USA
   probe:
     kind: json
@@ -184,8 +194,10 @@
     date: posted_date
     count: hits
     fields: {location: location, city: city, posted: posted_date, path: job_path}
-  notes: "OFF (Alex, 2026-11-04): robots.txt allows it, but amazon.jobs links to Amazon's Conditions of Use, which
-    forbid robots and data-gathering tools. Amazon's roles come through the community lists and LinkedIn alerts."
+  notes: "ON 2026-11-23: it was off only because Amazon's Conditions of Use forbid robots (Alex, 2026-11-04), and Alex
+    lifted the robots and terms rule (read any site that doesn't block us). The site's own search JSON, newest US
+    jobs first in four categories (software, applied science, data science, business intelligence), each with its
+    description and qualifications; the test requests all answered."
 
 - id: microsoft
   name: Microsoft (careers pcsx API)
@@ -209,13 +221,17 @@
   name: Google Careers
   family: bigtech
   enabled: false
-  notes: no API; results pages are disallowed by robots.txt. Covered by LinkedIn alerts and the miss-check.
+  notes: "OFF: no collector yet. robots.txt (results pages disallowed) no longer rules it out since Alex lifted the
+    robots and terms rule on 2026-11-23; whether its careers search can be read is being checked separately.
+    Covered by LinkedIn alerts and the miss-check meanwhile."
 
 - id: meta-careers
   name: Meta Careers
   family: bigtech
   enabled: false
-  notes: robots.txt asks for express written permission for automated collection. Covered by LinkedIn alerts.
+  notes: "OFF: no collector yet. robots.txt (asks for written permission) no longer rules it out since Alex lifted
+    the robots and terms rule on 2026-11-23; whether its careers search can be read is being checked separately.
+    Covered by LinkedIn alerts meanwhile."
 
 # --------------------------------------------------------------------------------------- job APIs
 - id: adzuna
@@ -235,11 +251,6 @@
     fields: {company: company.display_name, location: location.display_name, pay_min: salary_min, created: created,
              url: redirect_url}
   terms: personal job search is a permitted use; attribution ("Jobs by Adzuna") required
-  robots_exception:
-    hosts: [api.adzuna.com]
-    terms: "Adzuna's developer terms (developer.adzuna.com): a registered app key for its search API; personal
-      job search is a permitted use; attribution required. robots.txt on api.adzuna.com is Disallow: /"
-    decided: "Alex, 2026-11-05 (option 2: official keyed APIs whose terms allow our use)"
 
 - id: usajobs
   name: USAJobs (federal)
@@ -259,11 +270,6 @@
     fields: {org: MatchedObjectDescriptor.OrganizationName, location: MatchedObjectDescriptor.PositionLocationDisplay,
              pay: MatchedObjectDescriptor.PositionRemuneration, url: MatchedObjectDescriptor.PositionURI}
   terms: User-Agent must be the email the key was registered with (DEBRIEF_CONTACT; sent by the collector)
-  robots_exception:
-    hosts: [data.usajobs.gov]
-    terms: "USAJOBS developer API (developer.usajobs.gov): the federal government's published search API, used
-      with the Authorization-Key issued to DEBRIEF_CONTACT. robots.txt on data.usajobs.gov is Disallow: /"
-    decided: "Alex, 2026-11-05 (option 2: official keyed APIs whose terms allow our use)"
 
 - id: themuse
   name: The Muse
@@ -337,7 +343,85 @@
     date: publication_date
     fields: {company: company_name, location: candidate_required_location, pay: salary, published: publication_date}
   terms: jobs appear 24 h late; at most 4 requests a day; attribution; don't resubmit to other boards
-  notes: "OFF: remotive.com robots.txt has Disallow: /api/* for every User-Agent (checked 2026-11-04)"
+  notes: "OFF: no collector, and its jobs appear 24 h late. Its robots.txt (Disallow: /api/*, checked 2026-11-04) no
+    longer rules it out since Alex lifted the robots and terms rule on 2026-11-23."
+
+# ------------------------------------------------------- job sites' own searches (Revision 10)
+- id: linkedin-search
+  name: LinkedIn job search (guest, posted in the last day)
+  family: api
+  adapter: linkedin_search
+  url: https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software%20engineer%20junior&location=Washington%20DC-Baltimore%20Area&f_TPR=r86400&start=0
+  options:
+    endpoint: https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search
+    posted: r86400
+    max_requests: 50
+    max_pages: 3
+    us_wide: [founding engineer, forward deployed engineer]
+    by_place:
+      - 'software engineer (junior OR "new grad" OR "entry level" OR graduate OR "early career" OR associate)'
+      - '(data OR "machine learning" OR AI OR "forward deployed") (junior OR "new grad" OR "entry level" OR graduate OR "early career" OR associate)'
+    places: [Washington DC-Baltimore Area, New York City Metropolitan Area, San Francisco Bay Area, Greater Boston,
+             "Austin, Texas Metropolitan Area", remote]
+  probe: {kind: html, items: 'data-entity-urn="urn:li:jobPosting:', title: 'base-search-card__title">\s*([^<]+?)\s*</h3>'}
+  notes: "ON 2026-11-23. The logged-out jobs page's search, jobs posted in the last day: us_wide
+    keywords across the US (founding and forward deployed roles), then each by_place keyword in each place, at
+    most max_pages pages of 10 and max_requests a night (14 searches x 3 pages = 42). The place keywords ask for
+    early-career words: LinkedIn's entry-level filter is loose (0 of 15 jobs it returned said Entry level on their
+    own page) and a card has no description, so only a title that says new grad, junior or associate passes the
+    level check (6 passing cards in 4 pages with the words, 2 in the same 4 pages without; 2026-11-23). Items are
+    keyed linkedin:<id> like the alert emails', link https://www.linkedin.com/jobs/view/<id> with no tracking ids;
+    describe reads their job pages. Shares the linkedin.com rate bucket (5 s) and the block rule with describe: a
+    429, 999 or login wall ends LinkedIn for the night."
+
+- id: getro
+  name: VC portfolio job boards on Getro (General Catalyst, Accel, Revolution, ...)
+  family: api
+  adapter: getro
+  method: POST
+  url: https://api.getro.com/api/v2/collections/222/search/jobs
+  body: {hitsPerPage: 20, page: 0, query: "", filters: {job_functions: [Software Engineering, Data Science]}}
+  headers: {Accept: application/json}                  # anything else answers 406
+  options:
+    endpoint: "https://api.getro.com/api/v2/collections/{network}/search/jobs"
+    job_functions: [Software Engineering, Data Science]
+    first_pages: 3
+    max_pages: 10
+    networks: {General Catalyst: 222, Accel: 8672, Khosla: 257, 8VC: 1005, Insight: 246, Menlo: 767, Techstars: 89,
+               Revolution: 143, Lux: 103, Thrive: 2105}
+  probe:
+    kind: json
+    items: results.jobs
+    title: title
+    date: created_at
+    count: results.count
+    fields: {company: organization.name, locations: locations, url: url, seniority: seniority, stage: organization.stage,
+             head_count: organization.head_count, work_mode: work_mode}
+  notes: "ON 2026-11-23. One public API behind ten VC funds' job boards (network ids from each board
+    page's __NEXT_DATA__ props.pageProps.network.id; Revolution is a DC fund). Per fund, software and data jobs newest
+    first until the newest job this source already has from that fund (first night: first_pages pages). Getro's job
+    ids are global, so a job two funds list is one listing; links are the employer's own job pages. Each job carries
+    the company's funding stage and head-count bucket (company_size), shown to the scoring call as a startup sign.
+    Acquired companies keep their old names and a stage can be stale (Gusto shows series_a; checked 2026-11-23)."
+
+- id: waas-jobs
+  name: Work at a Startup (YC) job pages, by id
+  family: api
+  adapter: waas_jobs
+  url: https://www.workatastartup.com/jobs
+  headers: {Accept: text/html}                         # the default */* answers 406 (2026-11-23)
+  options: {seed: {id: 124490, date: 2026-11-23}, ids_per_day: 150, first_days: 1, stop_after: 60, max_requests: 400, startup: true}
+  probe: {kind: html, items: 'data-page="', title: '&quot;title&quot;:&quot;(.*?)&quot;'}
+  notes: "ON 2026-11-23. YC startups' jobs, most of them on no job board we read. The job list needs a
+    YC account, but each job's page is public and ids rise with time (about 180-200 a day; 55 of 300 walked ids were
+    live jobs, in clusters, with runs of up to 42 misses between; 2026-11-23), so each night walks up from the
+    highest id this source holds and stops after stop_after misses in a row past the highest job id the pages it
+    read link to. Its first night starts first_days back from an estimate made from the seed (a job id live that
+    day) at ids_per_day (set low, so it starts in the past, never ahead of the newest job), and max_requests carries
+    the rest to the next night: about 260 a night at 1 s, 400 at most. A page has no date: first seen is the posted
+    date. minExperience ('Any (new grads ok)') is the job's level. The raw store keeps the job, the company's name,
+    batch and size and the description without the founders' names, emails or profile links; never the founders.
+    A login redirect or a page without job data is a block."
 
 # ------------------------------------------------------------------------- Hacker News (hiring)
 - id: hn-whoishiring
@@ -364,6 +448,20 @@
   options: {max_pages: 100}
   notes: each company's whole board, every night; Workday boards page 20 at a time (max_pages caps it at 2,000 jobs)
 
+- id: yc-boards
+  name: YC companies' boards (named in HN titles)
+  family: watchlist
+  adapter: yc_boards
+  options: {search: "https://hn.algolia.com/api/v1/search_by_date", since: 2021-01-01, refresh_days: 7, max_pages: 100, startup: true}
+  terms: "ycombinator.com and workatastartup.com forbid robots and scraping in their terms; Alex lifted the robots and
+    terms rule on 2026-11-23, and waas-jobs now reads Work at a Startup. This source still takes its company list
+    from HN story and job-post titles through the HN Algolia API, and the jobs from each company's own board"
+  notes: "every YC company in an HN title since `since` (Launch HN, Show HN, \"is hiring\", HN job posts), refreshed
+    weekly; matched to the boards its posts link to and the directory's boards whose id spells its name; watchlist
+    companies and SmartRecruiters boards left out (src/debrief/jobs/adapters/yc.py). Only confirmed boards are read
+    (a post links it, or its jobs' text named Y Combinator on its first read); a board that answered 404 waits for the
+    weekly refresh. Normal filters, no watchlist treatment; data.yc is the batch"
+
 # ------------------------------------------------- descriptions for jobs that may be scored (M2)
 - id: board-finder
   name: The company's own board, for jobs that came without a job-board id
@@ -375,19 +473,24 @@
     dead_days: 30
     exclude_companies: [Amazon, Google, Meta]
   notes: "runs just before describe. Only companies already in the board directory (guessing board names found 2 of
-    103 jobs in the 2026-11-04 check); lists Greenhouse, Lever, Ashby, Workable and Recruitee boards, searches
-    Workday by title; never SmartRecruiters (robots.txt). Amazon, Google and Meta stay OFF here too. The match is the
-    merge rule's: same core title, overlapping place, exactly one job (src/debrief/jobs/adapters/finder.py)."
+    103 jobs in the 2026-11-04 check); lists Greenhouse, Lever, Ashby, Workable and Recruitee boards and the first
+    page of a SmartRecruiters board, searches Workday by title. Amazon (its own source), Google and Meta have no
+    job board to find. The match is the merge rule's: same core title, overlapping place, exactly one job
+    (src/debrief/jobs/adapters/finder.py)."
 
 - id: describe
   name: Job descriptions from job-board APIs
   family: detail
   adapter: describe
-  options: {max_requests: 300}
-  notes: runs last; only open jobs that pass the profile's filters and have no description; Greenhouse, Lever and
-    Workday per job, Ashby, Workable and Recruitee per board; never company sites or aggregators. A Greenhouse id
-    from a company page (?gh_jid=) with no known board gets up to 4 guessed board names, proved by the API answering
-    for that exact job; a found board goes in the directory
+  options: {max_requests: 300, max_pages: {jobright: 60, linkedin: 40}}
+  notes: "runs last; only open jobs not yet shown that pass the profile's filters and have no description, the ones
+    that can still make tonight's list first; Greenhouse, Lever, SmartRecruiters and Workday per job, Ashby,
+    Workable and Recruitee per board; never company sites. A Greenhouse id from a company page (?gh_jid=) with no
+    known board gets up to 4 guessed board names, proved by the API answering for that exact job; a found board
+    goes in the directory. A job no board reaches gets the page a listing links to, tried in order: jobright,
+    LinkedIn's guest job page (the alert emails' links); at most max_pages[site] a night, outside max_requests,
+    stored as the description and job criteria only, never the people the page names. A host that blocks us is
+    asked nothing more that night. LinkedIn read 15 of 15 test pages (2026-11-23)."
 
 # ----------------------------------------------------------------------- the alert inbox (Gmail)
 - id: alert-inbox
@@ -396,16 +499,17 @@
   adapter: alert_inbox
   url: imaps://imap.gmail.com:993
   auth: {env: [JOBS_IMAP_USER, JOBS_IMAP_PASSWORD]}
-  options: {early: true, days: 4, max_messages: 300}
+  options: {days: 4, max_messages: 300}
   probe:
     kind: imap
     senders: {linkedin: linkedin.com, indeed: indeed.com, glassdoor: glassdoor.com, wellfound: wellfound.com,
               handshake: joinhandshake.com, dice: dice.com, builtin: builtin.com}
   notes: "a Gmail account used only for saved-search alerts (LinkedIn, Indeed, Handshake forwarded from the school
-    address, Wellfound, Glassdoor, Dice, Built In; every search with the site's Entry-level filter, so the source
-    counts as new-grad: options.early). Read-only: INBOX opened read-only, BODY.PEEK, nothing marked read or moved.
-    The probe logs in and counts alert emails per sender, reading no bodies. Parsers per sender come from real
-    samples (PLAN.md Revision 6); until then emails are kept and counted."
+    address, Wellfound, Glassdoor, Dice, Built In). Not a new-grad source (no options.early): most searches have no
+    entry-level filter (16 of 19 on Indeed, every LinkedIn one; checked 2026-11-22). Read-only: INBOX opened
+    read-only, BODY.PEEK, nothing marked read or moved. The probe logs in and counts alert emails per sender,
+    reading no bodies. Indeed and LinkedIn digests are parsed (adapters/alerts.py); the other senders' emails are
+    kept and counted."
 
 # --------------------------------------------------------- the miss-check sample (Google's job results)
 - id: serpapi-account
@@ -437,11 +541,6 @@
   notes: "never a source of jobs: `jobs coverage` reads these results back from the raw store. At most per_day
     searches, and never more than an even share of the month's searches left (read from account.json first,
     which doesn't use a search)."
-  robots_exception:
-    hosts: [serpapi.com]
-    terms: "SerpAPI's API (serpapi.com/legal): a paid-or-free customer account calling its own search endpoint
-      with our key. robots.txt disallows /search.json (account.json is allowed)"
-    decided: "Alex, 2026-11-05 (option 2: official keyed APIs whose terms allow our use)"
   probe:
     kind: json
     items: jobs_results
