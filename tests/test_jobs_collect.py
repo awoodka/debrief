@@ -790,6 +790,13 @@ def test_the_fallback_refuses_a_source_listing_the_same_job_twice(store):
     assert "jobright-newgrad" not in store.posting_sources(store.find_key("job:x:2"))
 
 
+def test_one_listing_given_twice_is_not_two_jobs(store):
+    _put(store, "simplify-newgrad", [it("s1", title="Data Analyst, New Grad", company="Apex Group", job_key="job:lever:aaaa")])
+    found = it("j1", title="New Grad Data Analyst", company="Apex Technologies Inc")
+    c = _put(store, "jobright-newgrad", [found, found])                  # two searches found it
+    assert c["merged"] == 1 and "jobright-newgrad" in store.posting_sources(store.find_key("job:lever:aaaa"))
+
+
 def test_the_same_title_in_two_cities_is_not_ambiguous(store):
     t = "Machine Learning Engineer Graduate - E-Commerce Video"
     _put(store, "simplify-newgrad", [

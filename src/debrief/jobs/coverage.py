@@ -18,6 +18,7 @@ two; after `checks` runs it's a "miss" with a cause:
   company site only  only the company's own careers site -> an alert, or the watchlist
   closed site only   only LinkedIn, Indeed, Glassdoor and the like -> widen that alert search
   broken source      the watchlist reads that board, but it failed that night
+  not searched       the watchlist reads that Workday board through searches, and none found it -> a search word
 The report (runs/<date>/coverage-<run>.json and .md) has the day's and the last 7 days' recall, every
 miss with its cause and suggestion, and every near match; `jobs today` prints its summary line.
 """
@@ -143,14 +144,16 @@ def match(store, s):
     return None, None
 
 
-def cause(s, watch_boards, watch_failed):
-    """(cause, suggestion) for a miss."""
+def cause(s, watch_boards, watch_failed, searched=frozenset()):
+    """(cause, suggestion) for a miss. searched: the watched boards read only through searches."""
     urls = s["apply_urls"]
     found = [b for b in (boards.board_from_url(u) for u in urls) if b]
     if found:
         b = found[0]
         if b in watch_boards and watch_failed:
             return "broken source", f"the watchlist reads {b}, but it failed that night"
+        if b in searched:
+            return "not searched", f"the watchlist reads {b} through searches, and none found this job: a word for workday_search"
         page = next(u for u in urls if boards.board_from_url(u) == b)
         return "not watched", f'{s["company"]} posts on {b}: debrief jobs watch add "{s["company"]}" --kind large|startup --url {page}'
     if urls and all(_aggregator(u) for u in urls):
@@ -173,6 +176,8 @@ def run(cfg, run_date=None, now=None, log=print, days=3, checks=3, window=7):
     watch_boards = {c.get("board") for c in prof["companies"] if c.get("board")}
     wrow = store.one("SELECT last_status FROM source_state WHERE source_id='watchlist'")
     watch_failed = bool(wrow and wrow[0] in ("failed", "partial"))
+    wl = next((x for x in cfg.sources if x.id == "watchlist"), None)
+    searched = {b for b in watch_boards if boards.split(b)[0] == "workday"} if wl and wl.options.get("workday_search") else set()
     since = (date.fromisoformat(run_date) - timedelta(days=window - 1)).isoformat()
     with store.transaction():
         added = ingest(cfg, store, run_date, days)
@@ -198,7 +203,7 @@ def run(cfg, run_date=None, now=None, log=print, days=3, checks=3, window=7):
                 continue
             n = s["checks"] + (0 if s["last_checked"] == run_date else 1)
             if n >= checks:
-                c, why = cause(s, watch_boards, watch_failed)
+                c, why = cause(s, watch_boards, watch_failed, searched)
                 store.run("""UPDATE coverage_samples SET status='miss', checks=?, cause=?, suggestion=?, last_checked=?
                              WHERE sample_key=?""", (n, c, why, run_date, s["sample_key"]))
             else:

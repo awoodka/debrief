@@ -4,7 +4,7 @@
 
 A record looks like
   {"v": 1, "seq": 0, "source_id": ..., "run_id": ..., "url": ..., "each": ..., "fetched_at": ...,
-   "status": 200, "error": "", "headers": {"etag": ..., "last-modified": ..., "content-type": ...},
+   "status": 200, "error": "", "headers": {"etag": ..., "last-modified": ..., ...KEPT_HEADERS},
    "meta": {...what the adapter needs to parse it...}, "body": "<text>"}
 with "body_b64" instead of "body" when the bytes aren't valid UTF-8. A record's reference is
 "raw/<date>/<source>/<run_id>.jsonl.gz#<seq>". `collect --replay <date>` re-parses these files
@@ -17,7 +17,9 @@ import shutil
 from datetime import date as Date, timedelta
 from pathlib import Path
 
-KEPT_HEADERS = ("etag", "last-modified", "content-type", "content-length", "date")
+# server, cf-ray and cf-mitigated say whether Cloudflare answered, and whether it served a challenge.
+KEPT_HEADERS = ("etag", "last-modified", "content-type", "content-length", "date", "retry-after", "server", "cf-ray",
+                "cf-mitigated")
 
 
 def make_record(source_id, run_id, seq, fetched, fetched_at, each=None, meta=None):

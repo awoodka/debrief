@@ -6,6 +6,7 @@
 - Every request carries a descriptive User-Agent with contact info.
 - Conditional GET: pass the stored ETag/Last-Modified and a 304 comes back as `not_modified`.
 - 429/5xx: honour Retry-After (capped), else back off exponentially, then give up.
+- A Cloudflare challenge is never asked again: it comes back at once, its error naming it.
 
 HTTP errors never raise. Callers get a Fetched with `ok` False and the reason, so a failure is
 reported, not swallowed.
@@ -22,6 +23,7 @@ from .robots import Robots
 
 RATE_HEADERS = ("retry-after", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset",
                 "ratelimit-limit", "ratelimit-remaining", "ratelimit-reset", "ratelimit-policy")
+CHALLENGE_SCRIPT = b"/cdn-cgi/challenge-platform"
 
 
 @dataclass
@@ -61,6 +63,14 @@ class Fetched:
 
     def rate_headers(self):
         return {k: self.headers[k] for k in RATE_HEADERS if k in self.headers}
+
+    @property
+    def challenge(self):
+        """A refusal that is Cloudflare's challenge page: marked cf-mitigated: challenge, or loading Cloudflare's
+        challenge script. Only a refused answer counts: an ordinary page may load that script for Cloudflare's bot
+        detection."""
+        return self.status >= 400 and (self.headers.get("cf-mitigated") == "challenge"
+                                       or CHALLENGE_SCRIPT in self.content)
 
 
 def _host(url):
@@ -137,6 +147,9 @@ class Client:
             out.final_url, out.status = r.url, r.status_code
             out.headers = {k.lower(): v for k, v in r.headers.items()}
             out.content, out.error = r.content, ""
+            if out.challenge:
+                out.error = f"Cloudflare challenge, HTTP {r.status_code}"
+                break
             if r.status_code == 429 or r.status_code >= 500:
                 out.error = f"HTTP {r.status_code}"
                 if attempt < retries:

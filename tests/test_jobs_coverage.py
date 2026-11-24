@@ -137,3 +137,16 @@ def test_the_summary_line_tops_the_morning_list(tmp_path, monkeypatch):
     _list_store.close()
     rank.run(cfg, run_date=D1, dry_run=False, runner=lambda *a: (1, "", "no call in this test"), now=NOW, log=lambda *a: None)
     assert "Coverage: no Google sample decided yet (1 pending)" in rank.today(cfg, list_date=D1).splitlines()[1]
+
+
+def test_a_miss_on_a_searched_workday_board_is_not_searched(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path, monkeypatch, {"watchlist"})
+    prof = profile.latest(cfg)[1]
+    prof["companies"] = [{"name": "Umbrella", "board": "workday:umbrella|wd1|Ext"}]
+    profile.save(cfg, prof)
+    _sample(cfg, D1, [job("Software Engineer, New Grad", "Umbrella",
+                          apply=["https://umbrella.wd1.myworkdayjobs.com/en-US/Ext/job/New-York-NY/Software-Engineer_R1"])])
+    for d in (D1, D2, D3):
+        r = coverage.run(cfg, run_date=d, now=NOW, log=lambda *a: None)
+    assert [(m["company"], m["cause"]) for m in r["misses"]] == [("Umbrella", "not searched")]
+    assert "workday_search" in r["misses"][0]["suggestion"]

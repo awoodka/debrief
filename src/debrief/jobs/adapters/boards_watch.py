@@ -1,5 +1,6 @@
-"""The watchlist (the profile's companies): each company's whole board, every night, every page.
-And the board directory: the two company-board lists, refreshed weekly, for finding a watchlist
+"""The watchlist (the profile's companies): each company's board, every night. A board is read whole, every
+page, except a Workday board when the source has searches (options.workday_search): then only the jobs those
+searches find. And the board directory: the two company-board lists, refreshed weekly, for finding a watchlist
 company's board. The directory is a lookup table only; its boards are never polled as a whole.
 """
 import csv
@@ -14,7 +15,8 @@ from . import Adapter
 
 
 class Watchlist(Adapter):
-    """A board's list is complete, so a job that drops off a fully read board has closed."""
+    """A board's list is complete, so a job that drops off a fully read board has closed. A board read only in
+    part (stopped early, or through searches) closes nothing."""
     name = "watchlist"
     snapshot = "full"
 
@@ -29,34 +31,55 @@ class Watchlist(Adapter):
             self.read_board(ctx, source, board, {"board": board, "company": c["name"]}, max_pages)
 
     def read_board(self, ctx, source, board, meta, max_pages):
-        """The read's records, first page first. A paged board (Workday, SmartRecruiters) is read to its
-        end, and every record of a read that didn't reach the end is marked partial."""
+        """The read's records, first page first. A paged board (Workday, SmartRecruiters) is read to its end, and
+        every record of a read that didn't reach the end is marked partial.
+
+        A Workday board is read through options.workday_search instead when the list isn't empty: each search
+        (Workday's searchText: every word, in any order, anywhere in a job's title or description) paged to its
+        end or to options.search_max_pages. Searches find only some of a board's jobs, so their records are
+        partial; a job two searches find is one listing."""
         system = boards.split(board)[0]
         if system not in boards.PAGE_SIZE:
             _, url, _ = boards.list_request(board, 0, full=True)
             return [ctx.get(source, url, each=board, meta=meta)]
-        recs, total, reached_end = [], None, False
-        for page in range(max_pages):
-            method, url, body = boards.list_request(board, page, full=True)
-            page_meta = {**meta, "page": page}
-            rec = (ctx.post(source, url, body, each=board, meta=page_meta) if method == "POST"
-                   else ctx.get(source, url, each=board, meta=page_meta, conditional=False))
-            recs.append(rec)
-            if not raw.ok(rec):
-                break
-            try:
-                jobs, page_total = boards.parse_list(system, json.loads(raw.body(rec)))
-            except ValueError:
-                break
-            if total is None:
-                total = page_total or 0
-            if not jobs or page + 1 >= boards.pages_needed(system, total):
-                reached_end = system != "workday" or total < boards.WORKDAY_MAX_TOTAL
-                break
-        if not reached_end:
+        searches = tuple(source.options.get("workday_search") or ()) if system == "workday" else ()
+        pages = int(source.options.get("search_max_pages", max_pages)) if searches else max_pages
+        recs, ends, cut = [], set(), []
+        for q in searches or ("",):
+            got, end = self._read_list(ctx, source, board, meta, pages, q)
+            recs += got
+            ends.add(end)
+            if q and end == "more":
+                cut.append(q)
+        if cut:
+            ctx.warn(f"{meta['company']}: stopped after {pages} page{'s' * (pages != 1)} of the "
+                     f"search{'es' * (len(cut) > 1)} " + ", ".join(repr(q) for q in cut))
+        if searches or ends != {"end"}:
             for rec in recs:
                 rec["meta"]["partial"] = True
         return recs
+
+    def _read_list(self, ctx, source, board, meta, max_pages, search):
+        """(records, how the read stopped: "end" of the list, "more" left to read, or "failed")."""
+        system = boards.split(board)[0]
+        recs, total = [], None
+        for page in range(max_pages):
+            method, url, body = boards.list_request(board, page, full=True)
+            page_meta = {**meta, "page": page}
+            rec = (ctx.post(source, url, {**body, "searchText": search}, each=board, meta=page_meta) if method == "POST"
+                   else ctx.get(source, url, each=board, meta=page_meta, conditional=False))
+            recs.append(rec)
+            if not raw.ok(rec):
+                return recs, "failed"
+            try:
+                jobs, page_total = boards.parse_list(system, json.loads(raw.body(rec)))
+            except ValueError:
+                return recs, "failed"
+            if total is None:
+                total = page_total or 0
+            if not jobs or page + 1 >= boards.pages_needed(system, total):
+                return recs, "end" if system != "workday" or total < boards.WORKDAY_MAX_TOTAL else "more"
+        return recs, "more"
 
     def parse(self, record, source):
         if not raw.ok(record):

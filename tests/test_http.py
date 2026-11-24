@@ -1,3 +1,5 @@
+import pytest
+
 from debrief.http import Client
 
 SETTINGS = {"timeout_s": 5, "max_retries": 2, "backoff_s": 5, "max_retry_after_s": 120,
@@ -79,3 +81,22 @@ def test_path_prefix_buckets_take_precedence_in_order():
     assert c.bucket("https://huggingface.co/papers/2501.12948") == ("hf-pages", 3.5)
     assert c.bucket("https://huggingface.co/api/papers/2501.12948") == ("hf", 1.0)
     assert c.bucket("https://huggingface.co/papersx") == ("hf-pages", 3.5)   # prefix match, like robots paths
+
+
+CHALLENGE = (b'<html><title>Just a moment...</title>'
+             b'<script src="/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1"></script></html>')
+
+
+@pytest.mark.parametrize("headers,page", [({"Server": "cloudflare", "cf-mitigated": "challenge"}, b"<html></html>"),
+                                          ({"Server": "cloudflare"}, CHALLENGE)])
+def test_a_cloudflare_challenge_is_named_and_never_asked_again(headers, page):
+    c, clock = client([FakeResponse(429, headers, page), FakeResponse(200)])
+    r = c.get("https://tenant.wd5.myworkdayjobs.com/wday/cxs/tenant/site/jobs")
+    assert (r.status, r.attempts, r.error) == (429, 1, "Cloudflare challenge, HTTP 429") and clock.sleeps == []
+
+
+def test_a_page_that_loads_cloudflares_script_is_an_answer():
+    page = b'<html><p>story</p><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></html>'
+    c, _ = client([FakeResponse(200, {"Server": "cloudflare"}, page)])
+    r = c.get("https://news.test/a")
+    assert r.ok and r.error == "" and not r.challenge

@@ -1,6 +1,7 @@
 import pytest
 from conftest import record
 
+from debrief.http import Fetched
 from debrief.store import Store, raw
 
 
@@ -34,3 +35,11 @@ def test_prune_removes_only_old_days(tmp_path):
         raw.write(tmp_path, d, "src", "r", [record("x")])
     assert raw.prune(tmp_path, 60, "2026-10-22") == ["2026-08-01"]
     assert sorted(p.name for p in (tmp_path / "raw").iterdir()) == ["2026-10-01", "2026-10-22"]
+
+
+def test_raw_records_keep_cloudflares_headers_and_no_cookie():
+    f = Fetched(url="https://x.test/", status=429, content=b"", headers={
+        "server": "cloudflare", "cf-ray": "a5f358ebac59422e-EWR", "cf-mitigated": "challenge", "retry-after": "5",
+        "set-cookie": "__cf_bm=x"})
+    kept = raw.make_record("src", "run", 0, f, "2026-11-23T08:00:00Z")["headers"]
+    assert kept == {"server": "cloudflare", "cf-ray": "a5f358ebac59422e-EWR", "cf-mitigated": "challenge", "retry-after": "5"}

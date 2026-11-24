@@ -419,6 +419,8 @@ def test_skip_age():
     ("Site Reliability Engineer", "ok"),
     ("Associate Product Manager", "ok"),                     # "manager" is part of the matched type title
     ("Software Test Engineer", "title"),                     # words out of order aren't a match
+    ("Software Engineering Interns, Summer 2027", "title"),   # an excluded word's plural is excluded too
+    ("Software Engineer, Engineering Managers' Tools", "title"),
 ])
 def test_profile_v6_titles(title, expected):
     prof = copy.deepcopy(PROFILE)

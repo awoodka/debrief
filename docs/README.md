@@ -249,6 +249,7 @@ Every request goes through `src/debrief/http.py`:
 - **User-Agent.** `debrief/2.0 (personal AI/ML news digest; <contact>)`. Set `DEBRIEF_CONTACT` to an email; some APIs require one (SEC EDGAR).
 - **Conditional requests.** Callers pass the stored ETag and Last-Modified, and a 304 comes back as `not_modified`.
 - **429 and 5xx.** The client honours `Retry-After` up to 120 s, otherwise backs off exponentially. Each request is tried at most 3 times.
+- **Cloudflare challenges.** A refusal that is Cloudflare's challenge page (`cf-mitigated: challenge`, or a refused page loading `/cdn-cgi/challenge-platform`) is never asked again, and its error says "Cloudflare challenge". We never solve one. The raw store keeps each answer's `server`, `cf-ray` and `cf-mitigated` headers.
 - **robots.txt** is parsed per RFC 9309 (`src/debrief/robots.py`). The standard library's parser can't, because it handles neither `*` nor `$`. Policy:
   - Page scraping never fetches a disallowed page.
   - Where robots.txt disallows a feed or an API path, we use the site's official alternative instead. Examples: GitHub releases come from the REST API, because `/*.atom$` is disallowed. PyPI uses per-project RSS, because `/pypi/*/json` is disallowed. arXiv lookups use OAI-PMH, because `export.arxiv.org` disallows everything.

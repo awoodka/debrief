@@ -250,7 +250,8 @@ def apply(store, source, adapter, records, refs, warn=None, early_sources=frozen
     counts = Counter()
     seen = defaultdict(set)
     read = [_read(adapter, rec, source, counts) for rec in records]
-    per_job = Counter(_fallback_key(it) for listings, *_ in read for it in listings if it.active)
+    listed = {it.item_key: it for listings, *_ in read for it in listings if it.active}     # a listing given twice is one
+    per_job = Counter(_fallback_key(it) for it in listed.values())
     for rec, ref, (listings, texts, gone, directory) in zip(records, refs, read):
         at = rec["fetched_at"]
         for key, text, facts in texts:

@@ -13,8 +13,8 @@
 #                 check     the miss-check sample (never a source of jobs)
 #                 universe  a list of companies' job boards: the board directory, for finding a watchlist
 #                           company's board (never polled as a whole; Revision 1)
-#                 watchlist companies' boards, read in full every night: the profile's companies, and YC
-#                           companies named in HN titles (yc-boards)
+#                 watchlist companies' boards, every night: the profile's companies (Workday boards through
+#                           searches), and YC companies named in HN titles (yc-boards)
 #   url, each   the endpoint; {each} expands over `each`
 #   method      GET (default) or POST, with `body` as JSON
 #   candidates  alternative urls, tried in order until one works
@@ -445,8 +445,19 @@
   name: Watchlist boards (the profile's companies)
   family: watchlist
   adapter: watchlist
-  options: {max_pages: 100}
-  notes: each company's whole board, every night; Workday boards page 20 at a time (max_pages caps it at 2,000 jobs)
+  options:
+    max_pages: 100
+    workday_search: [college, university, early career, associate, junior, jr]
+    search_max_pages: 10
+  notes: "each company's whole board, every night, except Workday boards: those are read through workday_search
+    (Workday's searchText finds a job with every word of the search anywhere in its title or description), each
+    search paged 20 jobs at a time up to search_max_pages. An empty workday_search reads every page (max_pages caps
+    that at 2,000 jobs). A search read closes nothing: its jobs age out by max_age_days, and describe marks one gone
+    on its own 404. Of the Workday jobs that passed the filters 2026-11-10 to 11-23 and that only the watchlist
+    carried, the searches find 19 of 21 by title (the other 2 are NVIDIA internships), at an estimated 110 to 430
+    requests a night against ~1,000 for every page. A level numeral can't be searched (Workday ignores the \"i\"
+    of \"Software Engineer I\"); the 14 such RTX jobs that passed were all on new-grad lists too, 3 of them a day
+    later (checked 2026-11-23)"
 
 - id: yc-boards
   name: YC companies' boards (named in HN titles)

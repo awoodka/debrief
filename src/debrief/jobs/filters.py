@@ -65,7 +65,7 @@ def title_fit(title, profile):
         return None, "not one of the position types"
     rest = f" {' '.join(ws)} ".replace(f" {' '.join(words(best[1]))} ", " ", 1).split()
     for ex in profile["filters"]["exclude_titles"]:
-        if _has(rest, ex):
+        if _has(rest, ex) or _has(rest, ex + "s"):
             return None, f"excluded title word: {ex}"
     return best
 

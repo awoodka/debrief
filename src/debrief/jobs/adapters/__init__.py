@@ -3,11 +3,11 @@ talks to the network through the context, which records every response as a raw 
 turns one raw record into JobItems and is pure, so replay gives the same items.
 
 The site rule (Alex, 2026-11-23): any site that doesn't actively block us may be read. A block is an
-answer of 401, 403, 429 (after the client's retries) or LinkedIn's 999, or a page the adapter knows is a
-challenge or a login wall (get()'s `block`). After a block the context asks that host nothing more for
-the rest of the run: every later request to it is recorded as not made (status 0), so a full snapshot
-that lost a page never closes jobs, and the source's report names the host. A block is never worked
-around.
+answer of 401, 403, 429 (after the client's retries) or LinkedIn's 999, Cloudflare's challenge page, or a
+page the adapter knows is a challenge or a login wall (get()'s `block`). After a block the context asks
+that host nothing more for the rest of the run: every later request to it is recorded as not made
+(status 0), so a full snapshot that lost a page never closes jobs, and the source's report names the
+host. A block is never worked around.
 
 `snapshot` says what a response means for jobs it doesn't list:
   "window"  a recent window or search: a missing job means nothing
@@ -29,7 +29,9 @@ BLOCK_MARK = "a block"
 
 
 def blocked_by_status(fetched):
-    """Why this answer is a block, from its status alone, or None."""
+    """Why this answer is a block, from its status or Cloudflare's challenge page, or None."""
+    if fetched.challenge:
+        return f"Cloudflare challenge, HTTP {fetched.status}"
     return BLOCK_STATUSES.get(fetched.status)
 
 
